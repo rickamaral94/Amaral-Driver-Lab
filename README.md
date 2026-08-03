@@ -14,7 +14,9 @@ APK Android arm64, sem root, para comparar o driver Vulkan do sistema com pacote
 - catálogo persistente de crash, timeout, `VK_ERROR_DEVICE_LOST`, outros erros Vulkan, validation errors e render mismatch;
 - workload legado `vulkan_transfer_stress_v1`, preservado sem redefinir `transfer_payload_gib_s`;
 - telemetria de aparelho, Vulkan, bateria, temperatura, energia/corrente disponíveis, estado térmico e cauda do logcat;
-- exportação JSON e publicação opcional em GitHub Issues por Device Flow, sem PAT ou client secret no APK.
+- exportação JSON e publicação opcional em GitHub Issues por Device Flow, sem PAT ou client secret no APK;
+- histórico local de suítes, diff lado a lado, ranking por hardware/workload e bisect de builds sequenciais;
+- envelope público anônimo opcional, validado e assinado por hash canônico, sem envio automático.
 
 A correção offscreen valida somente a cena fixa incluída no APK. Ela **não prova ganho em jogos** nem correção em todos os shaders, APIs ou emuladores.
 
@@ -99,7 +101,7 @@ O APK executa código nativo do ZIP. Use somente pacotes próprios ou hashes ver
 
 ## Esquema de resultados
 
-A Fase 1 usa `schema_version = 2`, de forma aditiva e compatível com resultados v1. A série `vulkan_transfer_stress/v1` não foi alterada; `render_correctness_offscreen/v1` inicia uma série independente.
+A versão atual usa `schema_version = 5`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
 
 Mudanças na geometria, SPIR-V, ordem dos draws, resolução, formato, cálculo ou regra padrão de comparação exigem uma nova `workload_version`.
 
@@ -129,7 +131,7 @@ Siga [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md). Sem GitHub App config
 
 ## Estado do projeto
 
-As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora sem redefinir as séries existentes.
+As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado, sem redefinir as séries existentes.
 
 
 ## Fase 3: comparação estatística
@@ -145,3 +147,16 @@ A classificação usa uma margem prática de ±3%:
 - `insufficient_statistical_data`.
 
 Essa camada não altera nenhuma série de workload v1. Compare inferências somente com o mesmo `analysis_version` e as mesmas condições do aparelho. Veja [docs/PHASE3_STATISTICAL_ANALYSIS.md](docs/PHASE3_STATISTICAL_ANALYSIS.md).
+
+
+## Fase 4: laboratório histórico
+
+Abra **HISTÓRICO · DIFF · RANKING · BISECT** na tela principal para indexar resultados locais ou importar outros `suite.json`. O app permite:
+
+- filtrar por workload e identidade de hardware;
+- comparar duas suítes sem calcular deltas quando a metodologia é incompatível;
+- ranquear hashes de drivers somente dentro da mesma chave hardware/workload/configuração;
+- localizar a fronteira entre uma build conhecida como boa e a primeira build ruim;
+- exportar manualmente um envelope técnico sem modelo do aparelho, fingerprint, caminhos, logs ou imagens.
+
+Avisos bloqueantes e falhas impedem ranking válido, bisect conclusivo e publicação pública. Veja [docs/PHASE4_HISTORY_REGRESSION.md](docs/PHASE4_HISTORY_REGRESSION.md).

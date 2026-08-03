@@ -17,6 +17,10 @@
         android:theme="@style/Theme.DriverLab">
 
         <activity
+            android:name=".Phase4Activity"
+            android:exported="false" />
+
+        <activity
             android:name=".RunnerActivity"
             android:excludeFromRecents="true"
             android:exported="false"

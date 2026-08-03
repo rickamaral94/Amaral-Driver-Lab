@@ -27,6 +27,13 @@ final class DeviceSnapshot {
             json.put("product", Build.PRODUCT);
             json.put("board", Build.BOARD);
             json.put("hardware", Build.HARDWARE);
+            if (Build.VERSION.SDK_INT >= 31) {
+                json.put("soc_manufacturer", Build.SOC_MANUFACTURER);
+                json.put("soc_model", Build.SOC_MODEL);
+            } else {
+                json.put("soc_manufacturer", JSONObject.NULL);
+                json.put("soc_model", Build.HARDWARE);
+            }
             json.put("android_sdk", Build.VERSION.SDK_INT);
             json.put("android_release", Build.VERSION.RELEASE);
             json.put("build_fingerprint", Build.FINGERPRINT);
