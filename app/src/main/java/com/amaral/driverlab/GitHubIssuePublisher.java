@@ -75,12 +75,20 @@ final class GitHubIssuePublisher {
         String driver = candidate == null ? "system"
                 : candidate.optString("name", "candidate") + " "
                 + candidate.optString("packageVersion", candidate.optString("driverVersion", ""));
-        JSONObject summary = report.optJSONObject("summary");
-        double delta = summary == null ? Double.NaN
-                : summary.optDouble("candidate_vs_system_percent", Double.NaN);
-        String suffix = Double.isFinite(delta)
-                ? String.format(Locale.US, " · %+.1f%%", delta) : "";
-        String title = "[benchmark] " + model + " · " + driver.trim() + suffix;
+        String workloadId = report.optString("workload_id", WorkloadContract.TRANSFER_ID);
+        String suffix = "";
+        if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
+            String verdict = report.optString("verdict", "completed_no_reference");
+            suffix = " · " + ("passed_render_correctness".equals(verdict) ? "render PASS"
+                    : "failed_render_correctness".equals(verdict) ? "render FAIL"
+                    : "failed_execution".equals(verdict) ? "execution FAIL" : "no A/B reference");
+        } else {
+            JSONObject summary = report.optJSONObject("summary");
+            double delta = summary == null ? Double.NaN
+                    : summary.optDouble("candidate_vs_system_percent", Double.NaN);
+            if (Double.isFinite(delta)) suffix = String.format(Locale.US, " · %+.1f%%", delta);
+        }
+        String title = "[driver-lab] " + model + " · " + driver.trim() + suffix;
         return title.length() > 240 ? title.substring(0, 240) : title;
     }
 
@@ -89,6 +97,7 @@ final class GitHubIssuePublisher {
         JSONObject host = report.optJSONObject("host_device");
         JSONObject candidate = report.optJSONObject("candidate");
         JSONObject summary = report.optJSONObject("summary");
+        String workloadId = report.optString("workload_id", WorkloadContract.TRANSFER_ID);
         body.append("## Amaral Driver Lab\n\n");
         body.append("| Campo | Valor |\n|---|---|\n");
         body.append("| Suite | `").append(table(report.optString("suite_id"))).append("` |\n");
@@ -100,16 +109,42 @@ final class GitHubIssuePublisher {
                 : candidate.optString("name") + " " + candidate.optString("packageVersion"))).append(" |\n");
         body.append("| SHA-256 | `").append(candidate == null ? "—"
                 : table(candidate.optString("sha256"))).append("` |\n");
+        body.append("| Workload | `").append(table(workloadId)).append("` v")
+                .append(report.optInt("workload_version", 1)).append(" |\n");
         body.append("| Método | ").append(table(report.optString("mode")))
                 .append(", ").append(report.optInt("rounds")).append(" rodada(s), ordem ")
                 .append(table(report.optString("order_policy"))).append(" |\n");
-        if (summary != null) {
+        body.append("| Veredito | `").append(table(report.optString("verdict", "—")))
+                .append("` |\n");
+        if (summary != null && WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
+            double match = summary.optDouble("pixel_match_percent", Double.NaN);
+            body.append("| Pixels compatíveis | ")
+                    .append(Double.isFinite(match)
+                            ? String.format(Locale.US, "%.6f%%", match) : "—")
+                    .append(" |\n");
+            body.append("| Máx. blocos divergentes | ")
+                    .append(summary.has("maximum_divergent_block_count")
+                            ? summary.opt("maximum_divergent_block_count") : "—")
+                    .append(" |\n");
+        } else if (summary != null) {
             double delta = summary.optDouble("candidate_vs_system_percent", Double.NaN);
             body.append("| Delta candidato × sistema | ")
                     .append(Double.isFinite(delta) ? String.format(Locale.US, "%+.2f%%", delta) : "—")
                     .append(" |\n");
             body.append("| Fases com falha | ").append(summary.optInt("failed_phases")).append(" |\n");
         }
+        JSONObject capabilityDiff = report.optJSONObject("capability_diff");
+        if (capabilityDiff != null) {
+            JSONArray gained = capabilityDiff.optJSONArray("extensions_gained");
+            JSONArray lost = capabilityDiff.optJSONArray("extensions_lost");
+            body.append("| Extensões ganhas/perdidas | +")
+                    .append(gained == null ? 0 : gained.length()).append(" / -")
+                    .append(lost == null ? 0 : lost.length()).append(" |\n");
+        }
+        JSONArray failures = report.optJSONArray("failure_catalog");
+        body.append("| Eventos de falha | ").append(failures == null ? 0 : failures.length())
+                .append(" |\n");
+
         body.append("\n### Validade\n\n");
         JSONArray warnings = report.optJSONArray("validity_warnings");
         if (warnings == null || warnings.length() == 0) {
@@ -119,8 +154,16 @@ final class GitHubIssuePublisher {
                 body.append("- ").append(warnings.optString(index)).append("\n");
             }
         }
-        body.append("\n> `transfer_payload_gib_s` mede a carga sintética fill/copy desta versão; ")
-                .append("não é largura de banda física da VRAM. Compare apenas execuções do mesmo protocolo.\n");
+        body.append("\n> ").append(report.optString("metric_limitations",
+                WorkloadContract.limitationFor(workloadId))).append("\n");
+        if (capabilityDiff != null) {
+            body.append("\n### Diff de capacidades\n\n");
+            body.append("- ").append(capabilityDiff.optString("summary", "Sem resumo.")).append("\n");
+            appendArray(body, "Extensões ganhas", capabilityDiff.optJSONArray("extensions_gained"));
+            appendArray(body, "Extensões perdidas", capabilityDiff.optJSONArray("extensions_lost"));
+            appendArray(body, "Features ganhas", capabilityDiff.optJSONArray("features_gained"));
+            appendArray(body, "Features perdidas", capabilityDiff.optJSONArray("features_lost"));
+        }
         if (includeJson) {
             String encoded;
             try {
@@ -138,6 +181,18 @@ final class GitHubIssuePublisher {
         }
         body.append("\n_Gerado por Amaral Driver Lab ").append(BuildConfig.VERSION_NAME).append("._");
         return body.toString();
+    }
+
+    private static void appendArray(StringBuilder body, String label, JSONArray values) {
+        if (values == null || values.length() == 0) return;
+        body.append("- ").append(label).append(": ");
+        int limit = Math.min(values.length(), 20);
+        for (int index = 0; index < limit; ++index) {
+            if (index > 0) body.append(", ");
+            body.append('`').append(values.optString(index)).append('`');
+        }
+        if (values.length() > limit) body.append(" … +").append(values.length() - limit);
+        body.append("\n");
     }
 
     private static void validateRepository(String owner, String repository) {
