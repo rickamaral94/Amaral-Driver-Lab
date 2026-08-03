@@ -236,3 +236,76 @@ A melhora percentual pareada usa o driver do sistema como denominador. Para mét
 A unidade amostral é a rodada A/B completa. Frames, dispatches, pipelines ou janelas térmicas dentro de uma fase não são promovidos a observações independentes. Falhas e pares incompletos permanecem explícitos e não recebem valores numéricos sintéticos.
 
 Ver [PHASE3_STATISTICAL_ANALYSIS.md](PHASE3_STATISTICAL_ANALYSIS.md).
+
+## Fase 4: `schema_version = 5`
+
+A versão 5 adiciona metadados para catálogo e identidade de hardware. Ela não redefine nenhum workload nem a inferência da Fase 3.
+
+```json
+{
+  "schema_version": 5,
+  "phase4_contract": {
+    "catalog_version": 1,
+    "suite_diff_version": 1,
+    "ranking_version": 1,
+    "bisect_version": 1,
+    "public_dataset_schema_version": 1,
+    "blocking_validity_policy": "failures_or_blocking_warnings"
+  },
+  "hardware_identity": {
+    "identity_version": 1,
+    "manufacturer": "AYN",
+    "model": "Odin 2 Portal",
+    "soc_manufacturer": "Qualcomm",
+    "soc_model": "SM8550",
+    "gpu_model": "Adreno 740",
+    "device_key": "ayn/odin-2-portal/sm8550/adreno-740",
+    "public_hardware_key": "sm8550/adreno-740"
+  }
+}
+```
+
+Leitores de histórico aceitam schema 1–5 e derivam `hardware_identity` quando o campo não existe. Essa derivação não altera o arquivo antigo.
+
+### Chave de comparação
+
+Rankings, diffs numéricos e bisect exigem a mesma combinação de:
+
+- `hardware_identity.device_key`;
+- `workload_id`;
+- `workload_version`;
+- `analysis_contract.analysis_version`;
+- SHA-256 da forma canônica de `workload_config`.
+
+Misturar qualquer um desses elementos marca o resultado como historicamente incompatível.
+
+### Envelope público
+
+O envelope público usa um schema separado e não substitui `suite.json`:
+
+```json
+{
+  "public_dataset_schema_version": 1,
+  "signature_algorithm": "SHA-256-canonical-json-v1",
+  "payload": {
+    "hardware": {
+      "public_hardware_key": "sm8550/adreno-740",
+      "soc_model": "SM8550",
+      "gpu_model": "Adreno 740"
+    },
+    "workload": {
+      "workload_id": "compute_arithmetic",
+      "workload_version": 1,
+      "workload_config_sha256": "<64 hex>"
+    },
+    "candidate": {
+      "zip_sha256": "<64 hex>"
+    }
+  },
+  "payload_sha256": "<64 hex>"
+}
+```
+
+A assinatura é uma verificação de integridade determinística, não uma assinatura criptográfica de identidade. A publicação é recusada diante de falhas, avisos bloqueantes, hardware desconhecido ou amostra insuficiente.
+
+Veja [PHASE4_HISTORY_REGRESSION.md](PHASE4_HISTORY_REGRESSION.md).

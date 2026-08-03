@@ -287,6 +287,8 @@ final class RunCoordinator {
             report.put("verdict", verdict);
             report.put("validity_warnings", buildWarnings(
                     renderCorrectness, failureCatalog, statisticalAnalysis));
+            report.put("phase4_contract", Phase4Contract.contractJson());
+            report.put("hardware_identity", HardwareIdentity.fromReport(report));
 
             File reportFile = new File(suiteDirectory, "suite.json");
             ResultFiles.writeAtomic(reportFile, report.toString(2));

@@ -180,8 +180,15 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         Button runButton = new Button(this);
         runButton.setText("▶ INICIAR TESTE");
         runButton.setOnClickListener(view -> startSuite());
-        root.addView(runButton, margins(0, 4, 0, 20));
+        root.addView(runButton, margins(0, 4, 0, 8));
         controls.add(runButton);
+
+        Button phase4Button = new Button(this);
+        phase4Button.setText("HISTÓRICO · DIFF · RANKING · BISECT");
+        phase4Button.setOnClickListener(view ->
+                startActivity(new Intent(this, Phase4Activity.class)));
+        root.addView(phase4Button, margins(0, 0, 0, 20));
+        controls.add(phase4Button);
 
         root.addView(text("4. GitHub Issues", 19, true), margins(0, 0, 0, 8));
         ownerInput = textInput("Owner", preferences.getString("github_owner", "rickamaral94"));

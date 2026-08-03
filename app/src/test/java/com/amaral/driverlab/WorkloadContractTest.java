@@ -23,7 +23,7 @@ public final class WorkloadContractTest {
 
     @Test
     public void phaseTwoSeriesRemainVersionOneWhileSchemaAdvancesAdditively() {
-        assertEquals(4, WorkloadContract.RESULT_SCHEMA_VERSION);
+        assertEquals(5, WorkloadContract.RESULT_SCHEMA_VERSION);
         assertEquals(5, WorkloadContract.PHASE2_IDS.size());
         for (String workloadId : WorkloadContract.PHASE2_IDS) {
             assertEquals(1, WorkloadContract.versionFor(workloadId));
@@ -50,5 +50,16 @@ public final class WorkloadContractTest {
         assertEquals("sustained_throughput_gops", WorkloadContract.primaryMetricFor(WorkloadContract.THERMAL_SUSTAIN_ID));
         assertTrue(WorkloadContract.lowerIsBetter(WorkloadContract.SHADER_COMPILE_ID));
         assertFalse(WorkloadContract.lowerIsBetter(WorkloadContract.COMPUTE_ARITHMETIC_ID));
+    }
+
+    @Test
+    public void phaseFourVersionsCatalogWithoutChangingWorkloads() {
+        assertEquals(1, Phase4Contract.CATALOG_VERSION);
+        assertEquals(1, Phase4Contract.SUITE_DIFF_VERSION);
+        assertEquals(1, Phase4Contract.RANKING_VERSION);
+        assertEquals(1, Phase4Contract.BISECT_VERSION);
+        assertEquals(1, Phase4Contract.PUBLIC_DATASET_SCHEMA_VERSION);
+        assertEquals(1, WorkloadContract.COMPUTE_ARITHMETIC_VERSION);
+        assertEquals(1, WorkloadContract.STABLE_SCENE_VERSION);
     }
 }
