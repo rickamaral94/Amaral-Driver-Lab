@@ -1,0 +1,22 @@
+name: Benchmark result
+description: Resultado produzido pelo Amaral Driver Lab
+title: "[benchmark] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Prefira a publicação automática do APK: ela inclui SHA-256, protocolo e JSON.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Resumo
+      description: Aparelho, driver stock, candidato e delta observado.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: JSON ou link do resultado
+    validations:
+      required: true

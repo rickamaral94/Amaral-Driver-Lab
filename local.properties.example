@@ -1,0 +1,6 @@
+# Copy to local.properties and point sdk.dir to your Android SDK.
+sdk.dir=/absolute/path/to/Android/Sdk
+
+# Optional. Client ID of a GitHub App with Device Flow enabled.
+# Never put a PAT or client secret here.
+GITHUB_CLIENT_ID=Iv1.example
