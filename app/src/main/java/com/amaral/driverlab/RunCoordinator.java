@@ -127,8 +127,7 @@ final class RunCoordinator {
         String fileName = String.format(Locale.US, "phase-%02d-%s-r%d.json",
                 phaseIndex + 1, phase.label, phase.round);
         currentResultFile = new File(suiteDirectory, fileName);
-        String workloadLabel = WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)
-                ? "correção offscreen" : "transferência v1";
+        String workloadLabel = WorkloadContract.labelFor(workloadId);
         listener.onStatus("Executando " + (phaseIndex + 1) + "/" + phases.size()
                 + " · " + workloadLabel + " · rodada " + phase.round + " · "
                 + (phase.custom ? candidate.displayName() : "driver do sistema"));
@@ -152,8 +151,8 @@ final class RunCoordinator {
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
         phaseLaunchedElapsed = SystemClock.elapsedRealtime();
-        long timeoutSeconds = WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)
-                ? 90L : warmupSeconds + measureSeconds + 45L;
+        long timeoutSeconds = WorkloadContract.timeoutSeconds(
+                workloadId, warmupSeconds, measureSeconds);
         phaseDeadlineElapsed = phaseLaunchedElapsed + timeoutSeconds * 1000L;
         activity.startActivity(intent);
         handler.postDelayed(this::pollCurrent, 500);
@@ -258,24 +257,36 @@ final class RunCoordinator {
             JSONObject summary;
             JSONObject capabilityDiff = capabilityDiff();
             JSONObject renderCorrectness = null;
+            JSONObject statisticalAnalysis = null;
             String verdict;
             if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
                 renderCorrectness = analyzeRenderCorrectness(failureCatalog);
                 summary = correctionSummary(renderCorrectness, failureCatalog);
                 verdict = correctionVerdict(renderCorrectness, failureCatalog);
             } else {
-                summary = summarizeTransfer();
-                verdict = summary.optInt("failed_phases", 0) > 0
-                        ? "failed_execution" : "completed_transfer_measurement";
+                summary = WorkloadContract.isPhase2(workloadId)
+                        ? Phase2Metrics.summarize(phaseResults, workloadId)
+                        : summarizeTransfer();
+                statisticalAnalysis = StatisticalComparison.analyze(
+                        phaseResults, workloadId);
+                verdict = mode == MODE_AB
+                        ? StatisticalComparison.verdictFor(statisticalAnalysis,
+                                summary.optInt("failed_phases", 0))
+                        : (summary.optInt("failed_phases", 0) > 0
+                                ? "failed_execution" : "completed_single_driver_measurement");
             }
             report.put("summary", summary);
+            report.put("analysis_contract", StatisticalComparison.contractJson());
+            report.put("statistical_analysis",
+                    statisticalAnalysis == null ? JSONObject.NULL : statisticalAnalysis);
             report.put("render_correctness",
                     renderCorrectness == null ? JSONObject.NULL : renderCorrectness);
             report.put("capability_diff",
                     capabilityDiff == null ? JSONObject.NULL : capabilityDiff);
             report.put("failure_catalog", failureCatalog);
             report.put("verdict", verdict);
-            report.put("validity_warnings", buildWarnings(renderCorrectness, failureCatalog));
+            report.put("validity_warnings", buildWarnings(
+                    renderCorrectness, failureCatalog, statisticalAnalysis));
 
             File reportFile = new File(suiteDirectory, "suite.json");
             ResultFiles.writeAtomic(reportFile, report.toString(2));
@@ -290,7 +301,7 @@ final class RunCoordinator {
         if (WorkloadContract.TRANSFER_ID.equals(workloadId)) {
             config.put("warmup_seconds", warmupSeconds);
             config.put("measure_seconds", measureSeconds);
-        } else {
+        } else if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
             config.put("image_width", WorkloadContract.RENDER_WIDTH);
             config.put("image_height", WorkloadContract.RENDER_HEIGHT);
             config.put("pixel_tolerance", pixelTolerance);
@@ -298,16 +309,16 @@ final class RunCoordinator {
             config.put("minimum_block_match_percent",
                     WorkloadContract.MINIMUM_BLOCK_MATCH_PERCENT);
             config.put("maximum_divergent_blocks", maximumDivergentBlocks);
+        } else {
+            config.put("warmup_seconds", warmupSeconds);
+            config.put("measure_seconds", measureSeconds);
+            config.put("primary_metric", WorkloadContract.primaryMetricFor(workloadId));
         }
         return config;
     }
 
     private String compatibilityWorkloadName() {
-        if (WorkloadContract.TRANSFER_ID.equals(workloadId)) {
-            return WorkloadContract.TRANSFER_NATIVE_NAME;
-        }
-        return WorkloadContract.RENDER_CORRECTNESS_ID + "_v"
-                + WorkloadContract.RENDER_CORRECTNESS_VERSION;
+        return WorkloadContract.nativeNameFor(workloadId);
     }
 
     private JSONObject summarizeTransfer() throws Exception {
@@ -546,8 +557,8 @@ final class RunCoordinator {
                 : values.get(middle);
     }
 
-    private JSONArray buildWarnings(JSONObject correction, JSONArray failureCatalog)
-            throws Exception {
+    private JSONArray buildWarnings(JSONObject correction, JSONArray failureCatalog,
+                                      JSONObject statisticalAnalysis) throws Exception {
         JSONArray warnings = new JSONArray();
         double minimumTemperature = Double.POSITIVE_INFINITY;
         double maximumTemperature = Double.NEGATIVE_INFINITY;
@@ -592,6 +603,24 @@ final class RunCoordinator {
         }
         if (rounds < 3) {
             warnings.put("Menos de três rodadas: resultado exploratório, não conclusivo.");
+        }
+        if (statisticalAnalysis != null) {
+            int paired = statisticalAnalysis.optInt("paired_sample_count", 0);
+            if (paired < WorkloadContract.MINIMUM_PAIRED_SAMPLES) {
+                warnings.put("Menos de cinco pares A/B válidos: inferência inconclusiva.");
+            }
+            JSONObject orderBias = statisticalAnalysis.optJSONObject("order_bias_diagnostic");
+            double orderDifference = orderBias == null ? Double.NaN
+                    : orderBias.optDouble("median_difference_percent_points", Double.NaN);
+            if (Double.isFinite(orderDifference) && Math.abs(orderDifference)
+                    > WorkloadContract.PRACTICAL_EQUIVALENCE_MARGIN_PERCENT) {
+                warnings.put(String.format(Locale.US,
+                        "Possível viés de ordem AB/BA: diferença mediana de %+.2f p.p.",
+                        orderDifference));
+            }
+            if ("inconclusive".equals(statisticalAnalysis.optString("classification"))) {
+                warnings.put("O IC95% cruza a margem prática; não declare ganho ou regressão.");
+            }
         }
         if (correction != null) {
             if (correction.optBoolean("system_nondeterministic", false)) {

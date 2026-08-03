@@ -22,8 +22,8 @@ public final class WorkloadContractTest {
     }
 
     @Test
-    public void phaseTwoStartsFiveIndependentVersionOneSeriesAndSchemaThree() {
-        assertEquals(3, WorkloadContract.RESULT_SCHEMA_VERSION);
+    public void phaseTwoSeriesRemainVersionOneWhileSchemaAdvancesAdditively() {
+        assertEquals(4, WorkloadContract.RESULT_SCHEMA_VERSION);
         assertEquals(5, WorkloadContract.PHASE2_IDS.size());
         for (String workloadId : WorkloadContract.PHASE2_IDS) {
             assertEquals(1, WorkloadContract.versionFor(workloadId));
@@ -31,6 +31,14 @@ public final class WorkloadContractTest {
             assertTrue(WorkloadContract.isPhase2(workloadId));
             assertFalse(WorkloadContract.limitationFor(workloadId).isEmpty());
         }
+    }
+
+    @Test
+    public void phaseThreeAnalysisContractIsVersionedIndependently() {
+        assertEquals(1, WorkloadContract.STATISTICAL_ANALYSIS_VERSION);
+        assertEquals(5_000, WorkloadContract.BOOTSTRAP_ITERATIONS);
+        assertEquals(5, WorkloadContract.MINIMUM_PAIRED_SAMPLES);
+        assertEquals(3.0, WorkloadContract.PRACTICAL_EQUIVALENCE_MARGIN_PERCENT, 0.0);
     }
 
     @Test
