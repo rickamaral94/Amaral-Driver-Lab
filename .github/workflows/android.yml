@@ -27,6 +27,7 @@ jobs:
         shell: bash
         run: |
           python3 .github/scripts/materialize_phase2_source.py
+          git add --intent-to-add app/src/main/cpp/phase2_workloads.cpp
           if ! git diff --quiet -- app/src/main/cpp/phase2_workloads.cpp; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
