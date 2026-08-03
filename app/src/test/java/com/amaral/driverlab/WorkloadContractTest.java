@@ -3,6 +3,8 @@ package com.amaral.driverlab;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public final class WorkloadContractTest {
     @Test
@@ -14,9 +16,31 @@ public final class WorkloadContractTest {
     }
 
     @Test
-    public void correctionSceneStartsANewIndependentSeries() {
+    public void correctionSceneRemainsAnIndependentVersionOneSeries() {
         assertEquals("render_correctness_offscreen", WorkloadContract.RENDER_CORRECTNESS_ID);
         assertEquals(1, WorkloadContract.RENDER_CORRECTNESS_VERSION);
-        assertEquals(2, WorkloadContract.RESULT_SCHEMA_VERSION);
+    }
+
+    @Test
+    public void phaseTwoStartsFiveIndependentVersionOneSeriesAndSchemaThree() {
+        assertEquals(3, WorkloadContract.RESULT_SCHEMA_VERSION);
+        assertEquals(5, WorkloadContract.PHASE2_IDS.size());
+        for (String workloadId : WorkloadContract.PHASE2_IDS) {
+            assertEquals(1, WorkloadContract.versionFor(workloadId));
+            assertTrue(WorkloadContract.isSupported(workloadId));
+            assertTrue(WorkloadContract.isPhase2(workloadId));
+            assertFalse(WorkloadContract.limitationFor(workloadId).isEmpty());
+        }
+    }
+
+    @Test
+    public void directionAndPrimaryMetricAreExplicit() {
+        assertEquals("cold_total_ms", WorkloadContract.primaryMetricFor(WorkloadContract.SHADER_COMPILE_ID));
+        assertEquals("median_frame_ms", WorkloadContract.primaryMetricFor(WorkloadContract.RENDERPASS_TILING_ID));
+        assertEquals("throughput_gops", WorkloadContract.primaryMetricFor(WorkloadContract.COMPUTE_ARITHMETIC_ID));
+        assertEquals("p99_frame_ms", WorkloadContract.primaryMetricFor(WorkloadContract.STABLE_SCENE_ID));
+        assertEquals("sustained_throughput_gops", WorkloadContract.primaryMetricFor(WorkloadContract.THERMAL_SUSTAIN_ID));
+        assertTrue(WorkloadContract.lowerIsBetter(WorkloadContract.SHADER_COMPILE_ID));
+        assertFalse(WorkloadContract.lowerIsBetter(WorkloadContract.COMPUTE_ARITHMETIC_ID));
     }
 }

@@ -1,0 +1,22 @@
+#version 450
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+layout(constant_id = 0) const uint ITERATIONS = 256u;
+layout(constant_id = 1) const uint VARIANT = 0u;
+
+layout(set = 0, binding = 0, std430) buffer Values {
+    uint data[];
+} values;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    float value = uintBitsToFloat(0x3f000000u | ((values.data[index] + VARIANT) & 0x007fffffu));
+    float bias = 0.000001 + float(VARIANT & 15u) * 0.0000001;
+    for (uint iteration = 0u; iteration < ITERATIONS; ++iteration) {
+        value = fma(value, 1.000001, bias);
+        value = fma(value, 0.999999, -bias * 0.5);
+        value = value * 1.0000001 + 0.0000003;
+        value = value * 0.9999999 - 0.0000002;
+    }
+    values.data[index] = floatBitsToUint(value);
+}
