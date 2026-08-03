@@ -23,6 +23,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -45,19 +46,24 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
     private SharedPreferences preferences;
     private SecureTokenStore tokenStore;
     private Spinner driverSpinner;
+    private Spinner workloadSpinner;
     private Spinner modeSpinner;
     private EditText warmupInput;
     private EditText durationInput;
     private EditText roundsInput;
+    private EditText pixelToleranceInput;
+    private EditText maximumDivergentBlocksInput;
     private EditText ownerInput;
     private EditText repositoryInput;
     private CheckBox autoIssueCheck;
     private TextView driverDetails;
+    private TextView workloadNote;
     private TextView status;
     private TextView resultPreview;
     private Button githubButton;
     private JSONObject lastReport;
     private File lastReportFile;
+    private boolean busy;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,10 +84,10 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         scroll.addView(root, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
 
-        TextView title = text("Amaral Driver Lab", 26, true);
-        root.addView(title);
+        root.addView(text("Amaral Driver Lab", 26, true));
         TextView subtitle = text(
-                "Turnip/stock · processo limpo · telemetria · relatório reproduzível", 14, false);
+                "Turnip/stock · correção primeiro · processo limpo · evidência reproduzível",
+                14, false);
         subtitle.setTextColor(Color.DKGRAY);
         root.addView(subtitle, margins(0, 4, 0, 20));
 
@@ -99,7 +105,43 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         driverDetails.setTextIsSelectable(true);
         root.addView(driverDetails, margins(0, 0, 0, 20));
 
-        root.addView(text("2. Protocolo", 19, true), margins(0, 0, 0, 8));
+        root.addView(text("2. Workload", 19, true), margins(0, 0, 0, 8));
+        workloadSpinner = new Spinner(this);
+        workloadSpinner.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item,
+                new String[]{
+                        "Correção offscreen v1 · recomendado",
+                        "Transferência fill/copy v1 · legado"
+                }));
+        workloadSpinner.setSelection(preferences.getInt("workload_position", 0));
+        workloadSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                preferences.edit().putInt("workload_position", position).apply();
+                updateWorkloadControls();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        root.addView(workloadSpinner);
+        controls.add(workloadSpinner);
+
+        workloadNote = text("", 13, false);
+        workloadNote.setTextColor(Color.DKGRAY);
+        root.addView(workloadNote, margins(0, 4, 0, 10));
+
+        LinearLayout correctionInputs = new LinearLayout(this);
+        correctionInputs.setOrientation(LinearLayout.HORIZONTAL);
+        pixelToleranceInput = numeric("Tolerância RGBA", String.valueOf(
+                preferences.getInt("pixel_tolerance", WorkloadContract.DEFAULT_PIXEL_TOLERANCE)));
+        maximumDivergentBlocksInput = numeric("Máx. blocos divergentes", String.valueOf(
+                preferences.getInt("max_divergent_blocks",
+                        WorkloadContract.DEFAULT_MAX_DIVERGENT_BLOCKS)));
+        correctionInputs.addView(pixelToleranceInput, weighted());
+        correctionInputs.addView(maximumDivergentBlocksInput, weighted());
+        root.addView(correctionInputs, margins(0, 0, 0, 12));
+        controls.add(pixelToleranceInput);
+        controls.add(maximumDivergentBlocksInput);
+
+        root.addView(text("3. Protocolo", 19, true), margins(0, 0, 0, 8));
         modeSpinner = new Spinner(this);
         modeSpinner.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item,
@@ -127,7 +169,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         root.addView(runButton, margins(0, 4, 0, 20));
         controls.add(runButton);
 
-        root.addView(text("3. GitHub Issues", 19, true), margins(0, 0, 0, 8));
+        root.addView(text("4. GitHub Issues", 19, true), margins(0, 0, 0, 8));
         ownerInput = textInput("Owner", preferences.getString("github_owner", "rickamaral94"));
         repositoryInput = textInput("Repositório",
                 preferences.getString("github_repo", "Amaral-Driver-Lab"));
@@ -170,6 +212,24 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         root.addView(resultPreview);
 
         setContentView(scroll);
+        updateWorkloadControls();
+    }
+
+    private void updateWorkloadControls() {
+        if (workloadSpinner == null || workloadNote == null) return;
+        boolean transfer = selectedWorkloadId().equals(WorkloadContract.TRANSFER_ID);
+        workloadNote.setText(transfer
+                ? WorkloadContract.TRANSFER_LIMITATION
+                : WorkloadContract.RENDER_CORRECTNESS_LIMITATION);
+        warmupInput.setEnabled(!busy && transfer);
+        durationInput.setEnabled(!busy && transfer);
+        pixelToleranceInput.setEnabled(!busy && !transfer);
+        maximumDivergentBlocksInput.setEnabled(!busy && !transfer);
+    }
+
+    private String selectedWorkloadId() {
+        return workloadSpinner != null && workloadSpinner.getSelectedItemPosition() == 1
+                ? WorkloadContract.TRANSFER_ID : WorkloadContract.RENDER_CORRECTNESS_ID;
     }
 
     private void loadDrivers() {
@@ -287,13 +347,22 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
             int mode = modeSpinner.getSelectedItemPosition() == 0 ? RunCoordinator.MODE_AB
                     : modeSpinner.getSelectedItemPosition() == 1 ? RunCoordinator.MODE_CUSTOM
                     : RunCoordinator.MODE_SYSTEM;
+            String workloadId = selectedWorkloadId();
             int warmup = parseNumber(warmupInput, "Warm-up", 0, 30);
             int duration = parseNumber(durationInput, "Medição", 1, 120);
             int rounds = parseNumber(roundsInput, "Rodadas", 1, 10);
+            int tolerance = parseNumber(pixelToleranceInput, "Tolerância RGBA", 0, 255);
+            int maximumDivergent = parseNumber(
+                    maximumDivergentBlocksInput, "Máximo de blocos divergentes", 0, 256);
+            preferences.edit()
+                    .putInt("pixel_tolerance", tolerance)
+                    .putInt("max_divergent_blocks", maximumDivergent)
+                    .apply();
             saveGitHubTarget();
             setBusy(true);
             resultPreview.setText("");
-            new RunCoordinator(this, selectedDriver(), mode, rounds, warmup, duration, this).start();
+            new RunCoordinator(this, selectedDriver(), mode, rounds, warmup, duration,
+                    workloadId, tolerance, maximumDivergent, this).start();
         } catch (Throwable error) {
             status.setText(error.getMessage());
             setBusy(false);
@@ -329,14 +398,54 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
     }
 
     private void showSummary(JSONObject report) {
+        String workloadId = report.optString("workload_id", WorkloadContract.TRANSFER_ID);
+        String verdict = report.optString("verdict", "completed");
         JSONObject summary = report.optJSONObject("summary");
-        double delta = summary == null ? Double.NaN
-                : summary.optDouble("candidate_vs_system_percent", Double.NaN);
-        String headline = "Suíte concluída";
-        if (Double.isFinite(delta)) {
-            headline += String.format(Locale.US, " · candidato %+.2f%%", delta);
+        StringBuilder headline = new StringBuilder("Suíte concluída");
+        if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
+            if ("passed_render_correctness".equals(verdict)) {
+                headline.append(" · CORREÇÃO APROVADA");
+            } else if ("failed_render_correctness".equals(verdict)) {
+                headline.append(" · CORREÇÃO REPROVADA");
+            } else if ("failed_execution".equals(verdict)) {
+                headline.append(" · FALHA DE EXECUÇÃO");
+            } else {
+                headline.append(" · SEM REFERÊNCIA A/B");
+            }
+            if (summary != null) {
+                double match = summary.optDouble("pixel_match_percent", Double.NaN);
+                if (Double.isFinite(match)) {
+                    headline.append(String.format(Locale.US, " · pixels %.4f%%", match));
+                }
+                Object blocks = summary.opt("maximum_divergent_block_count");
+                if (blocks instanceof Number) {
+                    headline.append(" · blocos divergentes ").append(((Number) blocks).intValue());
+                }
+            }
+            JSONObject capabilityDiff = report.optJSONObject("capability_diff");
+            if (capabilityDiff != null) {
+                JSONArray gained = capabilityDiff.optJSONArray("extensions_gained");
+                JSONArray lost = capabilityDiff.optJSONArray("extensions_lost");
+                headline.append("\nExtensões: +")
+                        .append(gained == null ? 0 : gained.length())
+                        .append(" / -")
+                        .append(lost == null ? 0 : lost.length());
+            }
+            JSONArray failures = report.optJSONArray("failure_catalog");
+            if (failures != null && failures.length() > 0) {
+                headline.append(" · eventos de falha ").append(failures.length());
+            }
+        } else {
+            double delta = summary == null ? Double.NaN
+                    : summary.optDouble("candidate_vs_system_percent", Double.NaN);
+            if (Double.isFinite(delta)) {
+                headline.append(String.format(Locale.US, " · candidato %+.2f%%", delta));
+            }
         }
-        status.setText(headline + "\n" + lastReportFile.getAbsolutePath());
+        headline.append("\n").append(WorkloadContract.limitationFor(workloadId));
+        if (lastReportFile != null) headline.append("\n").append(lastReportFile.getAbsolutePath());
+        status.setText(headline.toString());
+
         String preview;
         try {
             preview = report.toString(2);
@@ -502,7 +611,9 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
     }
 
     private void setBusy(boolean busy) {
+        this.busy = busy;
         for (View control : controls) control.setEnabled(!busy);
+        updateWorkloadControls();
     }
 
     private int parseNumber(EditText input, String label, int minimum, int maximum) {
