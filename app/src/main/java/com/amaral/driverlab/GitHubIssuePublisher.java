@@ -122,7 +122,12 @@ final class GitHubIssuePublisher {
         body.append("\n> `transfer_payload_gib_s` mede a carga sintética fill/copy desta versão; ")
                 .append("não é largura de banda física da VRAM. Compare apenas execuções do mesmo protocolo.\n");
         if (includeJson) {
-            String encoded = report.toString(2);
+            String encoded;
+            try {
+                encoded = report.toString(2);
+            } catch (Exception ignored) {
+                encoded = report.toString();
+            }
             boolean truncated = encoded.length() > 45_000;
             if (truncated) encoded = encoded.substring(0, 45_000);
             body.append("\n<details><summary>Resultado JSON")
