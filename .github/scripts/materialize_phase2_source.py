@@ -15,8 +15,8 @@ EXPECTED_SHA256 = "d9df8381332ab410837ad7c0b049338e57ebd98460be999b621d3fd8759cc
 
 def main() -> int:
     chunks = sorted(PAYLOAD_DIR.glob("phase2_payload_*.txt"))
-    if len(chunks) != 8:
-        raise SystemExit(f"expected 8 payload chunks, found {len(chunks)}")
+    if len(chunks) != 5:
+        raise SystemExit(f"expected 5 payload chunks, found {len(chunks)}")
     encoded = "".join(path.read_text(encoding="ascii").strip() for path in chunks)
     source = gzip.decompress(base64.b64decode(encoded, validate=True))
     actual = hashlib.sha256(source).hexdigest()
