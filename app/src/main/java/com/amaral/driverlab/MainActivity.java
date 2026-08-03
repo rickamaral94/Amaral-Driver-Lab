@@ -337,7 +337,12 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
             headline += String.format(Locale.US, " · candidato %+.2f%%", delta);
         }
         status.setText(headline + "\n" + lastReportFile.getAbsolutePath());
-        String preview = report.toString(2);
+        String preview;
+        try {
+            preview = report.toString(2);
+        } catch (Exception ignored) {
+            preview = report.toString();
+        }
         if (preview.length() > 12_000) preview = preview.substring(0, 12_000) + "\n…";
         resultPreview.setText(preview);
     }
