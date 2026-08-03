@@ -5,7 +5,17 @@ import java.util.Collections;
 import java.util.List;
 
 final class WorkloadContract {
-    static final int RESULT_SCHEMA_VERSION = 3;
+    static final int RESULT_SCHEMA_VERSION = 4;
+
+    static final int STATISTICAL_ANALYSIS_VERSION = 1;
+    static final int BOOTSTRAP_ITERATIONS = 5_000;
+    static final int MINIMUM_PAIRED_SAMPLES = 5;
+    static final double CONFIDENCE_LEVEL = 0.95;
+    static final double PRACTICAL_EQUIVALENCE_MARGIN_PERCENT = 3.0;
+    static final String STATISTICAL_ANALYSIS_LIMITATION =
+            "Reamostra rodadas A/B completas, não frames ou dispatches; com poucas "
+                    + "rodadas o intervalo pode ser amplo, não há correção entre workloads e "
+                    + "o resultado não representa FPS ou ganho em jogos.";
 
     static final String TRANSFER_ID = "vulkan_transfer_stress";
     static final int TRANSFER_VERSION = 1;

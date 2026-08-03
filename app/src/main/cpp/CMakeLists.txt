@@ -27,43 +27,34 @@ if (NOT GLSLC_EXECUTABLE)
 endif ()
 
 set(GENERATED_SHADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-shaders")
-set(RENDER_VERT_C "${GENERATED_SHADER_DIR}/render_correctness_vert.c")
-set(RENDER_FRAG_C "${GENERATED_SHADER_DIR}/render_correctness_frag.c")
-set(RENDER_VERT_INC "${GENERATED_SHADER_DIR}/render_correctness_vert.inc")
-set(RENDER_FRAG_INC "${GENERATED_SHADER_DIR}/render_correctness_frag.inc")
 set(SPIRV_EXTRACTOR "${CMAKE_CURRENT_SOURCE_DIR}/extract_spirv_initializer.py")
 
-add_custom_command(
-        OUTPUT "${RENDER_VERT_INC}"
-        BYPRODUCTS "${RENDER_VERT_C}"
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "${GENERATED_SHADER_DIR}"
-        COMMAND "${GLSLC_EXECUTABLE}" -c --target-env=vulkan1.0 -mfmt=c
-                "${CMAKE_CURRENT_SOURCE_DIR}/shaders/render_correctness.vert"
-                -o "${RENDER_VERT_C}"
-        COMMAND "${Python3_EXECUTABLE}" "${SPIRV_EXTRACTOR}"
-                "${RENDER_VERT_C}" "${RENDER_VERT_INC}"
-        DEPENDS
-                "${CMAKE_CURRENT_SOURCE_DIR}/shaders/render_correctness.vert"
-                "${SPIRV_EXTRACTOR}"
-        VERBATIM)
+function(driverlab_compile_shader SOURCE OUTPUT_NAME)
+    set(SPIRV_C "${GENERATED_SHADER_DIR}/${OUTPUT_NAME}.c")
+    set(SPIRV_INC "${GENERATED_SHADER_DIR}/${OUTPUT_NAME}.inc")
+    add_custom_command(
+            OUTPUT "${SPIRV_INC}"
+            BYPRODUCTS "${SPIRV_C}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${GENERATED_SHADER_DIR}"
+            COMMAND "${GLSLC_EXECUTABLE}" -c --target-env=vulkan1.0 -mfmt=c
+                    "${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}" -o "${SPIRV_C}"
+            COMMAND "${Python3_EXECUTABLE}" "${SPIRV_EXTRACTOR}"
+                    "${SPIRV_C}" "${SPIRV_INC}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}" "${SPIRV_EXTRACTOR}"
+            VERBATIM)
+    set(DRIVERLAB_SHADER_OUTPUTS ${DRIVERLAB_SHADER_OUTPUTS} "${SPIRV_INC}" PARENT_SCOPE)
+endfunction()
 
-add_custom_command(
-        OUTPUT "${RENDER_FRAG_INC}"
-        BYPRODUCTS "${RENDER_FRAG_C}"
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "${GENERATED_SHADER_DIR}"
-        COMMAND "${GLSLC_EXECUTABLE}" -c --target-env=vulkan1.0 -mfmt=c
-                "${CMAKE_CURRENT_SOURCE_DIR}/shaders/render_correctness.frag"
-                -o "${RENDER_FRAG_C}"
-        COMMAND "${Python3_EXECUTABLE}" "${SPIRV_EXTRACTOR}"
-                "${RENDER_FRAG_C}" "${RENDER_FRAG_INC}"
-        DEPENDS
-                "${CMAKE_CURRENT_SOURCE_DIR}/shaders/render_correctness.frag"
-                "${SPIRV_EXTRACTOR}"
-        VERBATIM)
+driverlab_compile_shader("shaders/render_correctness.vert" "render_correctness_vert")
+driverlab_compile_shader("shaders/render_correctness.frag" "render_correctness_frag")
+driverlab_compile_shader("shaders/phase2_draw.vert" "phase2_draw_vert")
+driverlab_compile_shader("shaders/phase2_alu.frag" "phase2_alu_frag")
+driverlab_compile_shader("shaders/phase2_branch.frag" "phase2_branch_frag")
+driverlab_compile_shader("shaders/phase2_compute.comp" "phase2_compute_comp")
 
-add_custom_target(driverlab_shaders DEPENDS "${RENDER_VERT_INC}" "${RENDER_FRAG_INC}")
+add_custom_target(driverlab_shaders DEPENDS ${DRIVERLAB_SHADER_OUTPUTS})
 
-add_library(driverlab SHARED benchmark.cpp render_correctness.cpp)
+add_library(driverlab SHARED benchmark.cpp render_correctness.cpp phase2_workloads.cpp)
 add_dependencies(driverlab driverlab_shaders)
 target_include_directories(driverlab PRIVATE "${GENERATED_SHADER_DIR}")
 target_compile_features(driverlab PRIVATE cxx_std_20)

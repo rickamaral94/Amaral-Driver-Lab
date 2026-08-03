@@ -127,6 +127,21 @@ O CMake usa o `glslc` do NDK para compilar os shaders fixos em SPIR-V durante o 
 
 Siga [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md). Sem GitHub App configurado, o resultado continua salvo e o APK abre um rascunho de issue no navegador. Nenhum PAT ou client secret deve ser compilado no APK.
 
-## Próxima fase
+## Estado do projeto
 
-A Fase 2 adicionará workloads independentes e versionados para compilação cold/warm de shaders, render pass/tiling, compute aritmético, frametime offscreen e sustentação térmica. Nenhuma dessas métricas reutilizará `transfer_payload_gib_s`.
+As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora sem redefinir as séries existentes.
+
+
+## Fase 3: comparação estatística
+
+Suítes A/B de performance agora geram `statistical_analysis` com pareamento por rodada, melhora percentual orientada pela direção da métrica, bootstrap determinístico de 95%, teste exato dos sinais, tamanho de efeito e diagnóstico de viés de ordem. O padrão recomendado é **5 a 10 rodadas**.
+
+A classificação usa uma margem prática de ±3%:
+
+- `candidate_better_with_confidence`;
+- `candidate_worse_with_confidence`;
+- `practically_equivalent_with_confidence`;
+- `inconclusive_statistical_comparison`;
+- `insufficient_statistical_data`.
+
+Essa camada não altera nenhuma série de workload v1. Compare inferências somente com o mesmo `analysis_version` e as mesmas condições do aparelho. Veja [docs/PHASE3_STATISTICAL_ANALYSIS.md](docs/PHASE3_STATISTICAL_ANALYSIS.md).

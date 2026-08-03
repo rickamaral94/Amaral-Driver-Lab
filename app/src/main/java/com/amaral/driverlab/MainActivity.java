@@ -39,6 +39,15 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
     private static final int REQUEST_IMPORT_ZIP = 1001;
     private static final int REQUEST_EXPORT_JSON = 1002;
     private static final String PREFS = "driver_lab_settings";
+    private static final String[] WORKLOAD_IDS = {
+            WorkloadContract.RENDER_CORRECTNESS_ID,
+            WorkloadContract.SHADER_COMPILE_ID,
+            WorkloadContract.RENDERPASS_TILING_ID,
+            WorkloadContract.COMPUTE_ARITHMETIC_ID,
+            WorkloadContract.STABLE_SCENE_ID,
+            WorkloadContract.THERMAL_SUSTAIN_ID,
+            WorkloadContract.TRANSFER_ID
+    };
 
     private final List<DriverPackage> drivers = new ArrayList<>();
     private final List<View> controls = new ArrayList<>();
@@ -111,6 +120,11 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
                 android.R.layout.simple_spinner_dropdown_item,
                 new String[]{
                         "Correção offscreen v1 · recomendado",
+                        "Compilação de shaders v1",
+                        "Render pass / tiling v1",
+                        "Compute aritmético v1",
+                        "Frametime estável v1",
+                        "Sustentação térmica v1",
                         "Transferência fill/copy v1 · legado"
                 }));
         workloadSpinner.setSelection(preferences.getInt("workload_position", 0));
@@ -154,7 +168,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         timings.setOrientation(LinearLayout.HORIZONTAL);
         warmupInput = numeric("Warm-up (s)", "3");
         durationInput = numeric("Medição (s)", "10");
-        roundsInput = numeric("Rodadas", "3");
+        roundsInput = numeric("Rodadas", "5");
         timings.addView(warmupInput, weighted());
         timings.addView(durationInput, weighted());
         timings.addView(roundsInput, weighted());
@@ -217,19 +231,20 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
 
     private void updateWorkloadControls() {
         if (workloadSpinner == null || workloadNote == null) return;
-        boolean transfer = selectedWorkloadId().equals(WorkloadContract.TRANSFER_ID);
-        workloadNote.setText(transfer
-                ? WorkloadContract.TRANSFER_LIMITATION
-                : WorkloadContract.RENDER_CORRECTNESS_LIMITATION);
-        warmupInput.setEnabled(!busy && transfer);
-        durationInput.setEnabled(!busy && transfer);
-        pixelToleranceInput.setEnabled(!busy && !transfer);
-        maximumDivergentBlocksInput.setEnabled(!busy && !transfer);
+        String workloadId = selectedWorkloadId();
+        boolean correction = WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId);
+        boolean performance = WorkloadContract.isPerformance(workloadId);
+        workloadNote.setText(WorkloadContract.limitationFor(workloadId));
+        warmupInput.setEnabled(!busy && performance);
+        durationInput.setEnabled(!busy && performance);
+        pixelToleranceInput.setEnabled(!busy && correction);
+        maximumDivergentBlocksInput.setEnabled(!busy && correction);
     }
 
     private String selectedWorkloadId() {
-        return workloadSpinner != null && workloadSpinner.getSelectedItemPosition() == 1
-                ? WorkloadContract.TRANSFER_ID : WorkloadContract.RENDER_CORRECTNESS_ID;
+        int position = workloadSpinner == null ? 0 : workloadSpinner.getSelectedItemPosition();
+        if (position < 0 || position >= WORKLOAD_IDS.length) position = 0;
+        return WORKLOAD_IDS[position];
     }
 
     private void loadDrivers() {
@@ -436,10 +451,33 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
                 headline.append(" · eventos de falha ").append(failures.length());
             }
         } else {
-            double delta = summary == null ? Double.NaN
-                    : summary.optDouble("candidate_vs_system_percent", Double.NaN);
-            if (Double.isFinite(delta)) {
-                headline.append(String.format(Locale.US, " · candidato %+.2f%%", delta));
+            JSONObject analysis = report.optJSONObject("statistical_analysis");
+            if (analysis != null && analysis.optBoolean("available", false)) {
+                double improvement = analysis.optDouble(
+                        "median_paired_improvement_percent", Double.NaN);
+                JSONObject interval = analysis.optJSONObject(
+                        "confidence_interval_95_percent");
+                if (Double.isFinite(improvement)) {
+                    headline.append(String.format(Locale.US,
+                            " · melhora mediana %+.2f%%", improvement));
+                }
+                if (interval != null) {
+                    double lower = interval.optDouble("lower", Double.NaN);
+                    double upper = interval.optDouble("upper", Double.NaN);
+                    if (Double.isFinite(lower) && Double.isFinite(upper)) {
+                        headline.append(String.format(Locale.US,
+                                " · IC95%% [%+.2f, %+.2f]", lower, upper));
+                    }
+                }
+                headline.append(" · ").append(analysis.optString(
+                        "classification", "inconclusive"));
+            } else {
+                double delta = summary == null ? Double.NaN
+                        : summary.optDouble("candidate_vs_system_percent", Double.NaN);
+                if (Double.isFinite(delta)) {
+                    headline.append(String.format(Locale.US,
+                            " · candidato %+.2f%%", delta));
+                }
             }
         }
         headline.append("\n").append(WorkloadContract.limitationFor(workloadId));

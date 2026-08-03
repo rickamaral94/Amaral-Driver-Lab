@@ -194,3 +194,45 @@ Uma fase travada nunca é convertida em resultado numérico. O processo é encer
 ### Comparabilidade histórica
 
 A passagem de `schema_version` 1 para 2 **não quebra** a comparabilidade do workload de transferência v1. Ela inicia uma série nova e independente para `render_correctness_offscreen/v1`. Resultados antigos não possuem `render_correctness`, `capability_diff`, `failure_catalog` nem `verdict`; consumidores devem tratar esses campos como opcionais ao ler schema 1.
+
+
+## Fase 3: `schema_version = 4`
+
+A versão 4 é aditiva. Workloads e métricas primárias mantêm suas versões anteriores; a nova inferência fica isolada em `analysis_contract` e `statistical_analysis`.
+
+```json
+{
+  "analysis_contract": {
+    "analysis_version": 1,
+    "sample_unit": "paired_ab_round",
+    "primary_estimator": "median_paired_improvement_percent",
+    "confidence_level": 0.95,
+    "bootstrap_iterations": 5000,
+    "minimum_paired_samples": 5,
+    "practical_margin_percent": 3.0
+  },
+  "statistical_analysis": {
+    "available": true,
+    "primary_metric": "throughput_gops",
+    "paired_sample_count": 7,
+    "median_paired_improvement_percent": 8.4,
+    "confidence_interval_95_percent": {
+      "lower": 5.1,
+      "upper": 11.2
+    },
+    "wins": 7,
+    "ties": 0,
+    "losses": 0,
+    "probability_of_superiority_percent": 100.0,
+    "matched_rank_biserial_correlation": 1.0,
+    "exact_sign_test_two_sided_p_value": 0.015625,
+    "classification": "candidate_better"
+  }
+}
+```
+
+A melhora percentual pareada usa o driver do sistema como denominador. Para métricas em que menor é melhor: `(sistema - candidato) / sistema × 100`. Para métricas em que maior é melhor: `(candidato - sistema) / sistema × 100`.
+
+A unidade amostral é a rodada A/B completa. Frames, dispatches, pipelines ou janelas térmicas dentro de uma fase não são promovidos a observações independentes. Falhas e pares incompletos permanecem explícitos e não recebem valores numéricos sintéticos.
+
+Ver [PHASE3_STATISTICAL_ANALYSIS.md](PHASE3_STATISTICAL_ANALYSIS.md).

@@ -57,6 +57,15 @@ public final class RunnerActivity extends Activity {
             String temporaryDirectory,
             String rawOutputPath);
 
+    private static native String runNativePhase2Workload(
+            String workloadId,
+            String driverDirectory,
+            String driverName,
+            String nativeLibraryDirectory,
+            String temporaryDirectory,
+            int warmupSeconds,
+            int measureSeconds);
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -136,7 +145,7 @@ public final class RunnerActivity extends Activity {
                 workloadConfig.put("measure_seconds", measure);
                 result.put("warmup_seconds", warmup);
                 result.put("measure_seconds", measure);
-            } else {
+            } else if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
                 workloadConfig.put("image_width", WorkloadContract.RENDER_WIDTH);
                 workloadConfig.put("image_height", WorkloadContract.RENDER_HEIGHT);
                 workloadConfig.put("pixel_tolerance", pixelTolerance);
@@ -144,6 +153,9 @@ public final class RunnerActivity extends Activity {
                 workloadConfig.put("minimum_block_match_percent",
                         WorkloadContract.MINIMUM_BLOCK_MATCH_PERCENT);
                 workloadConfig.put("maximum_divergent_blocks", maxDivergentBlocks);
+            } else {
+                workloadConfig.put("warmup_seconds", warmup);
+                workloadConfig.put("measure_seconds", measure);
             }
             result.put("workload_config", workloadConfig);
             result.put("driver_mode", driverDir == null || driverDir.isEmpty() ? "system" : "custom");
@@ -172,6 +184,15 @@ public final class RunnerActivity extends Activity {
                         getApplicationInfo().nativeLibraryDir,
                         temporary.getAbsolutePath(),
                         rawEvidence.getAbsolutePath());
+            } else if (WorkloadContract.isPhase2(workloadId)) {
+                nativeJson = runNativePhase2Workload(
+                        workloadId,
+                        driverDir == null ? "" : driverDir,
+                        driverName == null ? "" : driverName,
+                        getApplicationInfo().nativeLibraryDir,
+                        temporary.getAbsolutePath(),
+                        warmup,
+                        measure);
             } else {
                 nativeJson = runNativeBenchmark(
                         driverDir == null ? "" : driverDir,
