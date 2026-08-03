@@ -216,7 +216,6 @@ const char *driverIdName(VkDriverId id) {
         case VK_DRIVER_ID_MESA_DOZEN: return "MESA_DOZEN";
         case VK_DRIVER_ID_MESA_NVK: return "MESA_NVK";
         case VK_DRIVER_ID_IMAGINATION_OPEN_SOURCE_MESA: return "IMAGINATION_OPEN_SOURCE_MESA";
-        case VK_DRIVER_ID_MESA_HONEYKRISP: return "MESA_HONEYKRISP";
         default: return "UNKNOWN";
     }
 }
@@ -418,7 +417,7 @@ public:
         stage = "create_device";
         check(createDevice(physicalDevice, &deviceInfo, nullptr, &device), "vkCreateDevice");
         loadDeviceFunctions();
-        getDeviceQueue(device, queueFamilyIndex, 0, &queue);
+        vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
         createResources();
     }
 
@@ -431,13 +430,13 @@ public:
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
         stage = "queue_submit";
-        check(queueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE), "vkQueueSubmit");
+        check(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE), "vkQueueSubmit");
         stage = "queue_wait_idle";
-        check(queueWaitIdle(queue), "vkQueueWaitIdle");
+        check(vkQueueWaitIdle(queue), "vkQueueWaitIdle");
 
         stage = "readback";
         void *mapped = nullptr;
-        check(mapMemory(device, readbackMemory, 0, readbackAllocationSize, 0, &mapped),
+        check(vkMapMemory(device, readbackMemory, 0, readbackAllocationSize, 0, &mapped),
               "vkMapMemory(readback)");
         if ((readbackMemoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
             VkMappedMemoryRange range{};
@@ -445,19 +444,19 @@ public:
             range.memory = readbackMemory;
             range.offset = 0;
             range.size = VK_WHOLE_SIZE;
-            check(invalidateMappedMemoryRanges(device, 1, &range),
+            check(vkInvalidateMappedMemoryRanges(device, 1, &range),
                   "vkInvalidateMappedMemoryRanges(readback)");
         }
 
         const size_t outputSize = static_cast<size_t>(kWidth) * kHeight * 4U;
         std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
         if (!output) {
-            unmapMemory(device, readbackMemory);
+            vkUnmapMemory(device, readbackMemory);
             throw std::runtime_error("Unable to create raw render evidence");
         }
         output.write(static_cast<const char *>(mapped), static_cast<std::streamsize>(outputSize));
         output.close();
-        unmapMemory(device, readbackMemory);
+        vkUnmapMemory(device, readbackMemory);
         if (!output) throw std::runtime_error("Unable to write raw render evidence");
 
         std::ostringstream json;
@@ -933,7 +932,7 @@ private:
 
         json << ",\"features2_source\":\""
              << (getPhysicalDeviceFeatures2 != nullptr ? "vkGetPhysicalDeviceFeatures2" : "legacy_fallback")
-             << "\",\"features":{";
+             << "\",\"features\":{";
 #define FEATURE(name) "\"" #name "\":" << (features.name ? "true" : "false")
         json << FEATURE(robustBufferAccess)
              << ',' << FEATURE(fullDrawIndexUint32)
