@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.22.1)
 project(amaral_driver_lab LANGUAGES C CXX)
 
 include(FetchContent)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 # Pinned: https://github.com/bylaws/libadrenotools/commit/8fae8ce254dfc1344527e05301e43f37dea2df80
 FetchContent_Declare(
@@ -26,25 +27,38 @@ if (NOT GLSLC_EXECUTABLE)
 endif ()
 
 set(GENERATED_SHADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-shaders")
+set(RENDER_VERT_C "${GENERATED_SHADER_DIR}/render_correctness_vert.c")
+set(RENDER_FRAG_C "${GENERATED_SHADER_DIR}/render_correctness_frag.c")
 set(RENDER_VERT_INC "${GENERATED_SHADER_DIR}/render_correctness_vert.inc")
 set(RENDER_FRAG_INC "${GENERATED_SHADER_DIR}/render_correctness_frag.inc")
+set(SPIRV_EXTRACTOR "${CMAKE_CURRENT_SOURCE_DIR}/extract_spirv_initializer.py")
 
 add_custom_command(
         OUTPUT "${RENDER_VERT_INC}"
+        BYPRODUCTS "${RENDER_VERT_C}"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${GENERATED_SHADER_DIR}"
         COMMAND "${GLSLC_EXECUTABLE}" -c --target-env=vulkan1.0 -mfmt=c
                 "${CMAKE_CURRENT_SOURCE_DIR}/shaders/render_correctness.vert"
-                -o "${RENDER_VERT_INC}"
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/render_correctness.vert"
+                -o "${RENDER_VERT_C}"
+        COMMAND "${Python3_EXECUTABLE}" "${SPIRV_EXTRACTOR}"
+                "${RENDER_VERT_C}" "${RENDER_VERT_INC}"
+        DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/shaders/render_correctness.vert"
+                "${SPIRV_EXTRACTOR}"
         VERBATIM)
 
 add_custom_command(
         OUTPUT "${RENDER_FRAG_INC}"
+        BYPRODUCTS "${RENDER_FRAG_C}"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${GENERATED_SHADER_DIR}"
         COMMAND "${GLSLC_EXECUTABLE}" -c --target-env=vulkan1.0 -mfmt=c
                 "${CMAKE_CURRENT_SOURCE_DIR}/shaders/render_correctness.frag"
-                -o "${RENDER_FRAG_INC}"
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/render_correctness.frag"
+                -o "${RENDER_FRAG_C}"
+        COMMAND "${Python3_EXECUTABLE}" "${SPIRV_EXTRACTOR}"
+                "${RENDER_FRAG_C}" "${RENDER_FRAG_INC}"
+        DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/shaders/render_correctness.frag"
+                "${SPIRV_EXTRACTOR}"
         VERBATIM)
 
 add_custom_target(driverlab_shaders DEPENDS "${RENDER_VERT_INC}" "${RENDER_FRAG_INC}")
