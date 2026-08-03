@@ -22,7 +22,7 @@ final class WorkloadContract {
     static final int DEFAULT_PIXEL_TOLERANCE = 2;
     static final int BLOCK_SIZE = 16;
     static final double MINIMUM_BLOCK_MATCH_PERCENT = 99.0;
-    static final int DEFAULT_MAX_DIVERGENT_BLOCKS = 8;
+    static final int DEFAULT_MAX_DIVERGENT_BLOCKS = 0;
 
     private WorkloadContract() {}
 
