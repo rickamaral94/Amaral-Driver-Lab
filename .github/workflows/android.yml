@@ -41,7 +41,29 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+        shell: bash
+        run: |
+          set +e
+          ./gradlew :app:assembleDebug --stacktrace --console=plain > native-build.log 2>&1
+          status=$?
+          grep -E "(^|[[:space:]])(error:|fatal error:|CMake Error|ninja: error|FAILURE:|What went wrong:|Execution failed for task|Caused by:)" \
+            native-build.log | tail -n 250 > native-build-errors.txt || true
+          if [ ! -s native-build-errors.txt ]; then
+            tail -n 250 native-build.log > native-build-errors.txt
+          fi
+          cat native-build-errors.txt
+          exit "$status"
+
+      - name: Upload native build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amaral-driver-lab-native-build-diagnostics
+          path: |
+            native-build-errors.txt
+            native-build.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload unit test report
         if: always()
