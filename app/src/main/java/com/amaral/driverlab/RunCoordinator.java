@@ -2,6 +2,8 @@ package com.amaral.driverlab;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
@@ -13,8 +15,10 @@ import org.json.JSONObject;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 final class RunCoordinator {
     static final int MODE_SYSTEM = 0;
@@ -46,6 +50,9 @@ final class RunCoordinator {
     private final int rounds;
     private final int warmupSeconds;
     private final int measureSeconds;
+    private final String workloadId;
+    private final int pixelTolerance;
+    private final int maximumDivergentBlocks;
     private final Listener listener;
     private final List<Phase> phases = new ArrayList<>();
     private final JSONArray phaseResults = new JSONArray();
@@ -54,16 +61,24 @@ final class RunCoordinator {
     private long suiteStartedAt;
     private int phaseIndex;
     private long phaseDeadlineElapsed;
+    private long phaseLaunchedElapsed;
     private File currentResultFile;
 
     RunCoordinator(Activity activity, DriverPackage candidate, int mode, int rounds,
-                   int warmupSeconds, int measureSeconds, Listener listener) {
+                   int warmupSeconds, int measureSeconds, String workloadId,
+                   int pixelTolerance, int maximumDivergentBlocks, Listener listener) {
         this.activity = activity;
         this.candidate = candidate;
         this.mode = mode;
         this.rounds = Math.max(1, Math.min(rounds, 10));
         this.warmupSeconds = Math.max(0, Math.min(warmupSeconds, 30));
         this.measureSeconds = Math.max(1, Math.min(measureSeconds, 120));
+        if (!WorkloadContract.isSupported(workloadId)) {
+            throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
+        }
+        this.workloadId = workloadId;
+        this.pixelTolerance = Math.max(0, Math.min(pixelTolerance, 255));
+        this.maximumDivergentBlocks = Math.max(0, maximumDivergentBlocks);
         this.listener = listener;
     }
 
@@ -112,8 +127,10 @@ final class RunCoordinator {
         String fileName = String.format(Locale.US, "phase-%02d-%s-r%d.json",
                 phaseIndex + 1, phase.label, phase.round);
         currentResultFile = new File(suiteDirectory, fileName);
+        String workloadLabel = WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)
+                ? "correção offscreen" : "transferência v1";
         listener.onStatus("Executando " + (phaseIndex + 1) + "/" + phases.size()
-                + " · rodada " + phase.round + " · "
+                + " · " + workloadLabel + " · rodada " + phase.round + " · "
                 + (phase.custom ? candidate.displayName() : "driver do sistema"));
 
         Intent intent = new Intent(activity, RunnerActivity.class);
@@ -122,6 +139,11 @@ final class RunCoordinator {
         intent.putExtra(RunnerActivity.EXTRA_ROUND, phase.round);
         intent.putExtra(RunnerActivity.EXTRA_WARMUP_SECONDS, warmupSeconds);
         intent.putExtra(RunnerActivity.EXTRA_MEASURE_SECONDS, measureSeconds);
+        intent.putExtra(RunnerActivity.EXTRA_WORKLOAD_ID, workloadId);
+        intent.putExtra(RunnerActivity.EXTRA_WORKLOAD_VERSION,
+                WorkloadContract.versionFor(workloadId));
+        intent.putExtra(RunnerActivity.EXTRA_PIXEL_TOLERANCE, pixelTolerance);
+        intent.putExtra(RunnerActivity.EXTRA_MAX_DIVERGENT_BLOCKS, maximumDivergentBlocks);
         if (phase.custom) {
             intent.putExtra(RunnerActivity.EXTRA_DRIVER_DIR, candidate.directory.getAbsolutePath());
             intent.putExtra(RunnerActivity.EXTRA_DRIVER_NAME, candidate.libraryName);
@@ -129,8 +151,10 @@ final class RunCoordinator {
             intent.putExtra(RunnerActivity.EXTRA_DRIVER_SHA, candidate.sha256);
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-        phaseDeadlineElapsed = SystemClock.elapsedRealtime()
-                + (warmupSeconds + measureSeconds + 45L) * 1000L;
+        phaseLaunchedElapsed = SystemClock.elapsedRealtime();
+        long timeoutSeconds = WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)
+                ? 90L : warmupSeconds + measureSeconds + 45L;
+        phaseDeadlineElapsed = phaseLaunchedElapsed + timeoutSeconds * 1000L;
         activity.startActivity(intent);
         handler.postDelayed(this::pollCurrent, 500);
     }
@@ -140,21 +164,21 @@ final class RunCoordinator {
             if (currentResultFile.isFile()) {
                 phaseResults.put(new JSONObject(ResultFiles.readUtf8(currentResultFile)));
                 phaseIndex++;
-                handler.postDelayed(this::launchNext, 1500);
+                handler.postDelayed(this::launchNext, 1200);
+                return;
+            }
+            if (runnerExitedUnexpectedly()) {
+                killTimedOutRunner();
+                recordSyntheticFailure("crash", "runner_crash");
+                phaseIndex++;
+                handler.postDelayed(this::launchNext, 1200);
                 return;
             }
             if (SystemClock.elapsedRealtime() >= phaseDeadlineElapsed) {
                 killTimedOutRunner();
-                Phase phase = phases.get(phaseIndex);
-                JSONObject timeout = new JSONObject();
-                timeout.put("success", false);
-                timeout.put("phase", phase.label);
-                timeout.put("round", phase.round);
-                timeout.put("error", "runner_timeout");
-                timeout.put("finished_at_ms", System.currentTimeMillis());
-                phaseResults.put(timeout);
+                recordSyntheticFailure("timeout", "runner_timeout");
                 phaseIndex++;
-                handler.postDelayed(this::launchNext, 1500);
+                handler.postDelayed(this::launchNext, 1200);
                 return;
             }
             handler.postDelayed(this::pollCurrent, 500);
@@ -163,38 +187,95 @@ final class RunCoordinator {
         }
     }
 
+    private boolean runnerExitedUnexpectedly() {
+        if (SystemClock.elapsedRealtime() - phaseLaunchedElapsed < 2000L) return false;
+        try {
+            File stateFile = new File(currentResultFile.getAbsolutePath() + ".state");
+            if (!stateFile.isFile()) return false;
+            JSONObject state = new JSONObject(ResultFiles.readUtf8(stateFile));
+            if (!"started".equals(state.optString("state"))) return false;
+            int pid = state.optInt("pid", -1);
+            return pid > 0 && !new File("/proc/" + pid).exists();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private void recordSyntheticFailure(String failureType, String error) throws Exception {
+        Phase phase = phases.get(phaseIndex);
+        JSONObject failure = new JSONObject();
+        failure.put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION);
+        failure.put("success", false);
+        failure.put("phase", phase.label);
+        failure.put("driver_mode", phase.custom ? "custom" : "system");
+        failure.put("round", phase.round);
+        failure.put("workload_id", workloadId);
+        failure.put("workload_version", WorkloadContract.versionFor(workloadId));
+        failure.put("failure_type", failureType);
+        failure.put("failure_stage", "runner_process");
+        failure.put("error", error);
+        failure.put("finished_at_ms", System.currentTimeMillis());
+        ResultFiles.writeAtomic(currentResultFile, failure.toString(2));
+        phaseResults.put(failure);
+    }
+
     private void killTimedOutRunner() {
         try {
             File stateFile = new File(currentResultFile.getAbsolutePath() + ".state");
             if (!stateFile.isFile()) return;
             int pid = new JSONObject(ResultFiles.readUtf8(stateFile)).optInt("pid", -1);
-            if (pid > 0 && pid != Process.myPid()) {
-                Process.killProcess(pid);
-            }
+            if (pid > 0 && pid != Process.myPid()) Process.killProcess(pid);
         } catch (Exception ignored) {
-            // The timeout itself remains recorded even if the stale runner cannot be killed.
+            // The failure remains recorded even if the stale runner cannot be killed.
         }
     }
 
     private void finishSuite() {
         try {
             JSONObject report = new JSONObject();
-            report.put("schema_version", 1);
+            report.put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION);
             report.put("suite_id", suiteDirectory.getName());
             report.put("app_version", BuildConfig.VERSION_NAME);
             report.put("started_at_ms", suiteStartedAt);
             report.put("finished_at_ms", System.currentTimeMillis());
             report.put("mode", modeName());
             report.put("rounds", rounds);
-            report.put("warmup_seconds", warmupSeconds);
-            report.put("measure_seconds", measureSeconds);
             report.put("order_policy", mode == MODE_AB ? "AB/BA alternating" : "single driver");
-            report.put("workload", "vulkan_transfer_stress_v1");
+            report.put("workload_id", workloadId);
+            report.put("workload_version", WorkloadContract.versionFor(workloadId));
+            report.put("workload", compatibilityWorkloadName());
+            report.put("metric_limitations", WorkloadContract.limitationFor(workloadId));
+            report.put("workload_config", workloadConfig());
+            if (WorkloadContract.TRANSFER_ID.equals(workloadId)) {
+                report.put("warmup_seconds", warmupSeconds);
+                report.put("measure_seconds", measureSeconds);
+            }
             report.put("host_device", DeviceSnapshot.capture(activity));
             report.put("candidate", candidate == null ? JSONObject.NULL : candidate.toJson());
             report.put("phases", phaseResults);
-            report.put("summary", summarize());
-            report.put("validity_warnings", buildWarnings());
+
+            JSONArray failureCatalog = FailureCatalog.fromPhases(phaseResults);
+            JSONObject summary;
+            JSONObject capabilityDiff = capabilityDiff();
+            JSONObject renderCorrectness = null;
+            String verdict;
+            if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
+                renderCorrectness = analyzeRenderCorrectness(failureCatalog);
+                summary = correctionSummary(renderCorrectness, failureCatalog);
+                verdict = correctionVerdict(renderCorrectness, failureCatalog);
+            } else {
+                summary = summarizeTransfer();
+                verdict = summary.optInt("failed_phases", 0) > 0
+                        ? "failed_execution" : "completed_transfer_measurement";
+            }
+            report.put("summary", summary);
+            report.put("render_correctness",
+                    renderCorrectness == null ? JSONObject.NULL : renderCorrectness);
+            report.put("capability_diff",
+                    capabilityDiff == null ? JSONObject.NULL : capabilityDiff);
+            report.put("failure_catalog", failureCatalog);
+            report.put("verdict", verdict);
+            report.put("validity_warnings", buildWarnings(renderCorrectness, failureCatalog));
 
             File reportFile = new File(suiteDirectory, "suite.json");
             ResultFiles.writeAtomic(reportFile, report.toString(2));
@@ -204,7 +285,32 @@ final class RunCoordinator {
         }
     }
 
-    private JSONObject summarize() throws Exception {
+    private JSONObject workloadConfig() throws Exception {
+        JSONObject config = new JSONObject();
+        if (WorkloadContract.TRANSFER_ID.equals(workloadId)) {
+            config.put("warmup_seconds", warmupSeconds);
+            config.put("measure_seconds", measureSeconds);
+        } else {
+            config.put("image_width", WorkloadContract.RENDER_WIDTH);
+            config.put("image_height", WorkloadContract.RENDER_HEIGHT);
+            config.put("pixel_tolerance", pixelTolerance);
+            config.put("block_size_px", WorkloadContract.BLOCK_SIZE);
+            config.put("minimum_block_match_percent",
+                    WorkloadContract.MINIMUM_BLOCK_MATCH_PERCENT);
+            config.put("maximum_divergent_blocks", maximumDivergentBlocks);
+        }
+        return config;
+    }
+
+    private String compatibilityWorkloadName() {
+        if (WorkloadContract.TRANSFER_ID.equals(workloadId)) {
+            return WorkloadContract.TRANSFER_NATIVE_NAME;
+        }
+        return WorkloadContract.RENDER_CORRECTNESS_ID + "_v"
+                + WorkloadContract.RENDER_CORRECTNESS_VERSION;
+    }
+
+    private JSONObject summarizeTransfer() throws Exception {
         List<Double> system = new ArrayList<>();
         List<Double> candidateValues = new ArrayList<>();
         int failures = 0;
@@ -219,7 +325,7 @@ final class RunCoordinator {
                 failures++;
                 continue;
             }
-            double value = nativeResult.optDouble("transfer_payload_gib_s", Double.NaN);
+            double value = nativeResult.optDouble(WorkloadContract.TRANSFER_METRIC, Double.NaN);
             if (!Double.isFinite(value)) continue;
             if ("custom".equals(phase.optString("driver_mode"))) {
                 candidateValues.add(value);
@@ -229,8 +335,8 @@ final class RunCoordinator {
         }
 
         JSONObject summary = new JSONObject();
-        summary.put("system", statistics(system));
-        summary.put("candidate", statistics(candidateValues));
+        summary.put("system", transferStatistics(system));
+        summary.put("candidate", transferStatistics(candidateValues));
         summary.put("failed_phases", failures);
         if (!system.isEmpty() && !candidateValues.isEmpty()) {
             double systemMedian = median(system);
@@ -240,10 +346,11 @@ final class RunCoordinator {
         } else {
             summary.put("candidate_vs_system_percent", JSONObject.NULL);
         }
+        summary.put("metric_note", WorkloadContract.TRANSFER_LIMITATION);
         return summary;
     }
 
-    private JSONObject statistics(List<Double> values) throws Exception {
+    private JSONObject transferStatistics(List<Double> values) throws Exception {
         JSONObject stats = new JSONObject();
         stats.put("sample_count", values.size());
         if (values.isEmpty()) {
@@ -265,6 +372,171 @@ final class RunCoordinator {
         return stats;
     }
 
+    private JSONObject analyzeRenderCorrectness(JSONArray failureCatalog) throws Exception {
+        JSONArray comparisons = new JSONArray();
+        Set<String> systemHashes = new HashSet<>();
+        Set<String> candidateHashes = new HashSet<>();
+        double minimumPixelMatch = Double.POSITIVE_INFINITY;
+        int maximumDivergent = 0;
+        boolean allPassed = true;
+
+        for (int round = 1; round <= rounds; ++round) {
+            JSONObject system = findSuccessfulPhase(round, false);
+            JSONObject candidatePhase = findSuccessfulPhase(round, true);
+            collectHash(system, systemHashes);
+            collectHash(candidatePhase, candidateHashes);
+            if (system == null || candidatePhase == null) continue;
+
+            int[] systemPixels = loadEvidencePixels(system);
+            int[] candidatePixels = loadEvidencePixels(candidatePhase);
+            RenderComparator.Result comparison = RenderComparator.compare(
+                    systemPixels, candidatePixels,
+                    WorkloadContract.RENDER_WIDTH, WorkloadContract.RENDER_HEIGHT,
+                    pixelTolerance, WorkloadContract.BLOCK_SIZE,
+                    WorkloadContract.MINIMUM_BLOCK_MATCH_PERCENT);
+            JSONObject comparisonJson = comparison.toJson(maximumDivergentBlocks);
+            comparisonJson.put("round", round);
+            comparisonJson.put("system_sha256_rgba", evidenceHash(system));
+            comparisonJson.put("candidate_sha256_rgba", evidenceHash(candidatePhase));
+            comparisons.put(comparisonJson);
+            minimumPixelMatch = Math.min(minimumPixelMatch, comparison.pixelMatchPercent());
+            maximumDivergent = Math.max(maximumDivergent, comparison.divergentBlocks.size());
+            if (!comparison.passes(maximumDivergentBlocks)) {
+                allPassed = false;
+                FailureCatalog.appendRenderMismatch(failureCatalog, round, comparisonJson);
+            }
+        }
+
+        // Single-driver modes still record deterministic hashes across their own rounds.
+        if (mode != MODE_AB) {
+            for (int index = 0; index < phaseResults.length(); ++index) {
+                JSONObject phase = phaseResults.optJSONObject(index);
+                if (phase == null || !phase.optBoolean("success", false)) continue;
+                collectHash(phase, "custom".equals(phase.optString("driver_mode"))
+                        ? candidateHashes : systemHashes);
+            }
+        }
+
+        JSONObject result = new JSONObject();
+        result.put("comparison_available", comparisons.length() > 0);
+        result.put("comparisons", comparisons);
+        result.put("comparison_count", comparisons.length());
+        result.put("pixel_match_percent", comparisons.length() == 0
+                ? JSONObject.NULL : minimumPixelMatch);
+        result.put("maximum_divergent_block_count", comparisons.length() == 0
+                ? JSONObject.NULL : maximumDivergent);
+        result.put("passed", comparisons.length() > 0 && allPassed);
+        result.put("system_unique_render_hashes", stringArray(systemHashes));
+        result.put("candidate_unique_render_hashes", stringArray(candidateHashes));
+        result.put("system_nondeterministic", systemHashes.size() > 1);
+        result.put("candidate_nondeterministic", candidateHashes.size() > 1);
+        result.put("metric_note", WorkloadContract.RENDER_CORRECTNESS_LIMITATION);
+        return result;
+    }
+
+    private JSONObject correctionSummary(JSONObject correction, JSONArray failures) throws Exception {
+        JSONObject summary = new JSONObject();
+        summary.put("failed_events", failures.length());
+        summary.put("comparison_count", correction.optInt("comparison_count", 0));
+        summary.put("pixel_match_percent",
+                correction.has("pixel_match_percent")
+                        ? correction.opt("pixel_match_percent") : JSONObject.NULL);
+        summary.put("maximum_divergent_block_count",
+                correction.has("maximum_divergent_block_count")
+                        ? correction.opt("maximum_divergent_block_count") : JSONObject.NULL);
+        summary.put("render_correctness_passed", correction.optBoolean("passed", false));
+        summary.put("metric_note", WorkloadContract.RENDER_CORRECTNESS_LIMITATION);
+        return summary;
+    }
+
+    private String correctionVerdict(JSONObject correction, JSONArray failures) {
+        for (int index = 0; index < failures.length(); ++index) {
+            JSONObject failure = failures.optJSONObject(index);
+            if (failure != null && !"render_mismatch".equals(
+                    failure.optString("failure_type"))) {
+                return "failed_execution";
+            }
+        }
+        if (!correction.optBoolean("comparison_available", false)) {
+            return "completed_no_reference";
+        }
+        return correction.optBoolean("passed", false)
+                ? "passed_render_correctness" : "failed_render_correctness";
+    }
+
+    private JSONObject capabilityDiff() throws Exception {
+        JSONObject systemCapabilities = firstCapabilities(false);
+        JSONObject candidateCapabilities = firstCapabilities(true);
+        if (systemCapabilities == null || candidateCapabilities == null) return null;
+        return CapabilityDiff.compare(systemCapabilities, candidateCapabilities);
+    }
+
+    private JSONObject firstCapabilities(boolean custom) {
+        for (int index = 0; index < phaseResults.length(); ++index) {
+            JSONObject phase = phaseResults.optJSONObject(index);
+            if (phase == null || !phase.optBoolean("success", false)) continue;
+            if (custom != "custom".equals(phase.optString("driver_mode"))) continue;
+            JSONObject nativeResult = phase.optJSONObject("native");
+            if (nativeResult == null) continue;
+            JSONObject capabilities = nativeResult.optJSONObject("capabilities");
+            if (capabilities != null) return capabilities;
+        }
+        return null;
+    }
+
+    private JSONObject findSuccessfulPhase(int round, boolean custom) {
+        for (int index = 0; index < phaseResults.length(); ++index) {
+            JSONObject phase = phaseResults.optJSONObject(index);
+            if (phase == null || !phase.optBoolean("success", false)) continue;
+            if (phase.optInt("round", -1) != round) continue;
+            if (custom == "custom".equals(phase.optString("driver_mode"))) return phase;
+        }
+        return null;
+    }
+
+    private int[] loadEvidencePixels(JSONObject phase) throws Exception {
+        JSONObject evidence = phase.optJSONObject("evidence");
+        if (evidence == null) throw new IllegalStateException("Fase sem preview de render");
+        String relativePath = evidence.optString("relative_path", "");
+        File file = new File(suiteDirectory, relativePath);
+        if (relativePath.isEmpty() || !ResultFiles.isInside(suiteDirectory, file) || !file.isFile()) {
+            throw new IllegalStateException("Preview de render ausente ou fora da suíte");
+        }
+        Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath());
+        if (bitmap == null) throw new IllegalStateException("PNG de evidência inválido");
+        try {
+            if (bitmap.getWidth() != WorkloadContract.RENDER_WIDTH
+                    || bitmap.getHeight() != WorkloadContract.RENDER_HEIGHT) {
+                throw new IllegalStateException("PNG com dimensões inesperadas");
+            }
+            int[] pixels = new int[bitmap.getWidth() * bitmap.getHeight()];
+            bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0,
+                    bitmap.getWidth(), bitmap.getHeight());
+            return pixels;
+        } finally {
+            bitmap.recycle();
+        }
+    }
+
+    private static void collectHash(JSONObject phase, Set<String> destination) {
+        if (phase == null) return;
+        String hash = evidenceHash(phase);
+        if (!hash.isEmpty()) destination.add(hash);
+    }
+
+    private static String evidenceHash(JSONObject phase) {
+        JSONObject evidence = phase == null ? null : phase.optJSONObject("evidence");
+        return evidence == null ? "" : evidence.optString("sha256_rgba", "");
+    }
+
+    private static JSONArray stringArray(Set<String> values) {
+        List<String> sorted = new ArrayList<>(values);
+        Collections.sort(sorted);
+        JSONArray array = new JSONArray();
+        for (String value : sorted) array.put(value);
+        return array;
+    }
+
     private static double median(List<Double> input) {
         List<Double> values = new ArrayList<>(input);
         Collections.sort(values);
@@ -274,19 +546,23 @@ final class RunCoordinator {
                 : values.get(middle);
     }
 
-    private JSONArray buildWarnings() throws Exception {
+    private JSONArray buildWarnings(JSONObject correction, JSONArray failureCatalog)
+            throws Exception {
         JSONArray warnings = new JSONArray();
         double minimumTemperature = Double.POSITIVE_INFINITY;
         double maximumTemperature = Double.NEGATIVE_INFINITY;
         boolean timestampFallback = false;
+        boolean validationFailure = false;
         for (int index = 0; index < phaseResults.length(); ++index) {
             JSONObject phase = phaseResults.getJSONObject(index);
             if (!phase.optBoolean("success", false)) {
-                warnings.put("Uma ou mais fases falharam ou expiraram.");
+                warnings.put("Uma ou mais fases falharam, encerraram ou expiraram.");
             }
-            JSONObject nativeResult = phase.optJSONObject("native");
-            if (nativeResult != null && !nativeResult.optBoolean("gpu_timestamps_used", false)) {
-                timestampFallback = true;
+            if (WorkloadContract.TRANSFER_ID.equals(workloadId)) {
+                JSONObject nativeResult = phase.optJSONObject("native");
+                if (nativeResult != null && !nativeResult.optBoolean("gpu_timestamps_used", false)) {
+                    timestampFallback = true;
+                }
             }
             JSONObject before = phase.optJSONObject("device_before");
             if (before != null) {
@@ -297,8 +573,16 @@ final class RunCoordinator {
                 }
             }
         }
+        for (int index = 0; index < failureCatalog.length(); ++index) {
+            JSONObject failure = failureCatalog.optJSONObject(index);
+            if (failure != null && "validation_error".equals(
+                    failure.optString("failure_type"))) validationFailure = true;
+        }
         if (timestampFallback) {
             warnings.put("A GPU não forneceu timestamps válidos; a fase usou relógio de parede.");
+        }
+        if (validationFailure) {
+            warnings.put("Foram capturadas mensagens de erro da camada de validação.");
         }
         if (Double.isFinite(minimumTemperature)
                 && maximumTemperature - minimumTemperature > 2.0) {
@@ -309,7 +593,28 @@ final class RunCoordinator {
         if (rounds < 3) {
             warnings.put("Menos de três rodadas: resultado exploratório, não conclusivo.");
         }
-        return warnings;
+        if (correction != null) {
+            if (correction.optBoolean("system_nondeterministic", false)) {
+                warnings.put("O driver do sistema produziu hashes exatos diferentes entre rodadas.");
+            }
+            if (correction.optBoolean("candidate_nondeterministic", false)) {
+                warnings.put("O candidato produziu hashes exatos diferentes entre rodadas.");
+            }
+            if (!correction.optBoolean("comparison_available", false)) {
+                warnings.put("Sem braço sistema × candidato; a correção relativa não pôde ser julgada.");
+            }
+        }
+        return deduplicate(warnings);
+    }
+
+    private static JSONArray deduplicate(JSONArray input) {
+        Set<String> seen = new HashSet<>();
+        JSONArray output = new JSONArray();
+        for (int index = 0; index < input.length(); ++index) {
+            String value = input.optString(index, "");
+            if (!value.isEmpty() && seen.add(value)) output.put(value);
+        }
+        return output;
     }
 
     private String modeName() {
