@@ -1,0 +1,223 @@
+package com.amaral.driverlab;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+final class CampaignPlan {
+    private static final Pattern SHA256 = Pattern.compile("[0-9a-fA-F]{64}");
+
+    private CampaignPlan() {}
+
+    static JSONObject create(String campaignId, long createdAtMs, JSONArray drivers,
+                             JSONArray workloads, JSONObject protocol) throws Exception {
+        validateInputs(campaignId, drivers, workloads, protocol);
+        JSONObject plan = new JSONObject()
+                .put("scheduler_version", Phase6Contract.SCHEDULER_VERSION)
+                .put("order_policy", Phase6Contract.ORDER_POLICY)
+                .put("protocol", new JSONObject(protocol.toString()))
+                .put("drivers", new JSONArray(drivers.toString()))
+                .put("workloads", new JSONArray(workloads.toString()))
+                .put("jobs", buildJobs(drivers, workloads));
+
+        JSONArray executionJobs = new JSONArray();
+        JSONArray jobs = plan.getJSONArray("jobs");
+        for (int index = 0; index < jobs.length(); ++index) {
+            JSONObject immutable = jobs.getJSONObject(index);
+            executionJobs.put(new JSONObject()
+                    .put("job_id", immutable.getString("job_id"))
+                    .put("status", "pending")
+                    .put("attempt_count", 0)
+                    .put("started_at_ms", JSONObject.NULL)
+                    .put("finished_at_ms", JSONObject.NULL)
+                    .put("suite_relative_path", JSONObject.NULL)
+                    .put("suite_id", JSONObject.NULL)
+                    .put("verdict", JSONObject.NULL)
+                    .put("blocking_validity", JSONObject.NULL)
+                    .put("failure", JSONObject.NULL));
+        }
+
+        JSONObject campaign = new JSONObject()
+                .put("campaign_schema_version", Phase6Contract.CAMPAIGN_SCHEMA_VERSION)
+                .put("campaign_id", campaignId)
+                .put("created_at_ms", createdAtMs)
+                .put("app_version", BuildConfig.VERSION_NAME)
+                .put("phase6_contract", Phase6Contract.contractJson())
+                .put("plan", plan)
+                .put("plan_sha256", JsonCanonicalizer.sha256(plan))
+                .put("execution", new JSONObject()
+                        .put("state", "pending")
+                        .put("started_at_ms", JSONObject.NULL)
+                        .put("finished_at_ms", JSONObject.NULL)
+                        .put("pause_requested", false)
+                        .put("recovery_count", 0)
+                        .put("warnings", new JSONArray())
+                        .put("jobs", executionJobs))
+                .put("summary", JSONObject.NULL)
+                .put("limitations", Phase6Contract.LIMITATION);
+        if (!verify(campaign)) throw new IllegalStateException("Manifesto de campanha inválido");
+        return campaign;
+    }
+
+    static boolean verify(JSONObject campaign) {
+        try {
+            if (campaign.optInt("campaign_schema_version", -1)
+                    != Phase6Contract.CAMPAIGN_SCHEMA_VERSION) return false;
+            String campaignId = campaign.optString("campaign_id", "");
+            if (!isSafeCampaignId(campaignId)) return false;
+            JSONObject plan = campaign.optJSONObject("plan");
+            JSONObject execution = campaign.optJSONObject("execution");
+            if (plan == null || execution == null) return false;
+            if (plan.optInt("scheduler_version", -1) != Phase6Contract.SCHEDULER_VERSION) {
+                return false;
+            }
+            if (!Phase6Contract.ORDER_POLICY.equals(plan.optString("order_policy"))) return false;
+            String expected = campaign.optString("plan_sha256", "");
+            if (!SHA256.matcher(expected).matches()
+                    || !expected.equalsIgnoreCase(JsonCanonicalizer.sha256(plan))) return false;
+            JSONArray jobs = plan.optJSONArray("jobs");
+            JSONArray states = execution.optJSONArray("jobs");
+            if (jobs == null || states == null || jobs.length() != states.length()
+                    || jobs.length() == 0 || jobs.length() > Phase6Contract.MAX_JOBS) return false;
+            Set<String> immutableIds = new HashSet<>();
+            for (int index = 0; index < jobs.length(); ++index) {
+                JSONObject job = jobs.optJSONObject(index);
+                JSONObject state = states.optJSONObject(index);
+                if (job == null || state == null) return false;
+                String id = job.optString("job_id", "");
+                if (id.isEmpty() || !immutableIds.add(id)
+                        || !id.equals(state.optString("job_id", ""))) return false;
+                if (!SHA256.matcher(job.optString("candidate_sha256", "")).matches()) return false;
+                CampaignWorkload.fromJson(job);
+                if (job.optInt("workload_version", -1)
+                        != WorkloadContract.versionFor(job.optString("workload_id"))) return false;
+                if (!isValidStatus(state.optString("status", ""))) return false;
+            }
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    static JSONObject immutableJob(JSONObject campaign, String jobId) {
+        JSONObject plan = campaign.optJSONObject("plan");
+        JSONArray jobs = plan == null ? null : plan.optJSONArray("jobs");
+        if (jobs == null) return null;
+        for (int index = 0; index < jobs.length(); ++index) {
+            JSONObject job = jobs.optJSONObject(index);
+            if (job != null && jobId.equals(job.optString("job_id"))) return job;
+        }
+        return null;
+    }
+
+    static JSONObject driverRef(DriverPackage driver) throws Exception {
+        return new JSONObject()
+                .put("candidate_sha256", driver.sha256)
+                .put("candidate_label", driver.displayName())
+                .put("library_name", driver.libraryName)
+                .put("package_version", driver.packageVersion)
+                .put("driver_version", driver.driverVersion);
+    }
+
+    private static JSONArray buildJobs(JSONArray drivers, JSONArray workloads) throws Exception {
+        JSONArray jobs = new JSONArray();
+        int driverCount = drivers.length();
+        int ordinal = 1;
+        for (int workloadIndex = 0; workloadIndex < workloads.length(); ++workloadIndex) {
+            JSONObject workload = workloads.getJSONObject(workloadIndex);
+            int offset = workloadIndex % driverCount;
+            boolean reverse = ((workloadIndex / driverCount) % 2) == 1;
+            for (int position = 0; position < driverCount; ++position) {
+                int driverIndex = reverse
+                        ? Math.floorMod(offset - position, driverCount)
+                        : (offset + position) % driverCount;
+                JSONObject driver = drivers.getJSONObject(driverIndex);
+                String jobId = String.format(Locale.US, "job-%03d", ordinal);
+                JSONObject job = new JSONObject()
+                        .put("job_id", jobId)
+                        .put("ordinal", ordinal)
+                        .put("workload_ordinal", workloadIndex + 1)
+                        .put("thermal_position", position + 1)
+                        .put("candidate_sha256", driver.getString("candidate_sha256"))
+                        .put("candidate_label", driver.optString("candidate_label", "candidato"))
+                        .put("workload_id", workload.getString("workload_id"))
+                        .put("workload_version", workload.getInt("workload_version"))
+                        .put("trace_id", workload.has("trace_id")
+                                ? workload.opt("trace_id") : JSONObject.NULL)
+                        .put("workload_key", CampaignWorkload.fromJson(workload).key());
+                jobs.put(job);
+                ordinal++;
+            }
+        }
+        return jobs;
+    }
+
+    private static void validateInputs(String campaignId, JSONArray drivers,
+                                       JSONArray workloads, JSONObject protocol) {
+        if (!isSafeCampaignId(campaignId)) {
+            throw new IllegalArgumentException("campaign_id inválido");
+        }
+        if (drivers == null || drivers.length() < 1
+                || drivers.length() > Phase6Contract.MAX_DRIVERS) {
+            throw new IllegalArgumentException("Selecione de 1 a "
+                    + Phase6Contract.MAX_DRIVERS + " drivers");
+        }
+        if (workloads == null || workloads.length() < 1
+                || workloads.length() > Phase6Contract.MAX_WORKLOAD_SPECS) {
+            throw new IllegalArgumentException("Selecione de 1 a "
+                    + Phase6Contract.MAX_WORKLOAD_SPECS + " workloads/traces");
+        }
+        if (drivers.length() * workloads.length() > Phase6Contract.MAX_JOBS) {
+            throw new IllegalArgumentException("Campanha excede "
+                    + Phase6Contract.MAX_JOBS + " jobs");
+        }
+        Set<String> driverHashes = new HashSet<>();
+        for (int index = 0; index < drivers.length(); ++index) {
+            JSONObject driver = drivers.optJSONObject(index);
+            String sha = driver == null ? "" : driver.optString("candidate_sha256", "");
+            if (!SHA256.matcher(sha).matches() || !driverHashes.add(sha.toLowerCase(Locale.US))) {
+                throw new IllegalArgumentException("Driver duplicado ou SHA-256 inválido");
+            }
+        }
+        Set<String> workloadKeys = new HashSet<>();
+        for (int index = 0; index < workloads.length(); ++index) {
+            JSONObject workload = workloads.optJSONObject(index);
+            if (workload == null) throw new IllegalArgumentException("Workload inválido");
+            CampaignWorkload spec = CampaignWorkload.fromJson(workload);
+            if (workload.optInt("workload_version", -1)
+                    != WorkloadContract.versionFor(spec.workloadId)) {
+                throw new IllegalArgumentException("Versão de workload incompatível");
+            }
+            if (!workloadKeys.add(spec.key())) {
+                throw new IllegalArgumentException("Workload/trace duplicado");
+            }
+        }
+        if (protocol == null || !"ab_system_vs_candidate".equals(
+                protocol.optString("mode"))) {
+            throw new IllegalArgumentException("Campanhas exigem protocolo A/B");
+        }
+        int rounds = protocol.optInt("rounds", 0);
+        int warmup = protocol.optInt("warmup_seconds", -1);
+        int measure = protocol.optInt("measure_seconds", 0);
+        int cooldown = protocol.optInt("cooldown_seconds", -1);
+        if (rounds < 1 || rounds > 10 || warmup < 0 || warmup > 30
+                || measure < 1 || measure > 120 || cooldown < 0
+                || cooldown > Phase6Contract.MAX_COOLDOWN_SECONDS) {
+            throw new IllegalArgumentException("Protocolo fora dos limites permitidos");
+        }
+    }
+
+    private static boolean isSafeCampaignId(String value) {
+        return value != null && value.matches("campaign-[0-9]{10,20}");
+    }
+
+    private static boolean isValidStatus(String value) {
+        return "pending".equals(value) || "running".equals(value)
+                || "completed".equals(value) || "failed".equals(value)
+                || "skipped".equals(value);
+    }
+}

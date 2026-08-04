@@ -55,6 +55,7 @@ final class RunCoordinator {
     private final int pixelTolerance;
     private final int maximumDivergentBlocks;
     private final Listener listener;
+    private final JSONObject executionContext;
     private final List<Phase> phases = new ArrayList<>();
     private final JSONArray phaseResults = new JSONArray();
 
@@ -68,6 +69,14 @@ final class RunCoordinator {
     RunCoordinator(Activity activity, DriverPackage candidate, int mode, int rounds,
                    int warmupSeconds, int measureSeconds, String workloadId, String traceId,
                    int pixelTolerance, int maximumDivergentBlocks, Listener listener) {
+        this(activity, candidate, mode, rounds, warmupSeconds, measureSeconds, workloadId,
+                traceId, pixelTolerance, maximumDivergentBlocks, null, listener);
+    }
+
+    RunCoordinator(Activity activity, DriverPackage candidate, int mode, int rounds,
+                   int warmupSeconds, int measureSeconds, String workloadId, String traceId,
+                   int pixelTolerance, int maximumDivergentBlocks, JSONObject executionContext,
+                   Listener listener) {
         this.activity = activity;
         this.candidate = candidate;
         this.mode = mode;
@@ -83,7 +92,17 @@ final class RunCoordinator {
                 : TraceReplayContract.MIXED_TRACE_ID) : TraceReplayContract.MIXED_TRACE_ID;
         this.pixelTolerance = Math.max(0, Math.min(pixelTolerance, 255));
         this.maximumDivergentBlocks = Math.max(0, maximumDivergentBlocks);
+        this.executionContext = copyExecutionContext(executionContext);
         this.listener = listener;
+    }
+
+    private static JSONObject copyExecutionContext(JSONObject source) {
+        if (source == null) return null;
+        try {
+            return new JSONObject(source.toString());
+        } catch (Exception error) {
+            throw new IllegalArgumentException("campaign_context inválido", error);
+        }
     }
 
     void start() {
@@ -307,6 +326,10 @@ final class RunCoordinator {
             report.put("validity_warnings", buildWarnings(
                     renderCorrectness, failureCatalog, statisticalAnalysis, traceReplay));
             report.put("phase4_contract", Phase4Contract.contractJson());
+            report.put("phase6_contract", executionContext == null
+                    ? JSONObject.NULL : Phase6Contract.contractJson());
+            report.put("campaign_context", executionContext == null
+                    ? JSONObject.NULL : executionContext);
             report.put("hardware_identity", HardwareIdentity.fromReport(report));
 
             File reportFile = new File(suiteDirectory, "suite.json");
