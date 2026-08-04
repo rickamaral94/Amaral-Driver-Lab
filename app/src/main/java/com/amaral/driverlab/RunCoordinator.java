@@ -92,9 +92,17 @@ final class RunCoordinator {
                 : TraceReplayContract.MIXED_TRACE_ID) : TraceReplayContract.MIXED_TRACE_ID;
         this.pixelTolerance = Math.max(0, Math.min(pixelTolerance, 255));
         this.maximumDivergentBlocks = Math.max(0, maximumDivergentBlocks);
-        this.executionContext = executionContext == null ? null
-                : new JSONObject(executionContext.toString());
+        this.executionContext = copyExecutionContext(executionContext);
         this.listener = listener;
+    }
+
+    private static JSONObject copyExecutionContext(JSONObject source) {
+        if (source == null) return null;
+        try {
+            return new JSONObject(source.toString());
+        } catch (Exception error) {
+            throw new IllegalArgumentException("campaign_context inválido", error);
+        }
     }
 
     void start() {
