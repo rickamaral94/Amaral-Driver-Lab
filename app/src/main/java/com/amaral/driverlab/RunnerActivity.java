@@ -27,7 +27,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public final class RunnerActivity extends Activity {
+public final class RunnerActivity extends LocalizedActivity {
     static final String EXTRA_RESULT_PATH = "result_path";
     static final String EXTRA_DRIVER_DIR = "driver_dir";
     static final String EXTRA_DRIVER_NAME = "driver_name";

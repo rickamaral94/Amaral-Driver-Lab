@@ -2,13 +2,13 @@
 
 Cada suíte grava `files/runs/suite-<timestamp>/suite.json`. Cada processo isolado grava um `phase-*.json`; workloads de correção também preservam um `phase-*.png` lossless como evidência visual.
 
-## Versão atual: `schema_version = 10`
+## Versão atual: `schema_version = 13`
 
-A versão 10 é uma evolução **aditiva e compatível** das versões anteriores. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
+A versão 13 é uma evolução **aditiva e compatível** das versões anteriores. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
 
 | Campo | Significado |
 |---|---|
-| `schema_version` | Versão do formato do resultado; atualmente `10` |
+| `schema_version` | Versão do formato do resultado; atualmente `13` |
 | `suite_id` | Identificador local imutável da suíte |
 | `app_version` | Versão do APK que gerou o resultado |
 | `mode` | `system_only`, `candidate_only` ou `ab_system_vs_candidate` |
@@ -573,3 +573,32 @@ The v3 report adds:
 ```
 
 Full v1, v2 and v3 results must never be mixed in one historical ranking.
+
+
+## Schema 13 — Fase 12: localização
+
+Schema 13 adiciona somente metadados informativos de localização e a apresentação HTML multilíngue. Nenhum ID, enum, hash, nome de métrica, configuração metodológica ou versão de workload foi traduzido ou redefinido.
+
+Novos relatórios incluem:
+
+```json
+{
+  "schema_version": 13,
+  "phase12_contract": {
+    "localization_schema_version": 1,
+    "result_schema_version": 13,
+    "supported_language_tags": ["pt-BR", "en", "es", "fr", "de", "it", "ja", "zh-CN"],
+    "system_language_option": true,
+    "default_fallback_language": "en",
+    "preference_persisted_locally": true,
+    "html_report_localized": true,
+    "technical_json_localized": false,
+    "technical_identifiers_stable": true,
+    "legacy_full_profiles_preserved": [1, 2, 3]
+  }
+}
+```
+
+O idioma altera somente rótulos, explicações, dialogs e o `summary.html`. Campos como `recommendation`, `p99_gpu_frame_ms`, `driver_sha256`, `VK_ERROR_DEVICE_LOST` e `visual_scene_geometry/v1` permanecem canônicos.
+
+Schemas 1–12 continuam válidos. A Fase 12 não cria uma nova metodologia: resultados permanecem comparáveis quando as chaves técnicas já exigidas coincidirem. Full Qualification v1, v2 e v3 continuam separados por `profile_version`, não pelo idioma do relatório.

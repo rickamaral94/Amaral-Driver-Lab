@@ -5,7 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 final class WorkloadContract {
-    static final int RESULT_SCHEMA_VERSION = 12;
+    static final int RESULT_SCHEMA_VERSION = 13;
 
     static final int STATISTICAL_ANALYSIS_VERSION = 1;
     static final int BOOTSTRAP_ITERATIONS = 5_000;

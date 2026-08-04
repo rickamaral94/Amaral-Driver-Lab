@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public final class DeepDiagnosticsRunnerActivity extends Activity {
+public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
     static final String EXTRA_RESULT_PATH = "result_path";
     static final String EXTRA_PHASE_LABEL = "phase_label";
     static final String EXTRA_DRIVER_DIR = "driver_dir";

@@ -35,7 +35,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-public final class MainActivity extends Activity implements RunCoordinator.Listener {
+public final class MainActivity extends LocalizedActivity implements RunCoordinator.Listener {
     private static final int REQUEST_IMPORT_ZIP = 1001;
     private static final int REQUEST_EXPORT_JSON = 1002;
     private static final String PREFS = "driver_lab_settings";
@@ -98,7 +98,23 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         scroll.addView(root, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
 
-        root.addView(text("Amaral Driver Lab", 26, true));
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView title = text(getString(R.string.app_name), 26, true);
+        header.addView(title, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        Button languageButton = new Button(this);
+        languageButton.setAllCaps(false);
+        languageButton.setMinWidth(dp(56));
+        languageButton.setText(LanguageManager.current(this).flag);
+        languageButton.setContentDescription(
+                getString(R.string.language_selector_content_description));
+        languageButton.setOnClickListener(view -> LanguageSelectorDialog.show(this));
+        header.addView(languageButton, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(header);
         TextView subtitle = text(
                 "Turnip/stock · correção primeiro · processo limpo · evidência reproduzível",
                 14, false);
@@ -121,7 +137,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
 
         root.addView(text("2. Workload", 19, true), margins(0, 0, 0, 8));
         workloadSpinner = new Spinner(this);
-        workloadSpinner.setAdapter(new ArrayAdapter<>(this,
+        workloadSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item,
                 new String[]{
                         "Correção offscreen v1 · rápido",
@@ -152,7 +168,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         root.addView(workloadNote, margins(0, 4, 0, 10));
 
         traceSpinner = new Spinner(this);
-        traceSpinner.setAdapter(new ArrayAdapter<>(this,
+        traceSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item,
                 new String[]{
                         TraceReplayContract.labelFor(TraceReplayContract.MIXED_TRACE_ID),
@@ -183,7 +199,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
 
         root.addView(text("3. Protocolo", 19, true), margins(0, 0, 0, 8));
         modeSpinner = new Spinner(this);
-        modeSpinner.setAdapter(new ArrayAdapter<>(this,
+        modeSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"A/B · sistema × candidato", "Somente candidato", "Somente sistema"}));
         modeSpinner.setSelection(0);
@@ -337,7 +353,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         List<String> labels = new ArrayList<>();
         if (drivers.isEmpty()) labels.add("Nenhum driver importado");
         for (DriverPackage driver : drivers) labels.add(driver.displayName());
-        driverSpinner.setAdapter(new ArrayAdapter<>(this,
+        driverSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, labels));
         String selectedSha = preferences.getString("selected_driver_sha", "");
         int selectedIndex = 0;
@@ -374,7 +390,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
     }
 
     private void confirmImport() {
-        new AlertDialog.Builder(this)
+        new LocalizedAlertDialogBuilder(this)
                 .setTitle("Importar código nativo")
                 .setMessage("O APK executará as bibliotecas .so deste ZIP. Importe apenas drivers "
                         + "que você compilou ou verificou; o SHA-256 será registrado em cada teste.")
@@ -618,7 +634,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
 
     private void handleGitHubConnection() {
         if (tokenStore.load() != null) {
-            new AlertDialog.Builder(this)
+            new LocalizedAlertDialogBuilder(this)
                     .setTitle("GitHub conectado")
                     .setMessage("O token está protegido pelo Android Keystore.")
                     .setNegativeButton("Manter", null)
@@ -631,7 +647,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
             return;
         }
         if (BuildConfig.GITHUB_CLIENT_ID.isEmpty()) {
-            new AlertDialog.Builder(this)
+            new LocalizedAlertDialogBuilder(this)
                     .setTitle("Build sem GitHub App")
                     .setMessage("Configure GITHUB_CLIENT_ID no build. Até lá, o botão de issue "
                             + "abre um rascunho no navegador sem armazenar credenciais.")
@@ -645,7 +661,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
                 runOnUiThread(() -> {
                     ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
                     clipboard.setPrimaryClip(ClipData.newPlainText("GitHub code", userCode));
-                    new AlertDialog.Builder(MainActivity.this)
+                    new LocalizedAlertDialogBuilder(MainActivity.this)
                             .setTitle("Autorizar GitHub")
                             .setMessage("Código copiado: " + userCode
                                     + "\n\nA permissão deve ficar limitada ao repositório de resultados "

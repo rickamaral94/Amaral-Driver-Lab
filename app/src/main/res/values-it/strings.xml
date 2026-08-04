@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Amaral Driver Lab</string>
+    <string name="language_system">Usa lingua di sistema</string>
+    <string name="language_portuguese_brazil">Português do Brasil</string>
+    <string name="language_english">English</string>
+    <string name="language_spanish">Español</string>
+    <string name="language_french">Français</string>
+    <string name="language_german">Deutsch</string>
+    <string name="language_italian">Italiano</string>
+    <string name="language_japanese">日本語</string>
+    <string name="language_chinese_simplified">简体中文</string>
+    <string name="language_selector_title">Lingua</string>
+    <string name="language_selector_content_description">Cambia lingua dell’app</string>
+    <string name="action_cancel">Annulla</string>
+    <string name="report_title">Amaral Driver Lab · Full Qualification</string>
+    <string name="report_result">Risultato</string>
+    <string name="report_driver">Driver</string>
+    <string name="report_performance">Prestazioni</string>
+    <string name="report_compatibility">Compatibilità</string>
+    <string name="report_weighted_gain">Guadagno ponderato</string>
+    <string name="report_confidence">Confidenza</string>
+    <string name="report_results_by_area">Risultati per area</string>
+    <string name="report_area">Area</string>
+    <string name="report_status">Stato</string>
+    <string name="report_gain">Guadagno</string>
+    <string name="report_weight">Peso</string>
+    <string name="report_compatibility_gate">Gate di compatibilità</string>
+    <string name="report_approved">Approvato.</string>
+    <string name="report_unavailable">non disponibile</string>
+    <string name="report_unknown_driver">sconosciuto</string>
+    <string name="report_candidate_driver">candidato</string>
+    <string name="phase12_label">Fase 12 · Localizzazione completa</string>
+    <string-array name="legacy_ui_translation">
+        <item>Turnip/stock · prima la correttezza · processo pulito · evidenze riproducibili</item>
+        <item>1. Driver</item>
+        <item>IMPORTA ZIP ADRENOTOOLS</item>
+        <item>Nessun driver importato.</item>
+        <item>Nessun driver importato</item>
+        <item>2. Carico di lavoro</item>
+        <item>Correttezza offscreen v1 · rapida</item>
+        <item>Scena visibile: geometria e profondità v1</item>
+        <item>Scena visibile: materiali procedurali v1</item>
+        <item>Scena visibile: post-elaborazione v1</item>
+        <item>Replay trace Vulkan v1</item>
+        <item>Compilazione shader v1</item>
+        <item>Render pass / tiling v1</item>
+        <item>Compute aritmetico v1</item>
+        <item>Frame time stabile v1</item>
+        <item>Sostenimento termico v1</item>
+        <item>Trasferimento fill/copy v1 · legacy</item>
+        <item>Tolleranza RGBA</item>
+        <item>Blocchi divergenti max</item>
+        <item>3. Protocollo</item>
+        <item>A/B · sistema × candidato</item>
+        <item>Solo candidato</item>
+        <item>Solo sistema</item>
+        <item>Riscaldamento (s)</item>
+        <item>Misurazione (s)</item>
+        <item>Round</item>
+        <item>▶ AVVIA TEST</item>
+        <item>★ TEST FULL CONSIGLIATO · FASE 11 / PROFILO v3</item>
+        <item>CRONOLOGIA · DIFF · CLASSIFICA · BISECT</item>
+        <item>CAMPAGNE DI REGRESSIONE · FASE 6</item>
+        <item>TELEMETRIA EMULATORI · FASE 9</item>
+        <item>DIAGNOSTICA PROFONDA TURNIP · FASE 10</item>
+        <item>4. Issue GitHub</item>
+        <item>Repository</item>
+        <item>Crea automaticamente una issue al termine</item>
+        <item>INVIA / APRI ULTIMA ISSUE</item>
+        <item>ESPORTA ULTIMO JSON</item>
+        <item>Stato</item>
+        <item>Pronto.</item>
+        <item>Importa codice nativo</item>
+        <item>Annulla</item>
+        <item>Seleziona ZIP</item>
+        <item>Validazione di meta.json, SHA-256 e librerie…</item>
+        <item>Importato: </item>
+        <item>Importazione rifiutata: </item>
+        <item>Suite completata</item>
+        <item>GitHub connesso</item>
+        <item>Mantieni</item>
+        <item>Disconnetti</item>
+        <item>Build senza GitHub App</item>
+        <item>Autorizza GitHub</item>
+        <item>Chiudi</item>
+        <item>Apri GitHub</item>
+        <item>GitHub connesso correttamente.</item>
+        <item>Non ci sono ancora risultati da inviare.</item>
+        <item>Creazione issue GitHub…</item>
+        <item>Issue creata</item>
+        <item>Non c’è ancora alcun JSON da esportare.</item>
+        <item>JSON esportato.</item>
+        <item>COLLEGA GITHUB</item>
+        <item>GITHUB CONNESSO</item>
+        <item>Test Full consigliato · Fase 11</item>
+        <item>Driver candidato</item>
+        <item>▶ AVVIA TEST FULL CONSIGLIATO</item>
+        <item>RIPRENDI TEST FULL INCOMPLETO</item>
+        <item>PAUSA DOPO LA FASE CORRENTE</item>
+        <item>ESPORTA LOG FULL (.ZIP)</item>
+        <item>AGGIORNA RISULTATO</item>
+        <item>Importa un driver nella schermata principale</item>
+        <item>Condizioni fuori dalle raccomandazioni</item>
+        <item>Esegui comunque</item>
+        <item>Nessun test Full incompleto trovato.</item>
+        <item>Nessun test Full è in esecuzione.</item>
+        <item>Risultato</item>
+        <item>Il pacchetto Full non è ancora disponibile.</item>
+        <item>Log Full esportato correttamente.</item>
+        <item>Fase 6 · Campagne di regressione</item>
+        <item>1. Driver candidati</item>
+        <item>2. Workload e trace</item>
+        <item>3. Protocollo A/B</item>
+        <item>CREA E AVVIA CAMPAGNA</item>
+        <item>RIPRENDI CAMPAGNA INCOMPLETA</item>
+        <item>PAUSA DOPO IL JOB CORRENTE</item>
+        <item>ESPORTA CAMPAIGN.JSON</item>
+        <item>AGGIORNA MANIFESTO</item>
+        <item>Nessuna campagna caricata.</item>
+        <item>Fase 4 · Cronologia e regressioni</item>
+        <item>IMPORTA SUITE.JSON</item>
+        <item>Filtri</item>
+        <item>Più recenti</item>
+        <item>Miglioramento maggiore</item>
+        <item>Nome driver</item>
+        <item>CONFRONTA SELEZIONATE</item>
+        <item>CLASSIFICA DEL GRUPPO</item>
+        <item>BISECT DELLA SEQUENZA</item>
+        <item>ESPORTA INVOLUCRO ANONIMO</item>
+        <item>Caricamento cronologia…</item>
+        <item>Tutti i workload</item>
+        <item>Analisi completata.</item>
+        <item>Fase 9 · Telemetria emulatori</item>
+        <item>IMPORTA SESSION.JSON</item>
+        <item>VEDI CONTRATTO SDK v1</item>
+        <item>Sessione selezionata</item>
+        <item>ESPORTA SESSIONE + RIEPILOGO + LINK</item>
+        <item>COLLEGA ALLA SUITE SELEZIONATA</item>
+        <item>Confronto A/B descrittivo</item>
+        <item>CONFRONTA SISTEMA × CANDIDATO</item>
+        <item>Caricamento…</item>
+        <item>Nessuna sessione importata</item>
+        <item>Diagnostica profonda Turnip · Fase 10</item>
+        <item>Matrice formati, shader/cache, memoria, sincronizzazione e Soak Test A/B.</item>
+        <item>Cicli Soak</item>
+        <item>Limite memoria (MiB)</item>
+        <item>▶ DIAGNOSTICA A/B PROFONDA</item>
+        <item>♻ SOAK TEST A/B</item>
+        <item>ESPORTA PACCHETTO COMPLETO (.ZIP)</item>
+        <item>VEDI CONTRATTO FASE 10</item>
+        <item>Importa e seleziona un driver Turnip valido.</item>
+        <item>Fase 10 completata.</item>
+        <item>Pacchetto esportato correttamente.</item>
+        <item>Destinazione non disponibile</item>
+        <item>Esportazione non riuscita: </item>
+        <item>errore sconosciuto</item>
+        <item>Libreria: </item>
+        <item>
+SHA-256: </item>
+        <item>L’APK eseguirà le librerie .so di questo ZIP. Importa solo driver </item>
+        <item>Riscaldamento</item>
+        <item>Misurazione</item>
+        <item>Blocchi divergenti massimi</item>
+        <item> · CORRETTEZZA APPROVATA</item>
+        <item> · CORRETTEZZA NON APPROVATA</item>
+        <item> · ERRORE DI ESECUZIONE</item>
+        <item> · SENZA RIFERIMENTO A/B</item>
+        <item> · pixel %.4f%%</item>
+        <item> · blocchi divergenti </item>
+        <item>
+Estensioni: +</item>
+        <item> · eventi di errore </item>
+        <item> · CHECKPOINT APPROVATI</item>
+        <item> · DIVERGENZA VISIVA</item>
+        <item> · pixel min. %.4f%%</item>
+        <item> · discrepanze </item>
+        <item> · miglioramento P99 mediano %+.2f%%</item>
+        <item> · OUTPUT RIPRODUCIBILE</item>
+        <item> · DIVERGENZA OUTPUT</item>
+        <item> · coppie </item>
+        <item> · miglioramento mediano %+.2f%%</item>
+        <item> · IC95%% [%+.2f, %+.2f]</item>
+        <item> · candidato %+.2f%%</item>
+        <item>Il token è protetto da Android Keystore.</item>
+        <item>Configura GITHUB_CLIENT_ID nella build. Fino ad allora il pulsante issue </item>
+        <item>apre una bozza nel browser senza memorizzare credenziali.</item>
+        <item>Richiesta codice di accesso GitHub…</item>
+        <item>Codice GitHub</item>
+        <item>Codice copiato: </item>
+        <item>
+
+L’autorizzazione deve essere limitata al repository dei risultati </item>
+        <item>e a Issues: write.</item>
+        <item>In attesa dell’autorizzazione del codice </item>
+        <item>GitHub: </item>
+        <item>Impossibile aprire la bozza: </item>
+        <item>Issue creata: </item>
+        <item>Risultato salvato, ma invio non riuscito: </item>
+        <item>Esportazione non riuscita: </item>
+        <item> non valido</item>
+        <item> deve essere compreso tra </item>
+        <item> e </item>
+        <item>Esegue Full v3 con scene visibili, tutti i test precedenti, diagnostica profonda, soak breve e bundle completo.</item>
+        <item>Profilo immutabile: </item>
+        <item> blocchi orchestrati · </item>
+        <item> test automatici · </item>
+        <item>1 evidenza reale opzionale.
+Diagnostica profonda: 128 MiB · soak breve: 5 cicli.
+
+</item>
+        <item>Importa prima un driver Turnip valido.</item>
+        <item>Il test può essere eseguito per diagnosi, ma sarà </item>
+        <item>escluso dalla classifica.
+
+</item>
+        <item>Preflight non riuscito: </item>
+        <item>Creazione test Full non riuscita: </item>
+        <item>Lettura qualification.json non riuscita: </item>
+        <item>
+Fasi: </item>
+        <item> completate · </item>
+        <item> fallite · </item>
+        <item> in attesa
+SHA-256 profilo: </item>
+        <item>
+
+Indice prestazioni: </item>
+        <item> / 100
+Indice compatibilità: </item>
+        <item> / 100
+Guadagno ponderato: </item>
+        <item>
+Confidenza: </item>
+        <item>non disponibile</item>
+        <item>
+Vincitore: </item>
+        <item>
+
+Blocchi:</item>
+        <item>
+
+Classifica locale: #</item>
+        <item> di </item>
+        <item>Aggiornato, ma anteprima non riuscita: </item>
+        <item>
+Test Full completato. Il log completo è pronto per l’esportazione.</item>
+        <item>Test completato: </item>
+        <item>Cooldown (s)</item>
+        <item>Importa prima i driver nella schermata principale.</item>
+        <item>
+SHA-256 </item>
+        <item>Cooldown</item>
+        <item>Seleziona da 1 a </item>
+        <item> driver</item>
+        <item> workload/trace</item>
+        <item>Nessuna campagna incompleta trovata.</item>
+        <item>Nessuna campagna è in esecuzione.</item>
+        <item>Lettura campaign.json non riuscita: </item>
+        <item>Job: </item>
+        <item> falliti · </item>
+        <item> in esecuzione · </item>
+        <item> in attesa · totale </item>
+        <item>
+SHA-256 piano: </item>
+        <item>Nessun campaign.json disponibile.</item>
+        <item>campaign.json esportato.</item>
+        <item>Campagna aggiornata, ma anteprima non riuscita: </item>
+        <item>
+Campagna completata. Le classifiche restano separate per gruppo comparabile.</item>
+        <item>Campagna completata: </item>
+        <item>Includi suite con validità bloccata</item>
+        <item>Confronto affiancato</item>
+        <item>Tutti i dispositivi / SoC / GPU</item>
+        <item>Nessuna suite corrisponde ai filtri</item>
+        <item> suite indicizzate · </item>
+        <item> visibili</item>
+        <item>Diff non disponibile: </item>
+        <item>Classifica non disponibile: </item>
+        <item>Nessuna sequenza filtrata</item>
+        <item>Bisect non disponibile: </item>
+        <item>Firma di integrità non valida</item>
+        <item>Esporta dataset pubblico</item>
+        <item>L’involucro rimuove modello del dispositivo, fingerprint e percorsi locali. </item>
+        <item>Mantiene SoC, GPU, workload, configurazione e hash ZIP, che possono </item>
+        <item>essere correlabili. Nessun invio avviene automaticamente.</item>
+        <item>Esporta</item>
+        <item>Involucro rifiutato: </item>
+        <item>File non disponibile</item>
+        <item>Suite importata: </item>
+        <item>Involucro pubblico esportato e firma verificata.</item>
+        <item>Seleziona una suite valida</item>
+        <item> · BLOCCATA</item>
+        <item> suite</item>
+        <item>suite.json supera 2 MiB</item>
+        <item>Collegamento immutabile a una suite locale</item>
+        <item>Nessuna suite locale disponibile</item>
+        <item> sessioni · </item>
+        <item> suite disponibili · nessun upload automatico</item>
+        <item>Validazione privacy, versioni, limiti e SHA-256…</item>
+        <item>Sessione importata: </item>
+        <item>Contratto pubblico SDK e importazione locale.</item>
+        <item>Contratto non disponibile: </item>
+        <item>Importa un session.json prodotto dall’SDK v1.</item>
+        <item>Confronto descrittivo storicamente compatibile.</item>
+        <item>Confronto non disponibile: </item>
+        <item>Collegamento rifiutato: </item>
+        <item>Esportazione non disponibile: </item>
+        <item>Esportazione completata. Nessun upload eseguito.</item>
+        <item>Esportazione non riuscita: </item>
+        <item>Nessuna suite locale</item>
+        <item>
+Modalità: </item>
+        <item>
+Profilo: </item>
+        <item>
+
+Verdetto: </item>
+        <item>
+Comparabile: </item>
+        <item>
+Blocchi: </item>
+        <item>
+Avvisi: </item>
+        <item>
+
+Regressioni formato: </item>
+        <item>
+Guadagni formato: </item>
+        <item>
+Pipeline cold: %s%%
+Pipeline warm: %s%%</item>
+        <item>Nessun pacchetto Fase 10 disponibile.</item>
+    </string-array>
+</resources>

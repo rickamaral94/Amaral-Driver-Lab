@@ -25,7 +25,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-public final class QualificationActivity extends Activity
+public final class QualificationActivity extends LocalizedActivity
         implements QualificationCoordinator.Listener {
     private static final int REQUEST_EXPORT_BUNDLE = 7001;
 
@@ -121,7 +121,7 @@ public final class QualificationActivity extends Activity
         for (DriverPackage driver : drivers) {
             labels.add(driver.displayName() + " · " + driver.sha256.substring(0, 12));
         }
-        driverSpinner.setAdapter(new ArrayAdapter<>(this,
+        driverSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, labels));
         updateButtons();
     }
@@ -136,7 +136,7 @@ public final class QualificationActivity extends Activity
             JSONObject preflight = QualificationPreflight.capture(this);
             JSONObject evaluation = preflight.getJSONObject("evaluation");
             if (!evaluation.optBoolean("eligible_to_start", true)) {
-                new AlertDialog.Builder(this)
+                new LocalizedAlertDialogBuilder(this)
                         .setTitle("Condições fora do recomendado")
                         .setMessage("O teste pode ser executado para diagnóstico, mas ficará "
                                 + "bloqueado para ranking.\n\n"

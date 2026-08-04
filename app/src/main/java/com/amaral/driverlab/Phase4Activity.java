@@ -26,7 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class Phase4Activity extends Activity {
+public final class Phase4Activity extends LocalizedActivity {
     private static final int REQUEST_IMPORT_SUITE = 4001;
     private static final int REQUEST_EXPORT_ENVELOPE = 4002;
 
@@ -76,7 +76,7 @@ public final class Phase4Activity extends Activity {
         workloadFilter = new Spinner(this);
         hardwareFilter = new Spinner(this);
         sortSpinner = new Spinner(this);
-        sortSpinner.setAdapter(new ArrayAdapter<>(this,
+        sortSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"Mais recentes", "Maior melhoria", "Nome do driver"}));
         AdapterView.OnItemSelectedListener filters = new AdapterView.OnItemSelectedListener() {
@@ -143,7 +143,7 @@ public final class Phase4Activity extends Activity {
             String id = workloadValues.get(index);
             workloadLabels.add(WorkloadContract.labelFor(id));
         }
-        workloadFilter.setAdapter(new ArrayAdapter<>(this,
+        workloadFilter.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, workloadLabels));
         workloadFilter.setSelection(indexOf(workloadValues, selectedWorkload));
 
@@ -155,7 +155,7 @@ public final class Phase4Activity extends Activity {
         for (int index = 1; index < hardwareValues.size(); ++index) {
             hardwareLabels.add(hardwareValues.get(index));
         }
-        hardwareFilter.setAdapter(new ArrayAdapter<>(this,
+        hardwareFilter.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, hardwareLabels));
         hardwareFilter.setSelection(indexOf(hardwareValues, selectedHardware));
     }
@@ -174,9 +174,9 @@ public final class Phase4Activity extends Activity {
         List<String> labels = new ArrayList<>();
         for (SuiteRecord record : filteredRecords) labels.add(record.displayLabel());
         if (labels.isEmpty()) labels.add("Nenhuma suíte compatível com os filtros");
-        leftSpinner.setAdapter(new ArrayAdapter<>(this,
+        leftSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, labels));
-        rightSpinner.setAdapter(new ArrayAdapter<>(this,
+        rightSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, labels));
         if (filteredRecords.size() > 1) rightSpinner.setSelection(1);
         status.setText(allRecords.size() + " suíte(s) indexada(s) · "
@@ -219,7 +219,7 @@ public final class Phase4Activity extends Activity {
             if (!PublicDatasetEnvelope.verify(envelope)) {
                 throw new IllegalStateException("Falha na assinatura de integridade");
             }
-            new AlertDialog.Builder(this)
+            new LocalizedAlertDialogBuilder(this)
                     .setTitle("Exportar conjunto público")
                     .setMessage("O envelope remove modelo do aparelho, fingerprint e caminhos locais. "
                             + "Ele mantém SoC, GPU, workload, configuração e hash do ZIP, que podem "

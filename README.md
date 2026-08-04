@@ -105,7 +105,7 @@ O APK executa código nativo do ZIP. Use somente pacotes próprios ou hashes ver
 
 ## Esquema de resultados
 
-A versão atual usa `schema_version = 11`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
+A versão atual usa `schema_version = 13`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
 
 Mudanças na geometria, SPIR-V, ordem dos draws, resolução, formato, cálculo ou regra padrão de comparação exigem uma nova `workload_version`.
 
@@ -135,7 +135,7 @@ Siga [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md). Sem GitHub App config
 
 ## Estado do projeto
 
-As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance. A Fase 6 executa matrizes de drivers × workloads/traces com plano imutável, retomada segura e rankings separados por chave comparável. A Fase 7 adiciona o Teste Full Recomendado, recomendação geral com gate de compatibilidade e pacote completo de diagnóstico. A Fase 8 adiciona três cenas Vulkan visíveis e animadas, checkpoints determinísticos e atualiza o Full Qualification para v2 sem redefinir as séries anteriores. A Fase 9 adiciona um SDK versionado de telemetria para emuladores, armazenamento local e comparação descritiva sem incorporar sessões reais ao score Full. A Fase 10 adiciona uma série separada de diagnóstico profundo do Turnip, com matriz de formatos, corpus compute, cache, memória, sincronização e soak controlado.
+As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance. A Fase 6 executa matrizes de drivers × workloads/traces com plano imutável, retomada segura e rankings separados por chave comparável. A Fase 7 adiciona o Teste Full Recomendado, recomendação geral com gate de compatibilidade e pacote completo de diagnóstico. A Fase 8 adiciona três cenas Vulkan visíveis e animadas, checkpoints determinísticos e atualiza o Full Qualification para v2 sem redefinir as séries anteriores. A Fase 9 adiciona um SDK versionado de telemetria para emuladores, armazenamento local e comparação descritiva sem incorporar sessões reais ao score Full. A Fase 10 adiciona uma série separada de diagnóstico profundo do Turnip, com matriz de formatos, corpus compute, cache, memória, sincronização e soak controlado. A Fase 11 consolida tudo isso no Full Qualification v3. A Fase 12 adiciona seleção persistente de idioma, oito traduções e relatório HTML localizado sem alterar os contratos técnicos.
 
 
 ## Fase 3: comparação estatística
@@ -224,3 +224,12 @@ A Fase 10 forma uma série histórica própria. Ela não altera workloads anteri
 The recommended Full test now orchestrates every automatic test added through Phase 10: existing A/B suites, visible Vulkan scenes, deep diagnostics at the safe 128 MiB memory profile and a five-cycle short soak. The report exposes separate performance and compatibility indices. Emulator telemetry remains optional, local and not scored automatically.
 
 Historical Full v1 and v2 profiles remain immutable and separate from v3.
+
+
+## Fase 12 — internacionalização completa
+
+O botão de bandeira no canto superior direito permite escolher **Português do Brasil, Inglês, Espanhol, Francês, Alemão, Italiano, Japonês, Chinês simplificado** ou voltar ao idioma do sistema. A preferência é local, persiste após reiniciar o app e também é aplicada aos processos isolados de execução.
+
+A interface herdada das Fases 1–11, dialogs, spinners, mensagens e o `summary.html` usam o idioma selecionado. O JSON permanece técnico e estável: nomes de campos, enums, códigos Vulkan, hashes, métricas e IDs de workload não são traduzidos. A mudança eleva o resultado para `schema_version = 13`, sem redefinir workloads nem os perfis Full v1, v2 ou v3.
+
+Veja [docs/PHASE12_LOCALIZATION.md](docs/PHASE12_LOCALIZATION.md) e [docs/TRANSLATION_GUIDE.md](docs/TRANSLATION_GUIDE.md).

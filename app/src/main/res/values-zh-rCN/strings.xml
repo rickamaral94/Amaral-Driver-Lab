@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Amaral Driver Lab</string>
+    <string name="language_system">使用系统语言</string>
+    <string name="language_portuguese_brazil">Português do Brasil</string>
+    <string name="language_english">English</string>
+    <string name="language_spanish">Español</string>
+    <string name="language_french">Français</string>
+    <string name="language_german">Deutsch</string>
+    <string name="language_italian">Italiano</string>
+    <string name="language_japanese">日本語</string>
+    <string name="language_chinese_simplified">简体中文</string>
+    <string name="language_selector_title">语言</string>
+    <string name="language_selector_content_description">更改应用语言</string>
+    <string name="action_cancel">取消</string>
+    <string name="report_title">Amaral Driver Lab · Full Qualification</string>
+    <string name="report_result">结果</string>
+    <string name="report_driver">驱动程序</string>
+    <string name="report_performance">性能</string>
+    <string name="report_compatibility">兼容性</string>
+    <string name="report_weighted_gain">加权提升</string>
+    <string name="report_confidence">置信度</string>
+    <string name="report_results_by_area">各领域结果</string>
+    <string name="report_area">领域</string>
+    <string name="report_status">状态</string>
+    <string name="report_gain">提升</string>
+    <string name="report_weight">权重</string>
+    <string name="report_compatibility_gate">兼容性门禁</string>
+    <string name="report_approved">通过。</string>
+    <string name="report_unavailable">不可用</string>
+    <string name="report_unknown_driver">未知</string>
+    <string name="report_candidate_driver">候选</string>
+    <string name="phase12_label">阶段 12 · 完整国际化</string>
+    <string-array name="legacy_ui_translation">
+        <item>Turnip/系统驱动 · 正确性优先 · 干净进程 · 可复现证据</item>
+        <item>1. 驱动程序</item>
+        <item>导入 ADRENOTOOLS ZIP</item>
+        <item>尚未导入驱动程序。</item>
+        <item>未导入驱动程序</item>
+        <item>2. 工作负载</item>
+        <item>离屏正确性 v1 · 快速</item>
+        <item>可见场景：几何与深度 v1</item>
+        <item>可见场景：程序化材质 v1</item>
+        <item>可见场景：后处理 v1</item>
+        <item>Vulkan 跟踪回放 v1</item>
+        <item>着色器编译 v1</item>
+        <item>渲染通道 / 分块 v1</item>
+        <item>算术计算 v1</item>
+        <item>稳定帧时间 v1</item>
+        <item>热持续性能 v1</item>
+        <item>填充/复制传输 v1 · 旧版</item>
+        <item>RGBA 容差</item>
+        <item>最大差异块数</item>
+        <item>3. 协议</item>
+        <item>A/B · 系统 × 候选</item>
+        <item>仅候选</item>
+        <item>仅系统</item>
+        <item>预热（秒）</item>
+        <item>测量（秒）</item>
+        <item>轮次</item>
+        <item>▶ 开始测试</item>
+        <item>★ 推荐完整测试 · 阶段 11 / 配置 v3</item>
+        <item>历史 · DIFF · 排名 · BISECT</item>
+        <item>回归活动 · 阶段 6</item>
+        <item>模拟器遥测 · 阶段 9</item>
+        <item>Turnip 深度诊断 · 阶段 10</item>
+        <item>4. GitHub Issue</item>
+        <item>仓库</item>
+        <item>完成后自动创建 Issue</item>
+        <item>发送 / 打开最新 Issue</item>
+        <item>导出最新 JSON</item>
+        <item>状态</item>
+        <item>就绪。</item>
+        <item>导入原生代码</item>
+        <item>取消</item>
+        <item>选择 ZIP</item>
+        <item>正在验证 meta.json、SHA-256 和库…</item>
+        <item>已导入：</item>
+        <item>导入被拒绝：</item>
+        <item>测试套件已完成</item>
+        <item>GitHub 已连接</item>
+        <item>保留</item>
+        <item>断开连接</item>
+        <item>未配置 GitHub App 的构建</item>
+        <item>授权 GitHub</item>
+        <item>关闭</item>
+        <item>打开 GitHub</item>
+        <item>GitHub 连接成功。</item>
+        <item>尚无可发送的结果。</item>
+        <item>正在创建 GitHub Issue…</item>
+        <item>Issue 已创建</item>
+        <item>尚无可导出的 JSON。</item>
+        <item>JSON 已导出。</item>
+        <item>连接 GITHUB</item>
+        <item>GITHUB 已连接</item>
+        <item>推荐完整测试 · 阶段 11</item>
+        <item>候选驱动程序</item>
+        <item>▶ 开始推荐完整测试</item>
+        <item>继续未完成的完整测试</item>
+        <item>当前步骤后暂停</item>
+        <item>导出完整日志 (.ZIP)</item>
+        <item>刷新结果</item>
+        <item>请在主屏幕导入驱动程序</item>
+        <item>条件不符合建议</item>
+        <item>仍然运行</item>
+        <item>未找到未完成的完整测试。</item>
+        <item>没有正在运行的完整测试。</item>
+        <item>结果</item>
+        <item>完整包尚不可用。</item>
+        <item>完整日志导出成功。</item>
+        <item>阶段 6 · 回归活动</item>
+        <item>1. 候选驱动程序</item>
+        <item>2. 工作负载与跟踪</item>
+        <item>3. A/B 协议</item>
+        <item>创建并开始活动</item>
+        <item>继续未完成的活动</item>
+        <item>当前作业后暂停</item>
+        <item>导出 CAMPAIGN.JSON</item>
+        <item>刷新清单</item>
+        <item>未加载活动。</item>
+        <item>阶段 4 · 历史与回归</item>
+        <item>导入 SUITE.JSON</item>
+        <item>筛选器</item>
+        <item>最新</item>
+        <item>最大提升</item>
+        <item>驱动程序名称</item>
+        <item>比较所选项</item>
+        <item>组排名</item>
+        <item>序列 BISECT</item>
+        <item>导出匿名封装</item>
+        <item>正在加载历史…</item>
+        <item>所有工作负载</item>
+        <item>分析完成。</item>
+        <item>阶段 9 · 模拟器遥测</item>
+        <item>导入 SESSION.JSON</item>
+        <item>查看 SDK v1 契约</item>
+        <item>已选会话</item>
+        <item>导出会话 + 摘要 + 链接</item>
+        <item>关联到所选测试套件</item>
+        <item>描述性 A/B 比较</item>
+        <item>比较系统 × 候选</item>
+        <item>正在加载…</item>
+        <item>未导入会话</item>
+        <item>Turnip 深度诊断 · 阶段 10</item>
+        <item>格式矩阵、着色器/缓存、内存、同步和 A/B 浸泡测试。</item>
+        <item>浸泡循环</item>
+        <item>内存限制（MiB）</item>
+        <item>▶ 深度 A/B 诊断</item>
+        <item>♻ A/B 浸泡测试</item>
+        <item>导出完整包 (.ZIP)</item>
+        <item>查看阶段 10 契约</item>
+        <item>请导入并选择有效的 Turnip 驱动程序。</item>
+        <item>阶段 10 已完成。</item>
+        <item>包导出成功。</item>
+        <item>目标不可用</item>
+        <item>导出失败：</item>
+        <item>未知故障</item>
+        <item>库：</item>
+        <item>
+SHA-256：</item>
+        <item>APK 将执行此 ZIP 中的 .so 库。仅导入以下驱动程序：</item>
+        <item>预热</item>
+        <item>测量</item>
+        <item>最大差异块数</item>
+        <item> · 正确性通过</item>
+        <item> · 正确性失败</item>
+        <item> · 执行失败</item>
+        <item> · 无 A/B 参考</item>
+        <item> · 像素 %.4f%%</item>
+        <item> · 差异块 </item>
+        <item>
+扩展：+</item>
+        <item> · 故障事件 </item>
+        <item> · 检查点通过</item>
+        <item> · 视觉差异</item>
+        <item> · 最小像素 %.4f%%</item>
+        <item> · 不匹配 </item>
+        <item> · P99 中位数提升 %+.2f%%</item>
+        <item> · 可复现输出</item>
+        <item> · 输出差异</item>
+        <item> · 配对 </item>
+        <item> · 中位数提升 %+.2f%%</item>
+        <item> · 95%% 置信区间 [%+.2f, %+.2f]</item>
+        <item> · 候选 %+.2f%%</item>
+        <item>令牌受 Android Keystore 保护。</item>
+        <item>请在构建中配置 GITHUB_CLIENT_ID。在此之前，Issue 按钮将</item>
+        <item>在浏览器中打开草稿且不存储凭据。</item>
+        <item>正在请求 GitHub 访问代码…</item>
+        <item>GitHub 代码</item>
+        <item>代码已复制：</item>
+        <item>
+
+权限必须限制为结果仓库：</item>
+        <item>以及 Issues: write。</item>
+        <item>正在等待代码授权：</item>
+        <item>GitHub：</item>
+        <item>无法打开草稿：</item>
+        <item>Issue 已创建：</item>
+        <item>结果已保存，但发送失败：</item>
+        <item>导出失败：</item>
+        <item> 无效</item>
+        <item> 必须介于 </item>
+        <item> 和 </item>
+        <item>运行 Full v3，包括可见场景、所有先前测试、深度诊断、短时浸泡和完整包。</item>
+        <item>不可变配置：</item>
+        <item> 个编排块 · </item>
+        <item> 个自动测试 · </item>
+        <item>1 个可选真实证据。
+深度诊断：128 MiB · 短时浸泡：5 个循环。
+
+</item>
+        <item>请先导入有效的 Turnip 驱动程序。</item>
+        <item>测试可用于诊断，但将被</item>
+        <item>排除在排名之外。
+
+</item>
+        <item>预检失败：</item>
+        <item>创建完整测试失败：</item>
+        <item>读取 qualification.json 失败：</item>
+        <item>
+步骤：</item>
+        <item> 已完成 · </item>
+        <item> 失败 · </item>
+        <item> 待处理
+配置 SHA-256：</item>
+        <item>
+
+性能指数：</item>
+        <item> / 100
+兼容性指数：</item>
+        <item> / 100
+加权提升：</item>
+        <item>
+置信度：</item>
+        <item>不可用</item>
+        <item>
+胜者：</item>
+        <item>
+
+阻断项：</item>
+        <item>
+
+本地排名：#</item>
+        <item> / </item>
+        <item>已更新，但预览失败：</item>
+        <item>
+完整测试已完成。完整日志可供导出。</item>
+        <item>测试完成：</item>
+        <item>冷却（秒）</item>
+        <item>请先在主屏幕导入驱动程序。</item>
+        <item>
+SHA-256 </item>
+        <item>冷却</item>
+        <item>请选择 1 到 </item>
+        <item> 个驱动程序</item>
+        <item> 个工作负载/跟踪</item>
+        <item>未找到未完成的活动。</item>
+        <item>没有正在运行的活动。</item>
+        <item>读取 campaign.json 失败：</item>
+        <item>作业：</item>
+        <item> 失败 · </item>
+        <item> 运行中 · </item>
+        <item> 待处理 · 总计 </item>
+        <item>
+计划 SHA-256：</item>
+        <item>没有可用的 campaign.json。</item>
+        <item>campaign.json 已导出。</item>
+        <item>活动已更新，但预览失败：</item>
+        <item>
+活动完成。排名仍按可比较组分开。</item>
+        <item>活动完成：</item>
+        <item>包含有效性被阻断的测试套件</item>
+        <item>并排比较</item>
+        <item>所有设备 / SoC / GPU</item>
+        <item>没有符合筛选条件的测试套件</item>
+        <item> 个测试套件已索引 · </item>
+        <item> 可见</item>
+        <item>Diff 不可用：</item>
+        <item>排名不可用：</item>
+        <item>无筛选序列</item>
+        <item>Bisect 不可用：</item>
+        <item>完整性签名失败</item>
+        <item>导出公共数据集</item>
+        <item>封装会移除设备型号、指纹和本地路径。</item>
+        <item>它保留 SoC、GPU、工作负载、配置和 ZIP 哈希，这些可能</item>
+        <item>可被关联。不会自动上传任何内容。</item>
+        <item>导出</item>
+        <item>封装被拒绝：</item>
+        <item>文件不可用</item>
+        <item>测试套件已导入：</item>
+        <item>公共封装已导出并验证签名。</item>
+        <item>选择有效的测试套件</item>
+        <item> · 已阻断</item>
+        <item> 个测试套件</item>
+        <item>suite.json 超过 2 MiB</item>
+        <item>与本地测试套件的不可变关联</item>
+        <item>无可用本地测试套件</item>
+        <item> 个会话 · </item>
+        <item> 个测试套件可用 · 不自动上传</item>
+        <item>正在验证隐私、版本、限制和 SHA-256…</item>
+        <item>会话已导入：</item>
+        <item>SDK 与本地导入的公共契约。</item>
+        <item>契约不可用：</item>
+        <item>请导入由 SDK v1 生成的 session.json。</item>
+        <item>历史兼容的描述性比较。</item>
+        <item>比较不可用：</item>
+        <item>关联被拒绝：</item>
+        <item>导出不可用：</item>
+        <item>导出完成。未上传任何内容。</item>
+        <item>导出失败：</item>
+        <item>无本地测试套件</item>
+        <item>
+模式：</item>
+        <item>
+配置：</item>
+        <item>
+
+结论：</item>
+        <item>
+可比较：</item>
+        <item>
+阻断项：</item>
+        <item>
+警告：</item>
+        <item>
+
+格式回归：</item>
+        <item>
+格式增益：</item>
+        <item>
+冷管线：%s%%
+热管线：%s%%</item>
+        <item>没有可用的阶段 10 包。</item>
+    </string-array>
+</resources>

@@ -24,7 +24,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-public final class DeepDiagnosticsActivity extends Activity
+public final class DeepDiagnosticsActivity extends LocalizedActivity
         implements DeepDiagnosticsCoordinator.Listener {
     private static final int REQUEST_EXPORT = 10101;
 
@@ -122,7 +122,7 @@ public final class DeepDiagnosticsActivity extends Activity
         for (DriverPackage driver : drivers) {
             labels.add(driver.displayName() + " · " + driver.sha256.substring(0, 12));
         }
-        driverSpinner.setAdapter(new ArrayAdapter<>(this,
+        driverSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, labels));
         updateButtons();
     }
