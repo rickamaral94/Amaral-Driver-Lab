@@ -1,0 +1,80 @@
++    <string name="phase13_copy_log">Copia registro completo</string>
++    <string name="phase13_log_copied">Registro completo copiato.</string>
++    <string name="phase13_export_log">Esporta ZIP diagnostico</string>
++    <string name="phase13_export_success">ZIP diagnostico esportato.</string>
++    <string name="phase13_export_failed">Esportazione non riuscita: %1$s</string>
++    <string name="phase13_back_home">Torna alla home</string>
++    <string name="phase13_log_invalid">Questo registro non è disponibile o non è valido.</string>
++    <string name="phase13_issue_sending">Creazione della issue in Amaral Driver Lab…</string>
++    <string name="phase13_bundle_unavailable">Il pacchetto diagnostico non è ancora disponibile.</string>
++    <string name="phase13_log_metrics_format">Prestazioni: %1$s / 100
++Compatibilità: %2$s / 100
++Guadagno ponderato: %3$s
++Confidenza: %4$s</string>
++    <string name="phase13_log_blockers">Blocchi e avvertenze:</string>
++    <string name="phase13_log_steps_format">Fasi: %1$d completate · %2$d non riuscite · %3$d in attesa</string>
++
+     <string-array name="legacy_ui_translation">
+         <item>Turnip/stock · prima la correttezza · processo pulito · evidenze riproducibili</item>
+         <item>1. Driver</item>
+@@ -461,4 +502,7 @@ Pipeline cold: %s%%
+ Pipeline warm: %s%%</item>
+         <item>Nessun pacchetto Fase 10 disponibile.</item>
+     </string-array>
++    <string name="phase13_legacy_full_title">Full v3 esteso</string>
++    <string name="phase13_legacy_full_detail">Indagine avanzata lunga con test sintetici, tenuta termica, diagnostica profonda e soak di cinque cicli.</string>
++    <string name="phase13_start_legacy_full">AVVIA FULL v3 ESTESO</string>
+ </resources>
+diff --git a/app/src/main/res/values-ja/strings.xml b/app/src/main/res/values-ja/strings.xml
+index 03f05c2..997ff51 100644
+--- a/app/src/main/res/values-ja/strings.xml
++++ b/app/src/main/res/values-ja/strings.xml
+@@ -47,9 +47,9 @@
+     <string name="phase13_result_in_progress">A qualification is still in progress.</string>
+     <string name="phase13_recommended_section">推奨テスト</string>
+     <string name="phase13_status_recommended">推奨</string>
+-    <string name="phase13_full_title">Full Qualification v3</string>
++    <string name="phase13_full_title">推奨 Turnip テスト</string>
+     <string name="phase13_full_description">The most complete and guided comparison: visual correctness, controlled performance, deep diagnostics and short soak.</string>
+-    <string name="phase13_full_composition">21 stages · 5 reliability cycles · 128 MiB memory pressure · real telemetry optional</string>
++    <string name="phase13_full_composition">8つの重点ステップ・描画正確性・シェーダー・フレームタイム・混合同期トレース</string>
+     <string name="phase13_start_full">Fullテストを開始</string>
+     <string name="phase13_comparisons">比較</string>
+     <string name="phase13_system_vs_turnip">System × Turnip</string>
+@@ -95,7 +95,7 @@
+     <string name="phase13_system_driver_detail">Used as the stock reference under the same device and thermal conditions.</string>
+     <string name="phase13_candidate_driver">Turnip候補</string>
+     <string name="phase13_no_driver_imported">インポート済みドライバーなし</string>
+-    <string name="phase13_import_driver_instruction">Import a valid AdrenoTools ZIP in the technical workspace before continuing.</string>
++    <string name="phase13_import_driver_instruction">ホーム画面から有効な AdrenoTools ZIP を直接インポートしてください。</string>
+     <string name="phase13_driver_details_format">SHA-256: %1$s\nImported: %2$s\nKnown compatibility: %3$s</string>
+     <string name="phase13_compatibility_available">available for this Android version</string>
+     <string name="phase13_compatibility_warning">requires a newer Android API</string>
+@@ -160,6 +160,47 @@
+     <string name="help_thermal_what">Measures how performance and temperature behave during a sustained workload.</string>
+     <string name="help_thermal_why">Short peaks can hide throttling and unstable long sessions.</string>
+     <string name="help_thermal_how">Prefer stable performance with a controlled temperature increase under identical cooling conditions.</string>
++    <string name="phase13_quick_test_description">ここでドライバーをインポートまたは選択し、技術画面を開かずに短い推奨比較を実行します。</string>
++    <string name="phase13_compare_against">比較対象</string>
++    <string name="phase13_comparison_system_turnip">Android システムドライバー × Turnip 候補</string>
++    <string name="phase13_comparison_turnip_turnip">Turnip 参照 × Turnip 候補</string>
++    <string name="phase13_candidate_driver_label">候補ドライバー</string>
++    <string name="phase13_reference_driver_label">参照ドライバー</string>
++    <string name="phase13_import_driver">Turnip ZIP をインポート</string>
++    <string name="phase13_start_selected_test">選択した Full テストを開始</string>
++    <string name="phase13_importing_driver">ドライバーをインポートして検証中…</string>
++    <string name="phase13_import_success">インポート完了: %1$s</string>
++    <string name="phase13_import_failed">インポート失敗: %1$s</string>
++    <string name="phase13_select_candidate_error">有効な Turnip 候補を選択またはインポートしてください。</string>
++    <string name="phase13_select_reference_error">有効な Turnip 参照ドライバーを選択してください。</string>
++    <string name="phase13_same_driver_error">候補と参照には異なるドライバーを選択してください。</string>
++    <string name="phase13_open_test_log">テストログを開く</string>
++    <string name="phase13_comparison_summary_format">%1$s
++対
++%2$s</string>
++    <string name="phase13_log_title">テストログ</string>
++    <string name="phase13_log_subtitle">結果、技術的証拠、プロジェクト Issue への送信</string>
++    <string name="phase13_log_raw_title">完全な qualification.json</string>
++    <string name="phase13_send_issue">プロジェクト Issue に送信</string>
++    <string name="phase13_issue_opened">入力済み Issue をブラウザーで開きました。</string>
++    <string name="phase13_issue_created">Issue を作成しました: %1$s</string>

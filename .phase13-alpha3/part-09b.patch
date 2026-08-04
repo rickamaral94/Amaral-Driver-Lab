@@ -1,0 +1,108 @@
++    <string name="phase13_import_success">Imported: %1$s</string>
++    <string name="phase13_import_failed">Import failed: %1$s</string>
++    <string name="phase13_select_candidate_error">Select or import a valid candidate Turnip driver.</string>
++    <string name="phase13_select_reference_error">Select a valid reference Turnip driver.</string>
++    <string name="phase13_same_driver_error">Candidate and reference must be different drivers.</string>
++    <string name="phase13_open_test_log">Open test log</string>
++    <string name="phase13_comparison_summary_format">%1$s
++versus
++%2$s</string>
++    <string name="phase13_log_title">Test log</string>
++    <string name="phase13_log_subtitle">Result, technical evidence and project issue handoff</string>
++    <string name="phase13_log_raw_title">Complete qualification.json</string>
++    <string name="phase13_send_issue">Send to project issue</string>
++    <string name="phase13_issue_opened">A prefilled project issue was opened in the browser.</string>
++    <string name="phase13_issue_created">Issue created: %1$s</string>
++    <string name="phase13_issue_failed">Could not prepare the issue: %1$s</string>
++    <string name="phase13_copy_log">Copy complete log</string>
++    <string name="phase13_log_copied">Complete log copied.</string>
++    <string name="phase13_export_log">Export diagnostic ZIP</string>
++    <string name="phase13_export_success">Diagnostic ZIP exported.</string>
++    <string name="phase13_export_failed">Export failed: %1$s</string>
++    <string name="phase13_back_home">Back to home</string>
++    <string name="phase13_log_invalid">This test log is unavailable or invalid.</string>
++    <string name="phase13_issue_sending">Creating issue in the Amaral Driver Lab project…</string>
++    <string name="phase13_bundle_unavailable">The diagnostic package is not available yet.</string>
++    <string name="phase13_log_metrics_format">Performance: %1$s / 100
++Compatibility: %2$s / 100
++Weighted gain: %3$s
++Confidence: %4$s</string>
++    <string name="phase13_log_blockers">Blockers and caveats:</string>
++    <string name="phase13_log_steps_format">Steps: %1$d completed · %2$d failed · %3$d pending</string>
++
+     <string-array name="legacy_ui_translation">
+         <item>Turnip/stock · correctness first · clean process · reproducible evidence</item>
+         <item>1. Driver</item>
+@@ -461,4 +502,7 @@ Cold pipeline: %s%%
+ Warm pipeline: %s%%</item>
+         <item>No Phase 10 package available.</item>
+     </string-array>
++    <string name="phase13_legacy_full_title">Extended Full v3</string>
++    <string name="phase13_legacy_full_detail">Long advanced investigation with synthetic workloads, thermal sustain, deep diagnostics and five-cycle soak.</string>
++    <string name="phase13_start_legacy_full">START EXTENDED FULL v3</string>
+ </resources>
+diff --git a/app/src/test/java/com/amaral/driverlab/Phase13ContractTest.java b/app/src/test/java/com/amaral/driverlab/Phase13ContractTest.java
+index 4e2e6de..b7b87f4 100644
+--- a/app/src/test/java/com/amaral/driverlab/Phase13ContractTest.java
++++ b/app/src/test/java/com/amaral/driverlab/Phase13ContractTest.java
+@@ -10,15 +10,21 @@ public final class Phase13ContractTest {
+     @Test
+     public void uxRedesignDoesNotChangeTechnicalSchema() {
+         assertEquals(13, Phase13Contract.RESULT_SCHEMA_VERSION);
+-        assertEquals(1, Phase13Contract.UX_SCHEMA_VERSION);
++        assertEquals(2, Phase13Contract.UX_SCHEMA_VERSION);
+         assertEquals(5, Phase13Contract.GUIDED_STEP_COUNT);
+         assertTrue(Phase13Contract.TECHNICAL_IDENTIFIERS_STABLE);
+-        assertFalse(Phase13Contract.METHODOLOGY_CHANGED);
++        assertTrue(Phase13Contract.RECOMMENDED_PROFILE_CHANGED);
++        assertTrue(Phase13Contract.LEGACY_FULL_V3_PRESERVED);
+     }
+ 
+     @Test
+     public void modesRemainStableIdentifiers() {
+         assertEquals("basic", Phase13Contract.BASIC_MODE);
+         assertEquals("advanced", Phase13Contract.ADVANCED_MODE);
++        assertEquals("system_vs_turnip", Phase13Contract.SYSTEM_VS_TURNIP);
++        assertEquals("turnip_vs_turnip", Phase13Contract.TURNIP_VS_TURNIP);
++        assertTrue(Phase13Contract.HOME_DIRECT_DRIVER_SELECTION);
++        assertTrue(Phase13Contract.HOME_DIRECT_DRIVER_IMPORT);
++        assertTrue(Phase13Contract.LOG_OPENS_AFTER_HOME_TEST);
+     }
+ }
+diff --git a/app/src/test/java/com/amaral/driverlab/QualificationProfileTest.java b/app/src/test/java/com/amaral/driverlab/QualificationProfileTest.java
+index 7dc669d..0031262 100644
+--- a/app/src/test/java/com/amaral/driverlab/QualificationProfileTest.java
++++ b/app/src/test/java/com/amaral/driverlab/QualificationProfileTest.java
+@@ -13,13 +13,13 @@ import static org.junit.Assert.assertTrue;
+ 
+ public final class QualificationProfileTest {
+     @Test
+-    public void currentProfileV3IsImmutableAndWeightsSumToOneHundred() throws Exception {
++    public void currentRecommendedProfileIsFocusedAndWeightsSumToOneHundred() throws Exception {
+         JSONObject profile = QualificationProfile.definition();
+         assertTrue(QualificationProfile.verify(profile));
+         assertEquals(Phase7Contract.PROFILE_ID, profile.getString("profile_id"));
+-        assertEquals(3, profile.getInt("profile_version"));
+-        assertEquals(15, profile.getInt("step_count"));
+-        assertEquals(20, profile.getInt("automated_logical_test_count"));
++        assertEquals(4, profile.getInt("profile_version"));
++        assertEquals(8, profile.getInt("step_count"));
++        assertEquals(8, profile.getInt("automated_logical_test_count"));
+         assertEquals(1, profile.getInt("optional_evidence_slot_count"));
+         assertEquals(100, profile.getInt("performance_weight_total"));
+         assertEquals(64, profile.getString("profile_sha256").length());
+@@ -38,10 +38,10 @@ public final class QualificationProfileTest {
+             }
+         }
+         assertEquals(new HashSet<>(VisualSceneContract.IDS), visualWorkloads);
+-        assertEquals(QualificationProfile.KIND_DEEP_DIAGNOSTICS,
+-                steps.getJSONObject(13).getString("step_kind"));
+-        assertEquals(QualificationProfile.KIND_SHORT_SOAK,
+-                steps.getJSONObject(14).getString("step_kind"));
++        for (int index = 0; index < steps.length(); index++) {
++            assertEquals(QualificationProfile.KIND_SUITE,
++                    steps.getJSONObject(index).getString("step_kind"));
++        }
+     }
+ 
+     @Test

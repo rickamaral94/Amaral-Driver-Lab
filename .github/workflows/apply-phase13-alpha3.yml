@@ -1,0 +1,35 @@
+name: Apply Phase 13 alpha3
+
+on:
+  push:
+    branches:
+      - agent/phase13-ux-redesign
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: contains(github.event.head_commit.message, 'stage Phase 13 alpha3 patch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout staged branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify and apply alpha3 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .phase13-alpha3/part-*.patch > /tmp/phase13-alpha3.patch
+          echo "81bc7bff32d2d269f9ba8f6b5106da499b2d74fcc7119e52dc351eff6e9d1fa5  /tmp/phase13-alpha3.patch" | sha256sum -c -
+          git apply --check /tmp/phase13-alpha3.patch
+          git apply /tmp/phase13-alpha3.patch
+          rm -rf .phase13-alpha3 .github/workflows/apply-phase13-alpha3.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refine recommended Turnip validation flow"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

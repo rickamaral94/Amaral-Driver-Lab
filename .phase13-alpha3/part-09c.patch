@@ -1,0 +1,110 @@
+@@ -49,14 +49,18 @@ public final class QualificationProfileTest {
+         JSONObject v1 = QualificationProfile.definitionForVersion(1);
+         JSONObject v2 = QualificationProfile.definitionForVersion(2);
+         JSONObject v3 = QualificationProfile.definitionForVersion(3);
++        JSONObject v4 = QualificationProfile.definitionForVersion(4);
+         assertTrue(QualificationProfile.verify(v1));
+         assertTrue(QualificationProfile.verify(v2));
+         assertTrue(QualificationProfile.verify(v3));
++        assertTrue(QualificationProfile.verify(v4));
+         assertEquals(10, v1.getInt("step_count"));
+         assertEquals(13, v2.getInt("step_count"));
+         assertEquals(15, v3.getInt("step_count"));
++        assertEquals(8, v4.getInt("step_count"));
+         assertNotEquals(v1.getString("profile_sha256"), v2.getString("profile_sha256"));
+         assertNotEquals(v2.getString("profile_sha256"), v3.getString("profile_sha256"));
++        assertNotEquals(v3.getString("profile_sha256"), v4.getString("profile_sha256"));
+     }
+ 
+     @Test
+diff --git a/app/src/test/java/com/amaral/driverlab/QualificationReportComparisonTest.java b/app/src/test/java/com/amaral/driverlab/QualificationReportComparisonTest.java
+new file mode 100644
+index 0000000..6c08ae5
+--- /dev/null
++++ b/app/src/test/java/com/amaral/driverlab/QualificationReportComparisonTest.java
+@@ -0,0 +1,51 @@
++package com.amaral.driverlab;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++
++import org.json.JSONObject;
++import org.junit.Test;
++
++public final class QualificationReportComparisonTest {
++    @Test
++    public void turnipReferenceIsNamedInHumanSummary() throws Exception {
++        JSONObject candidate = driver("Candidate", "candidate-sha");
++        JSONObject reference = driver("Reference", "reference-sha");
++        JSONObject score = new JSONObject()
++                .put("recommendation", "system_recommended_over_candidate")
++                .put("profile_version", 3)
++                .put("winner", "system")
++                .put("confidence", "high")
++                .put("performance_index", 75)
++                .put("compatibility_index", 80)
++                .put("overall_index", 77)
++                .put("weighted_improvement_percent", -4.5);
++
++        JSONObject summary = QualificationReport.humanSummary(
++                candidate, reference, "turnip_vs_turnip", score);
++
++        assertEquals("turnip_vs_turnip", summary.getString("comparison_mode"));
++        assertEquals("Driver de referência recomendado", summary.getString("headline"));
++        assertTrue(summary.getString("detail").contains("Reference"));
++    }
++
++    @Test
++    public void stockBaselineRemainsCompatible() throws Exception {
++        JSONObject score = new JSONObject()
++                .put("recommendation", "candidate_recommended_over_system")
++                .put("profile_version", 3)
++                .put("winner", "candidate")
++                .put("confidence", "medium")
++                .put("weighted_improvement_percent", 5.0);
++        JSONObject summary = QualificationReport.humanSummary(driver("Candidate", "sha"), score);
++        assertEquals("system_vs_turnip", summary.getString("comparison_mode"));
++        assertTrue(summary.getString("detail").contains("driver do sistema"));
++    }
++
++    private static JSONObject driver(String name, String sha) throws Exception {
++        return new JSONObject()
++                .put("name", name)
++                .put("packageVersion", "v1")
++                .put("sha256", sha);
++    }
++}
+diff --git a/app/src/test/java/com/amaral/driverlab/RecommendedTurnipProfileTest.java b/app/src/test/java/com/amaral/driverlab/RecommendedTurnipProfileTest.java
+new file mode 100644
+index 0000000..dcfaaac
+--- /dev/null
++++ b/app/src/test/java/com/amaral/driverlab/RecommendedTurnipProfileTest.java
+@@ -0,0 +1,96 @@
++package com.amaral.driverlab;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++import org.junit.Test;
++
++import java.util.HashSet;
++import java.util.Set;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++public final class RecommendedTurnipProfileTest {
++    @Test
++    public void recommendedProfileKeepsOnlyDecisionRelevantWorkloads() throws Exception {
++        JSONObject profile = QualificationProfile.definitionForVersion(4);
++        assertEquals(8, profile.getInt("step_count"));
++        assertEquals(100, profile.getInt("performance_weight_total"));
++        Set<String> stepIds = new HashSet<>();
++        JSONArray steps = profile.getJSONArray("steps");
++        for (int index = 0; index < steps.length(); index++) {
++            JSONObject step = steps.getJSONObject(index);
++            stepIds.add(step.getString("step_id"));
++            assertTrue(step.getInt("cooldown_seconds") <= 2);
++        }
++        assertTrue(stepIds.contains("correctness_pre"));
++        assertTrue(stepIds.contains("visual_geometry"));

@@ -1,0 +1,64 @@
++    <string name="phase13_issue_opened">Uma issue preenchida do projeto foi aberta no navegador.</string>
++    <string name="phase13_issue_created">Issue criada: %1$s</string>
++    <string name="phase13_issue_failed">Não foi possível preparar a issue: %1$s</string>
++    <string name="phase13_copy_log">Copiar log completo</string>
++    <string name="phase13_log_copied">Log completo copiado.</string>
++    <string name="phase13_export_log">Exportar ZIP de diagnóstico</string>
++    <string name="phase13_export_success">ZIP de diagnóstico exportado.</string>
++    <string name="phase13_export_failed">Falha na exportação: %1$s</string>
++    <string name="phase13_back_home">Voltar ao início</string>
++    <string name="phase13_log_invalid">Este log de teste está indisponível ou inválido.</string>
++    <string name="phase13_issue_sending">Criando issue no projeto Amaral Driver Lab…</string>
++    <string name="phase13_bundle_unavailable">O pacote de diagnóstico ainda não está disponível.</string>
++    <string name="phase13_log_metrics_format">Performance: %1$s / 100
++Compatibilidade: %2$s / 100
++Ganho ponderado: %3$s
++Confiança: %4$s</string>
++    <string name="phase13_log_blockers">Bloqueios e ressalvas:</string>
++    <string name="phase13_log_steps_format">Etapas: %1$d concluídas · %2$d falhas · %3$d pendentes</string>
++
+     <string-array name="legacy_ui_translation">
+         <item>Turnip/stock · correção primeiro · processo limpo · evidência reproduzível</item>
+         <item>1. Driver</item>
+@@ -461,4 +502,7 @@ Pipeline cold: %s%%
+ Pipeline warm: %s%%</item>
+         <item>Nenhum pacote da Fase 10 disponível.</item>
+     </string-array>
++    <string name="phase13_legacy_full_title">Full v3 estendido</string>
++    <string name="phase13_legacy_full_detail">Investigação avançada longa com testes sintéticos, sustentação térmica, diagnóstico profundo e soak de cinco ciclos.</string>
++    <string name="phase13_start_legacy_full">INICIAR FULL v3 ESTENDIDO</string>
+ </resources>
+diff --git a/app/src/main/res/values-zh-rCN/strings.xml b/app/src/main/res/values-zh-rCN/strings.xml
+index f4a0996..2c2caa7 100644
+--- a/app/src/main/res/values-zh-rCN/strings.xml
++++ b/app/src/main/res/values-zh-rCN/strings.xml
+@@ -47,9 +47,9 @@
+     <string name="phase13_result_in_progress">A qualification is still in progress.</string>
+     <string name="phase13_recommended_section">推荐测试</string>
+     <string name="phase13_status_recommended">推荐</string>
+-    <string name="phase13_full_title">Full Qualification v3</string>
++    <string name="phase13_full_title">推荐 Turnip 测试</string>
+     <string name="phase13_full_description">The most complete and guided comparison: visual correctness, controlled performance, deep diagnostics and short soak.</string>
+-    <string name="phase13_full_composition">21 stages · 5 reliability cycles · 128 MiB memory pressure · real telemetry optional</string>
++    <string name="phase13_full_composition">8 个重点阶段 · 视觉正确性 · 着色器 · 帧时间 · 混合同步跟踪</string>
+     <string name="phase13_start_full">开始 Full 测试</string>
+     <string name="phase13_comparisons">比较</string>
+     <string name="phase13_system_vs_turnip">System × Turnip</string>
+@@ -95,7 +95,7 @@
+     <string name="phase13_system_driver_detail">Used as the stock reference under the same device and thermal conditions.</string>
+     <string name="phase13_candidate_driver">Turnip 候选驱动</string>
+     <string name="phase13_no_driver_imported">没有已导入的驱动</string>
+-    <string name="phase13_import_driver_instruction">Import a valid AdrenoTools ZIP in the technical workspace before continuing.</string>
++    <string name="phase13_import_driver_instruction">请直接在主页导入有效的 AdrenoTools ZIP。</string>
+     <string name="phase13_driver_details_format">SHA-256: %1$s\nImported: %2$s\nKnown compatibility: %3$s</string>
+     <string name="phase13_compatibility_available">available for this Android version</string>
+     <string name="phase13_compatibility_warning">requires a newer Android API</string>
+@@ -160,6 +160,47 @@
+     <string name="help_thermal_what">Measures how performance and temperature behave during a sustained workload.</string>
+     <string name="help_thermal_why">Short peaks can hide throttling and unstable long sessions.</string>
+     <string name="help_thermal_how">Prefer stable performance with a controlled temperature increase under identical cooling conditions.</string>
++    <string name="phase13_quick_test_description">在首页导入或选择驱动，并直接运行推荐的短时对比，无需进入技术区域。</string>
++    <string name="phase13_compare_against">比较对象</string>
++    <string name="phase13_comparison_system_turnip">Android 系统驱动 × Turnip 候选</string>
++    <string name="phase13_comparison_turnip_turnip">Turnip 参考 × Turnip 候选</string>
++    <string name="phase13_candidate_driver_label">候选驱动</string>

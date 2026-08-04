@@ -1,0 +1,85 @@
++    <string name="phase13_reference_driver_label">参考驱动</string>
++    <string name="phase13_import_driver">导入 Turnip ZIP</string>
++    <string name="phase13_start_selected_test">启动所选 Full 测试</string>
++    <string name="phase13_importing_driver">正在导入并验证驱动…</string>
++    <string name="phase13_import_success">已导入：%1$s</string>
++    <string name="phase13_import_failed">导入失败：%1$s</string>
++    <string name="phase13_select_candidate_error">请选择或导入有效的 Turnip 候选驱动。</string>
++    <string name="phase13_select_reference_error">请选择有效的 Turnip 参考驱动。</string>
++    <string name="phase13_same_driver_error">候选和参考必须是不同的驱动。</string>
++    <string name="phase13_open_test_log">打开测试日志</string>
++    <string name="phase13_comparison_summary_format">%1$s
++对比
++%2$s</string>
++    <string name="phase13_log_title">测试日志</string>
++    <string name="phase13_log_subtitle">结果、技术证据及发送到项目 Issue</string>
++    <string name="phase13_log_raw_title">完整 qualification.json</string>
++    <string name="phase13_send_issue">发送到项目 Issue</string>
++    <string name="phase13_issue_opened">已在浏览器中打开预填的项目 Issue。</string>
++    <string name="phase13_issue_created">Issue 已创建：%1$s</string>
++    <string name="phase13_issue_failed">无法准备 Issue：%1$s</string>
++    <string name="phase13_copy_log">复制完整日志</string>
++    <string name="phase13_log_copied">已复制完整日志。</string>
++    <string name="phase13_export_log">导出诊断 ZIP</string>
++    <string name="phase13_export_success">已导出诊断 ZIP。</string>
++    <string name="phase13_export_failed">导出失败：%1$s</string>
++    <string name="phase13_back_home">返回主页</string>
++    <string name="phase13_log_invalid">此测试日志不可用或无效。</string>
++    <string name="phase13_issue_sending">正在 Amaral Driver Lab 项目中创建 Issue…</string>
++    <string name="phase13_bundle_unavailable">诊断包尚不可用。</string>
++    <string name="phase13_log_metrics_format">性能：%1$s / 100
++兼容性：%2$s / 100
++加权提升：%3$s
++置信度：%4$s</string>
++    <string name="phase13_log_blockers">阻止项与注意事项：</string>
++    <string name="phase13_log_steps_format">步骤：%1$d 已完成 · %2$d 失败 · %3$d 待处理</string>
++
+     <string-array name="legacy_ui_translation">
+         <item>Turnip/系统驱动 · 正确性优先 · 干净进程 · 可复现证据</item>
+         <item>1. 驱动程序</item>
+@@ -461,4 +502,7 @@ SHA-256 </item>
+ 热管线：%s%%</item>
+         <item>没有可用的阶段 10 包。</item>
+     </string-array>
++    <string name="phase13_legacy_full_title">扩展 Full v3</string>
++    <string name="phase13_legacy_full_detail">包含合成负载、持续热测试、深度诊断和五轮 soak 的长时间高级调查。</string>
++    <string name="phase13_start_legacy_full">开始扩展 FULL v3</string>
+ </resources>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 84ec7d9..bca86fa 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -47,9 +47,9 @@
+     <string name="phase13_result_in_progress">A qualification is still in progress.</string>
+     <string name="phase13_recommended_section">Recommended test</string>
+     <string name="phase13_status_recommended">Recommended</string>
+-    <string name="phase13_full_title">Full Qualification v3</string>
++    <string name="phase13_full_title">Recommended Turnip Test</string>
+     <string name="phase13_full_description">The most complete and guided comparison: visual correctness, controlled performance, deep diagnostics and short soak.</string>
+-    <string name="phase13_full_composition">21 stages · 5 reliability cycles · 128 MiB memory pressure · real telemetry optional</string>
++    <string name="phase13_full_composition">8 focused stages · visual correctness · shaders · frametime · mixed synchronization trace</string>
+     <string name="phase13_start_full">Start Full test</string>
+     <string name="phase13_comparisons">Comparisons</string>
+     <string name="phase13_system_vs_turnip">System × Turnip</string>
+@@ -95,7 +95,7 @@
+     <string name="phase13_system_driver_detail">Used as the stock reference under the same device and thermal conditions.</string>
+     <string name="phase13_candidate_driver">Turnip candidate</string>
+     <string name="phase13_no_driver_imported">No imported driver</string>
+-    <string name="phase13_import_driver_instruction">Import a valid AdrenoTools ZIP in the technical workspace before continuing.</string>
++    <string name="phase13_import_driver_instruction">Import a valid AdrenoTools ZIP directly on the home screen.</string>
+     <string name="phase13_driver_details_format">SHA-256: %1$s\nImported: %2$s\nKnown compatibility: %3$s</string>
+     <string name="phase13_compatibility_available">available for this Android version</string>
+     <string name="phase13_compatibility_warning">requires a newer Android API</string>
+@@ -160,6 +160,47 @@
+     <string name="help_thermal_what">Measures how performance and temperature behave during a sustained workload.</string>
+     <string name="help_thermal_why">Short peaks can hide throttling and unstable long sessions.</string>
+     <string name="help_thermal_how">Prefer stable performance with a controlled temperature increase under identical cooling conditions.</string>
++    <string name="phase13_quick_test_description">Import or select the drivers here and run the short recommended comparison without opening the technical workspace.</string>
++    <string name="phase13_compare_against">Compare against</string>
++    <string name="phase13_comparison_system_turnip">Android system driver × Turnip candidate</string>
++    <string name="phase13_comparison_turnip_turnip">Turnip reference × Turnip candidate</string>
++    <string name="phase13_candidate_driver_label">Candidate driver</string>
++    <string name="phase13_reference_driver_label">Reference driver</string>
++    <string name="phase13_import_driver">Import Turnip ZIP</string>
++    <string name="phase13_start_selected_test">Start selected Full test</string>
++    <string name="phase13_importing_driver">Importing and validating driver…</string>
