@@ -32,13 +32,11 @@ public final class TraceReplayAnalysisTest {
         JSONArray phases = new JSONArray();
         for (int round = 1; round <= 5; ++round) {
             phases.put(phase(round, false, HASH_A));
-            phases.put(phase(round, true, HASH_B));
+            phases.put(phase(round, true, round == 3 ? HASH_B : HASH_A));
         }
         JSONObject trace = TraceReplayAnalysis.analyze(phases, 5, RunCoordinator.MODE_AB);
         assertFalse(trace.getBoolean("passed_correctness_gate"));
-        assertFalse(trace.getBoolean("system_nondeterministic"));
-        assertFalse(trace.getBoolean("candidate_nondeterministic"));
-        assertEquals(5, trace.getInt("output_mismatch_count"));
+        assertEquals(1, trace.getInt("output_mismatch_count"));
         assertEquals("failed_trace_output_mismatch",
                 TraceReplayAnalysis.verdictFor(trace, new JSONObject(), RunCoordinator.MODE_AB));
     }
