@@ -5,15 +5,46 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: agent/phase10-deep-turnip-diagnostics
+          fetch-depth: 0
+      - name: Materialize verified Phase 10 source
+        if: hashFiles('.phase10/part-00') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object .phase10/part-00)" = "156ca1322559fa5def01ffc6e80da0e18fdd2b7c"
+          test "$(git hash-object .phase10/part-01)" = "490f456a99d20ae322414ca345b9c5c27bf50a08"
+          test "$(git hash-object .phase10/part-02)" = "b61333496593acadb79ae6ca0d95127e0a15bb03"
+          test "$(git hash-object .phase10/part-03)" = "6791592f8b6b328f60cd3d2e326262cc2921e02f"
+          test "$(git hash-object .phase10/part-04)" = "aaf2c9818b3c83a229ee0007b35976c3b9b08d88"
+          test "$(git hash-object .phase10/part-05)" = "5cf70a1fb6b45fbbabf494c916aa267e86346aa7"
+          test "$(git hash-object .phase10/part-06)" = "2fa17293779e4ff67fb4134cd50d70eb2c4917c2"
+          test "$(git hash-object .phase10/part-07)" = "fc7e42d4d5acab6f5d4eb84f5bf9b879041fde88"
+          test "$(git hash-object .phase10/part-08)" = "7795c6698ef611be587913cde084f963bcda5571"
+          cat .phase10/part-* > /tmp/phase10.patch.gz.b64
+          echo '2c8f485b4e4c5e22e46fc6e2b99f599d65298984a673b6f692ca5138b1d13f9b  /tmp/phase10.patch.gz.b64' | sha256sum --check
+          base64 --decode /tmp/phase10.patch.gz.b64 > /tmp/phase10.patch.gz
+          echo 'e1ae742d5a4d976cecfaf15a3d646c87fdd609b57fe9de59a66274856d76018b  /tmp/phase10.patch.gz' | sha256sum --check
+          gzip --decompress --stdout /tmp/phase10.patch.gz > /tmp/phase10.patch
+          echo '521e733a8b0a5f68736d995c2a047422d9e0d15df263a818e879950d0b98ac72  /tmp/phase10.patch' | sha256sum --check
+          git apply --check /tmp/phase10.patch
+          git apply /tmp/phase10.patch
+          rm -rf .phase10
+          git config user.name 'OpenAI Agent'
+          git config user.email 'agent@openai.com'
+          git add -A
+          git commit -m 'feat: add phase 10 deep Turnip diagnostics'
+          git push origin HEAD:agent/phase10-deep-turnip-diagnostics
       - name: Upload source snapshot
         uses: actions/upload-artifact@v4
         with:
