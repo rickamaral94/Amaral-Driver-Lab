@@ -1,4 +1,4 @@
-name: Inspect Phase 13 alpha5 patch
+name: Inspect Phase 13 alpha5 parts
 
 on:
   pull_request:
@@ -16,15 +16,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: agent/phase13-ux-redesign
-      - name: Decode and inspect malformed area
+      - name: Inspect encoded parts
         shell: bash
         run: |
           set -euo pipefail
-          : > /tmp/phase13-alpha5.patch
+          ls -la .phase13-alpha5
           for part in .phase13-alpha5/part-*.b64; do
-            base64 --decode "$part" >> /tmp/phase13-alpha5.patch
+            echo "=== $part ==="
+            wc -c "$part"
+            out="/tmp/$(basename "$part" .b64).decoded"
+            base64 --decode "$part" > "$out"
+            wc -c "$out"
+            echo '--- first decoded lines ---'
+            head -n 4 "$out"
+            echo '--- last decoded lines ---'
+            tail -n 4 "$out"
           done
-          echo '--- lines 330-390 ---'
-          nl -ba /tmp/phase13-alpha5.patch | sed -n '330,390p'
-          echo '--- patch diagnostics ---'
-          git apply --recount --check /tmp/phase13-alpha5.patch
