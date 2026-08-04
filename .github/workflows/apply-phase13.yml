@@ -1,9 +1,9 @@
 name: Apply Phase 13 implementation
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/phase13-ux-redesign
+      - agent/phase12-complete-localization
     paths:
       - '.phase13-b64.*'
       - '.github/workflows/apply-phase13.yml'
@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   apply:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
