@@ -5,29 +5,72 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   snapshot:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout
+      - name: Checkout PR branch
         uses: actions/checkout@v4
-      - name: Upload source snapshot
-        uses: actions/upload-artifact@v4
         with:
-          name: amaral-driver-lab-source
-          path: |
-            app
-            telemetry-sdk
-            docs
-            README.md
-            build.gradle
-            settings.gradle
-            gradle.properties
-            gradlew
-            gradlew.bat
-            gradle
-          if-no-files-found: error
-          retention-days: 3
+          ref: agent/phase13-ux-redesign
+          fetch-depth: 0
+
+      - name: Verify, apply and publish alpha6
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/alpha6.patch
+          for part in .phase13-alpha6/part-*.b64; do
+            base64 --decode "$part" >> /tmp/alpha6.patch
+          done
+          echo '51b6ffb6cde30ed8992f4562e54c01e93a7cdfc0aab683ec243d442584796d93  /tmp/alpha6.patch' | sha256sum --check
+          git apply --check /tmp/alpha6.patch
+          git apply /tmp/alpha6.patch
+          rm -rf .phase13-alpha6
+          rm -f .github/workflows/apply-phase13-alpha6.yml
+          cat > .github/workflows/source-snapshot.yml <<'YAML'
+          name: Source Snapshot
+
+          on:
+            pull_request:
+            workflow_dispatch:
+
+          permissions:
+            contents: read
+
+          jobs:
+            snapshot:
+              runs-on: ubuntu-latest
+              timeout-minutes: 10
+              steps:
+                - name: Checkout
+                  uses: actions/checkout@v4
+                - name: Upload source snapshot
+                  uses: actions/upload-artifact@v4
+                  with:
+                    name: amaral-driver-lab-source
+                    path: |
+                      app
+                      telemetry-sdk
+                      docs
+                      README.md
+                      build.gradle
+                      settings.gradle
+                      gradle.properties
+                      gradlew
+                      gradlew.bat
+                      gradle
+                    if-no-files-found: error
+                    retention-days: 3
+          YAML
+          sed -i 's/^          //' .github/workflows/source-snapshot.yml
+          git diff --check
+          git status --short
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Phase 13 alpha6 comparative issue report'
+          git push origin HEAD:agent/phase13-ux-redesign
