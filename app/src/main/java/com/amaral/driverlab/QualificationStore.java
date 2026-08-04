@@ -34,6 +34,7 @@ final class QualificationStore {
                 .put("created_at_ms", now)
                 .put("app_version", BuildConfig.VERSION_NAME)
                 .put("phase7_contract", Phase7Contract.contractJson())
+                .put("phase8_contract", Phase8Contract.contractJson())
                 .put("profile", profile)
                 .put("profile_sha256", profile.getString("profile_sha256"))
                 .put("driver", driver.toJson())
@@ -49,7 +50,8 @@ final class QualificationStore {
                         .put("steps", states))
                 .put("report", JSONObject.NULL)
                 .put("diagnostic_bundle", JSONObject.NULL)
-                .put("limitations", Phase7Contract.LIMITATION);
+                .put("limitations", profile.optInt("profile_version", 1) >= 2
+                        ? Phase8Contract.LIMITATION : Phase7Contract.LIMITATION);
         File file = new File(directory, "qualification.json");
         save(file, manifest);
         ResultFiles.writeAtomic(new File(directory, "profile.json"), profile.toString(2));
@@ -83,8 +85,11 @@ final class QualificationStore {
             if (driver == null || driver.optString("sha256", "").length() != 64) return false;
             JSONObject execution = manifest.optJSONObject("execution");
             JSONArray states = execution == null ? null : execution.optJSONArray("steps");
-            if (states == null || states.length() != QualificationProfile.steps().size()) return false;
-            for (QualificationProfile.Step step : QualificationProfile.steps()) {
+            int profileVersion = profile.optInt("profile_version", -1);
+            java.util.List<QualificationProfile.Step> expectedSteps =
+                    QualificationProfile.stepsForVersion(profileVersion);
+            if (states == null || states.length() != expectedSteps.size()) return false;
+            for (QualificationProfile.Step step : expectedSteps) {
                 JSONObject state = stateFor(manifest, step.stepId);
                 if (state == null || !validStatus(state.optString("status"))) return false;
             }

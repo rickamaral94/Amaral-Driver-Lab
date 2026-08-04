@@ -29,6 +29,15 @@
             android:exported="false" />
 
         <activity
+            android:name=".VisualRunnerActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:process=":runner"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.DriverLab.VisualRunner" />
+
+        <activity
             android:name=".RunnerActivity"
             android:excludeFromRecents="true"
             android:exported="false"

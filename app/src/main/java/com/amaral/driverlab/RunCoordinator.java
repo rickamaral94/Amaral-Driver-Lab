@@ -165,7 +165,8 @@ final class RunCoordinator {
                 + " · " + workloadLabel + " · rodada " + phase.round + " · "
                 + (phase.custom ? candidate.displayName() : "driver do sistema"));
 
-        Intent intent = new Intent(activity, RunnerActivity.class);
+        Intent intent = new Intent(activity, VisualSceneContract.isVisualScene(workloadId)
+                ? VisualRunnerActivity.class : RunnerActivity.class);
         intent.putExtra(RunnerActivity.EXTRA_RESULT_PATH, currentResultFile.getAbsolutePath());
         intent.putExtra(RunnerActivity.EXTRA_PHASE_LABEL, phase.label);
         intent.putExtra(RunnerActivity.EXTRA_ROUND, phase.round);
@@ -280,7 +281,8 @@ final class RunCoordinator {
             report.put("workload", compatibilityWorkloadName());
             report.put("metric_limitations", WorkloadContract.limitationFor(workloadId));
             report.put("workload_config", workloadConfig());
-            if (WorkloadContract.TRANSFER_ID.equals(workloadId)) {
+            if (WorkloadContract.TRANSFER_ID.equals(workloadId)
+                    || VisualSceneContract.isVisualScene(workloadId)) {
                 report.put("warmup_seconds", warmupSeconds);
                 report.put("measure_seconds", measureSeconds);
             }
@@ -294,6 +296,7 @@ final class RunCoordinator {
             JSONObject renderCorrectness = null;
             JSONObject statisticalAnalysis = null;
             JSONObject traceReplay = null;
+            JSONObject visualScene = null;
             String verdict;
             if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
                 renderCorrectness = analyzeRenderCorrectness(failureCatalog);
@@ -301,7 +304,8 @@ final class RunCoordinator {
                 verdict = correctionVerdict(renderCorrectness, failureCatalog);
             } else {
                 summary = (WorkloadContract.isPhase2(workloadId)
-                        || WorkloadContract.TRACE_REPLAY_ID.equals(workloadId))
+                        || WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)
+                        || VisualSceneContract.isVisualScene(workloadId))
                         ? Phase2Metrics.summarize(phaseResults, workloadId)
                         : summarizeTransfer();
                 statisticalAnalysis = StatisticalComparison.analyze(
@@ -311,6 +315,13 @@ final class RunCoordinator {
                     appendTraceFailures(failureCatalog, traceReplay);
                     verdict = TraceReplayAnalysis.verdictFor(
                             traceReplay, statisticalAnalysis, mode);
+                } else if (VisualSceneContract.isVisualScene(workloadId)) {
+                    visualScene = VisualSceneAnalysis.analyze(
+                            phaseResults, suiteDirectory, rounds, mode,
+                            pixelTolerance, maximumDivergentBlocks);
+                    appendVisualFailures(failureCatalog, visualScene);
+                    verdict = VisualSceneAnalysis.verdictFor(
+                            visualScene, statisticalAnalysis, mode);
                 } else {
                     verdict = mode == MODE_AB
                             ? StatisticalComparison.verdictFor(statisticalAnalysis,
@@ -329,12 +340,18 @@ final class RunCoordinator {
                     ? TraceReplayContract.contractJson(traceId) : JSONObject.NULL);
             report.put("trace_replay",
                     traceReplay == null ? JSONObject.NULL : traceReplay);
+            report.put("visual_scene_contract",
+                    VisualSceneContract.isVisualScene(workloadId)
+                            ? VisualSceneContract.definition(workloadId) : JSONObject.NULL);
+            report.put("visual_scene",
+                    visualScene == null ? JSONObject.NULL : visualScene);
             report.put("capability_diff",
                     capabilityDiff == null ? JSONObject.NULL : capabilityDiff);
             report.put("failure_catalog", failureCatalog);
             report.put("verdict", verdict);
             report.put("validity_warnings", buildWarnings(
-                    renderCorrectness, failureCatalog, statisticalAnalysis, traceReplay));
+                    renderCorrectness, failureCatalog, statisticalAnalysis,
+                    traceReplay, visualScene));
             report.put("phase4_contract", Phase4Contract.contractJson());
             report.put("phase6_contract", campaignContext == null
                     ? JSONObject.NULL : Phase6Contract.contractJson());
@@ -342,6 +359,10 @@ final class RunCoordinator {
                     ? JSONObject.NULL : campaignContext);
             report.put("phase7_contract", qualificationContext == null
                     ? JSONObject.NULL : Phase7Contract.contractJson());
+            report.put("phase8_contract", qualificationContext != null
+                    && qualificationContext.optInt("profile_version", 1)
+                            >= Phase8Contract.CURRENT_FULL_PROFILE_VERSION
+                    ? Phase8Contract.contractJson() : JSONObject.NULL);
             report.put("qualification_context", qualificationContext == null
                     ? JSONObject.NULL : qualificationContext);
             report.put("hardware_identity", HardwareIdentity.fromReport(report));
@@ -367,6 +388,10 @@ final class RunCoordinator {
             config.put("minimum_block_match_percent",
                     WorkloadContract.MINIMUM_BLOCK_MATCH_PERCENT);
             config.put("maximum_divergent_blocks", maximumDivergentBlocks);
+        } else if (VisualSceneContract.isVisualScene(workloadId)) {
+            return VisualSceneContract.workloadConfig(
+                    workloadId, warmupSeconds, measureSeconds,
+                    pixelTolerance, maximumDivergentBlocks);
         } else if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
             config.put("warmup_seconds", warmupSeconds);
             config.put("measure_seconds", measureSeconds);
@@ -655,8 +680,41 @@ final class RunCoordinator {
         }
     }
 
+    private void appendVisualFailures(JSONArray failures, JSONObject visualScene)
+            throws Exception {
+        JSONArray comparisons = visualScene.optJSONArray("comparisons");
+        if (comparisons != null) {
+            for (int index = 0; index < comparisons.length(); ++index) {
+                JSONObject comparison = comparisons.optJSONObject(index);
+                if (comparison == null || comparison.optBoolean("passed", true)) continue;
+                FailureCatalog.appendVisualMismatch(
+                        failures,
+                        comparison.optInt("round", -1),
+                        comparison.optInt("checkpoint_frame", -1),
+                        comparison);
+            }
+        }
+        if (visualScene.optBoolean("system_nondeterministic", false)) {
+            failures.put(new JSONObject()
+                    .put("phase", "system")
+                    .put("driver_mode", "system")
+                    .put("failure_type", "visual_scene_nondeterminism")
+                    .put("failure_stage", "visual_checkpoint_gate")
+                    .put("message", "O braço do sistema variou entre checkpoints equivalentes."));
+        }
+        if (visualScene.optBoolean("candidate_nondeterministic", false)) {
+            failures.put(new JSONObject()
+                    .put("phase", "candidate")
+                    .put("driver_mode", "custom")
+                    .put("failure_type", "visual_scene_nondeterminism")
+                    .put("failure_stage", "visual_checkpoint_gate")
+                    .put("message", "O candidato variou entre checkpoints equivalentes."));
+        }
+    }
+
     private JSONArray buildWarnings(JSONObject correction, JSONArray failureCatalog,
-                                      JSONObject statisticalAnalysis, JSONObject traceReplay) throws Exception {
+                                      JSONObject statisticalAnalysis, JSONObject traceReplay,
+                                      JSONObject visualScene) throws Exception {
         JSONArray warnings = new JSONArray();
         double minimumTemperature = Double.POSITIVE_INFINITY;
         double maximumTemperature = Double.NEGATIVE_INFINITY;
@@ -667,7 +725,8 @@ final class RunCoordinator {
             if (!phase.optBoolean("success", false)) {
                 warnings.put("Uma ou mais fases falharam, encerraram ou expiraram.");
             }
-            if (WorkloadContract.TRANSFER_ID.equals(workloadId)) {
+            if (WorkloadContract.TRANSFER_ID.equals(workloadId)
+                    || VisualSceneContract.isVisualScene(workloadId)) {
                 JSONObject nativeResult = phase.optJSONObject("native");
                 if (nativeResult != null && !nativeResult.optBoolean("gpu_timestamps_used", false)) {
                     timestampFallback = true;
@@ -712,6 +771,19 @@ final class RunCoordinator {
             }
             if (mode == MODE_AB && traceReplay.optInt("complete_pair_count", 0) < rounds) {
                 warnings.put("Trace replay sem todos os pares A/B completos.");
+            }
+        }
+        if (visualScene != null) {
+            if (visualScene.optBoolean("system_nondeterministic", false)
+                    || visualScene.optBoolean("candidate_nondeterministic", false)) {
+                warnings.put("Cena visual não determinística: checkpoints variaram no mesmo braço.");
+            }
+            if (visualScene.optInt("checkpoint_mismatch_count", 0) > 0) {
+                warnings.put("Checkpoints visuais divergiram; conclusão de performance bloqueada.");
+            }
+            if (mode == MODE_AB && visualScene.optInt("complete_comparison_count", 0)
+                    < visualScene.optInt("expected_comparison_count", 0)) {
+                warnings.put("Cena visual sem todos os checkpoints A/B completos.");
             }
         }
         if (statisticalAnalysis != null) {

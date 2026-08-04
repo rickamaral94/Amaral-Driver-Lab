@@ -103,7 +103,7 @@ O APK executa código nativo do ZIP. Use somente pacotes próprios ou hashes ver
 
 ## Esquema de resultados
 
-A versão atual usa `schema_version = 8`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
+A versão atual usa `schema_version = 9`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
 
 Mudanças na geometria, SPIR-V, ordem dos draws, resolução, formato, cálculo ou regra padrão de comparação exigem uma nova `workload_version`.
 
@@ -133,7 +133,7 @@ Siga [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md). Sem GitHub App config
 
 ## Estado do projeto
 
-As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance. A Fase 6 executa matrizes de drivers × workloads/traces com plano imutável, retomada segura e rankings separados por chave comparável. A Fase 7 adiciona o Teste Full Recomendado, recomendação geral com gate de compatibilidade e pacote completo de diagnóstico.
+As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance. A Fase 6 executa matrizes de drivers × workloads/traces com plano imutável, retomada segura e rankings separados por chave comparável. A Fase 7 adiciona o Teste Full Recomendado, recomendação geral com gate de compatibilidade e pacote completo de diagnóstico. A Fase 8 adiciona três cenas Vulkan visíveis e animadas, checkpoints determinísticos e atualiza o Full Qualification para v2 sem redefinir as séries anteriores.
 
 
 ## Fase 3: comparação estatística
@@ -185,3 +185,16 @@ Uma campanha interrompida pode ser retomada; o job que estava em execução volt
 O botão **TESTE FULL RECOMENDADO · FASE 7** executa o perfil imutável `turnip_full_qualification/v1`: todos os workloads e traces oficiais, correção visual antes e depois da carga, preflight ambiental, pausa/retomada, índice de qualificação, recomendação clara e um `diagnostic-bundle.zip` com relatório HTML, JSONs, resultados brutos, PNGs e hashes.
 
 O índice geral é um resumo versionado para facilitar decisão; as métricas científicas individuais continuam separadas. Falhas de compatibilidade ou validade sempre bloqueiam a recomendação, mesmo quando o candidato é mais rápido em algum teste. Veja [docs/PHASE7_FULL_QUALIFICATION.md](docs/PHASE7_FULL_QUALIFICATION.md).
+
+
+## Fase 8: cenas Vulkan visíveis e Full Qualification v2
+
+A Fase 8 adiciona três workloads independentes:
+
+- `visual_scene_geometry/v1`: 144 instâncias animadas, depth e câmera determinística;
+- `visual_scene_materials/v1`: materiais procedurais e padrões de alta frequência;
+- `visual_scene_postprocess/v1`: amostragem intermediária, bloom, tone mapping e sincronização entre passes.
+
+As cenas são exibidas em tela cheia, renderizadas internamente em 960×540 e capturam checkpoints nos frames 30, 90 e 150. O braço candidato só recebe veredito de performance quando seus checkpoints passam pela comparação visual A/B e permanecem determinísticos entre rodadas. A métrica primária é `p99_gpu_frame_ms`, menor é melhor.
+
+O Teste Full Recomendado atual passa a usar `turnip_full_qualification/v2` com 13 etapas. Resultados v1 permanecem válidos, mas não entram no ranking v2. Veja [docs/PHASE8_VISIBLE_VULKAN_SCENES.md](docs/PHASE8_VISIBLE_VULKAN_SCENES.md).

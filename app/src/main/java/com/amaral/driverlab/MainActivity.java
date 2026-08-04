@@ -41,6 +41,9 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
     private static final String PREFS = "driver_lab_settings";
     private static final String[] WORKLOAD_IDS = {
             WorkloadContract.RENDER_CORRECTNESS_ID,
+            WorkloadContract.VISUAL_GEOMETRY_ID,
+            WorkloadContract.VISUAL_MATERIALS_ID,
+            WorkloadContract.VISUAL_POSTPROCESS_ID,
             WorkloadContract.TRACE_REPLAY_ID,
             WorkloadContract.SHADER_COMPILE_ID,
             WorkloadContract.RENDERPASS_TILING_ID,
@@ -121,7 +124,10 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         workloadSpinner.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item,
                 new String[]{
-                        "Correção offscreen v1 · recomendado",
+                        "Correção offscreen v1 · rápido",
+                        "Cena visível: geometria e depth v1",
+                        "Cena visível: materiais procedurais v1",
+                        "Cena visível: pós-processamento v1",
                         "Trace replay Vulkan v1",
                         "Compilação de shaders v1",
                         "Render pass / tiling v1",
@@ -204,7 +210,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         controls.add(runButton);
 
         Button phase7Button = new Button(this);
-        phase7Button.setText("★ TESTE FULL RECOMENDADO · FASE 7");
+        phase7Button.setText("★ TESTE FULL RECOMENDADO · FASE 8 / PERFIL v2");
         phase7Button.setOnClickListener(view ->
                 startActivity(new Intent(this, QualificationActivity.class)));
         root.addView(phase7Button, margins(0, 0, 0, 8));
@@ -274,13 +280,14 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         if (workloadSpinner == null || workloadNote == null) return;
         String workloadId = selectedWorkloadId();
         boolean correction = WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId);
+        boolean visualScene = VisualSceneContract.isVisualScene(workloadId);
         boolean performance = WorkloadContract.isPerformance(workloadId);
         boolean traceReplay = WorkloadContract.TRACE_REPLAY_ID.equals(workloadId);
         workloadNote.setText(WorkloadContract.limitationFor(workloadId));
         warmupInput.setEnabled(!busy && performance);
         durationInput.setEnabled(!busy && performance);
-        pixelToleranceInput.setEnabled(!busy && correction);
-        maximumDivergentBlocksInput.setEnabled(!busy && correction);
+        pixelToleranceInput.setEnabled(!busy && (correction || visualScene));
+        maximumDivergentBlocksInput.setEnabled(!busy && (correction || visualScene));
         if (traceSpinner != null) traceSpinner.setEnabled(!busy && traceReplay);
     }
 
@@ -498,6 +505,34 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
             JSONArray failures = report.optJSONArray("failure_catalog");
             if (failures != null && failures.length() > 0) {
                 headline.append(" · eventos de falha ").append(failures.length());
+            }
+        } else if (VisualSceneContract.isVisualScene(workloadId)) {
+            JSONObject visual = report.optJSONObject("visual_scene");
+            if (visual != null) {
+                if (visual.optBoolean("passed_correctness_gate", false)) {
+                    headline.append(" · CHECKPOINTS APROVADOS");
+                } else if (visual.optBoolean("comparison_available", false)) {
+                    headline.append(" · DIVERGÊNCIA VISUAL");
+                } else {
+                    headline.append(" · SEM REFERÊNCIA A/B");
+                }
+                double match = visual.optDouble("minimum_pixel_match_percent", Double.NaN);
+                if (Double.isFinite(match)) {
+                    headline.append(String.format(Locale.US, " · pixels mín. %.4f%%", match));
+                }
+                headline.append(" · mismatches ")
+                        .append(visual.optInt("checkpoint_mismatch_count", 0));
+            }
+            JSONObject analysis = report.optJSONObject("statistical_analysis");
+            if (analysis != null && analysis.optBoolean("available", false)) {
+                double improvement = analysis.optDouble(
+                        "median_paired_improvement_percent", Double.NaN);
+                if (Double.isFinite(improvement)) {
+                    headline.append(String.format(Locale.US,
+                            " · melhora P99 mediana %+.2f%%", improvement));
+                }
+                headline.append(" · ").append(analysis.optString(
+                        "classification", "inconclusive"));
             }
         } else if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
             JSONObject trace = report.optJSONObject("trace_replay");

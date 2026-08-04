@@ -8,6 +8,14 @@
         <item name="android:windowLightStatusBar">false</item>
     </style>
 
+    <style name="Theme.DriverLab.VisualRunner" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:colorAccent">#1565C0</item>
+    </style>
+
     <style name="Theme.DriverLab.Runner" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsTranslucent">true</item>

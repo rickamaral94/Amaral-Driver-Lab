@@ -18,6 +18,10 @@ final class QualificationScore {
         if (!QualificationProfile.verify(profile)) {
             throw new IllegalArgumentException("Perfil Full Qualification inválido");
         }
+        int profileVersion = profile.getInt("profile_version");
+        int minimumValidSteps = profileVersion >= Phase8Contract.CURRENT_FULL_PROFILE_VERSION
+                ? Phase8Contract.MINIMUM_VALID_PERFORMANCE_STEPS_V2
+                : Phase7Contract.MINIMUM_VALID_PERFORMANCE_STEPS;
         Map<String, JSONObject> byStep = new HashMap<>();
         for (int index = 0; index < completedSteps.length(); ++index) {
             JSONObject item = completedSteps.optJSONObject(index);
@@ -103,6 +107,21 @@ final class QualificationScore {
                 }
             }
 
+            if (gate && VisualSceneContract.isVisualScene(step.optString("workload_id"))) {
+                JSONObject visual = report.optJSONObject("visual_scene");
+                boolean visualPassed = visual != null
+                        && visual.optBoolean("passed_correctness_gate", false);
+                if (!visualPassed) gateReasons.put("visual_scene_gate_failed:" + stepId);
+                category.put("visual_checkpoint_gate_passed", visualPassed)
+                        .put("minimum_pixel_match_percent", visual == null
+                                ? JSONObject.NULL
+                                : visual.has("minimum_pixel_match_percent")
+                                ? visual.opt("minimum_pixel_match_percent") : JSONObject.NULL)
+                        .put("checkpoint_mismatch_count", visual == null
+                                ? JSONObject.NULL
+                                : visual.optInt("checkpoint_mismatch_count", 0));
+            }
+
             JSONObject analysis = report.optJSONObject("statistical_analysis");
             double improvement = analysis == null ? Double.NaN
                     : analysis.optDouble("median_paired_improvement_percent", Double.NaN);
@@ -148,8 +167,9 @@ final class QualificationScore {
             }
         }
 
-        if (validPerformanceSteps < Phase7Contract.MINIMUM_VALID_PERFORMANCE_STEPS) {
-            gateReasons.put("insufficient_valid_performance_steps:" + validPerformanceSteps);
+        if (validPerformanceSteps < minimumValidSteps) {
+            gateReasons.put("insufficient_valid_performance_steps:" + validPerformanceSteps
+                    + "/" + minimumValidSteps);
         }
         double meanImprovement = validWeight == 0 ? Double.NaN
                 : weightedImprovement / validWeight;
@@ -182,7 +202,9 @@ final class QualificationScore {
                 : validPerformanceSteps >= 6 && conclusiveSteps >= 4 ? "medium" : "low";
 
         return new JSONObject()
-                .put("qualification_score_version", Phase7Contract.SCORE_VERSION)
+                .put("qualification_score_version", profileVersion >= 2
+                        ? Phase8Contract.CURRENT_QUALIFICATION_SCORE_VERSION
+                        : Phase7Contract.SCORE_VERSION)
                 .put("eligible_for_recommendation", eligible)
                 .put("compatibility_gate_passed", gateReasons.length() == 0)
                 .put("compatibility_score", gateReasons.length() == 0 ? 100 : 0)
@@ -201,7 +223,10 @@ final class QualificationScore {
                 .put("best_category", best == null ? JSONObject.NULL : best)
                 .put("worst_category", worst == null ? JSONObject.NULL : worst)
                 .put("categories", encoded)
-                .put("limitations", Phase7Contract.LIMITATION);
+                .put("profile_version", profileVersion)
+                .put("minimum_valid_performance_steps", minimumValidSteps)
+                .put("limitations", profileVersion >= 2
+                        ? Phase8Contract.LIMITATION : Phase7Contract.LIMITATION);
     }
 
     private static JSONObject firstFinite(List<JSONObject> input, boolean best) {

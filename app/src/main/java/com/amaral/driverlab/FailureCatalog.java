@@ -42,6 +42,25 @@ final class FailureCatalog {
         return failures;
     }
 
+    static void appendVisualMismatch(JSONArray failures, int round, int frame,
+                                     JSONObject comparison) throws Exception {
+        JSONObject failure = new JSONObject();
+        failure.put("phase_index", JSONObject.NULL);
+        failure.put("phase", "system_vs_candidate");
+        failure.put("driver_mode", "comparison");
+        failure.put("round", round);
+        failure.put("checkpoint_frame", frame);
+        failure.put("failure_type", "visual_scene_checkpoint_mismatch");
+        failure.put("failure_stage", "visual_checkpoint_comparison");
+        failure.put("pixel_match_percent", comparison.optDouble("pixel_match_percent"));
+        failure.put("divergent_block_count", comparison.optInt("divergent_block_count"));
+        failure.put("heatmap_relative_path", comparison.has("heatmap_relative_path")
+                ? comparison.opt("heatmap_relative_path") : JSONObject.NULL);
+        failure.put("message",
+                "O checkpoint da cena visível excedeu a tolerância configurada.");
+        failures.put(failure);
+    }
+
     static void appendRenderMismatch(JSONArray failures, int round, JSONObject comparison)
             throws Exception {
         JSONObject failure = new JSONObject();

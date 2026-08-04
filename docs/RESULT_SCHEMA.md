@@ -2,13 +2,13 @@
 
 Cada suíte grava `files/runs/suite-<timestamp>/suite.json`. Cada processo isolado grava um `phase-*.json`; workloads de correção também preservam um `phase-*.png` lossless como evidência visual.
 
-## Versão atual: `schema_version = 8`
+## Versão atual: `schema_version = 9`
 
-A versão 8 é uma evolução **aditiva e compatível** das versões anteriores. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
+A versão 9 é uma evolução **aditiva e compatível** das versões anteriores. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
 
 | Campo | Significado |
 |---|---|
-| `schema_version` | Versão do formato do resultado; atualmente `8` |
+| `schema_version` | Versão do formato do resultado; atualmente `9` |
 | `suite_id` | Identificador local imutável da suíte |
 | `app_version` | Versão do APK que gerou o resultado |
 | `mode` | `system_only`, `candidate_only` ou `ab_system_vs_candidate` |
@@ -411,3 +411,51 @@ A versão 8 adiciona contexto opcional de Full Qualification sem redefinir workl
 Execuções manuais e campanhas da Fase 6 gravam esses campos como `null`. O arquivo `qualification.json` possui schema próprio e referencia as suítes individuais. O `report.json` contém o gate de compatibilidade, o índice geral, a recomendação e o ranking local por mesmo hardware e mesmo `profile_sha256`.
 
 O índice Full não substitui as métricas originais e não pode ser comparado entre versões diferentes do perfil. Veja [PHASE7_FULL_QUALIFICATION.md](PHASE7_FULL_QUALIFICATION.md).
+
+
+## Fase 8: `schema_version = 9`
+
+A versão 9 adiciona três workloads visuais independentes e o contexto do Full Qualification v2:
+
+```json
+{
+  "schema_version": 9,
+  "workload_id": "visual_scene_geometry",
+  "workload_version": 1,
+  "workload_config": {
+    "warmup_seconds": 2,
+    "measure_seconds": 10,
+    "primary_metric": "p99_gpu_frame_ms",
+    "scene": {
+      "scene_version": 1,
+      "internal_width": 960,
+      "internal_height": 540,
+      "checkpoint_frames": [30, 90, 150],
+      "definition_sha256": "<64 hex>"
+    }
+  },
+  "visual_scene": {
+    "checkpoint_analysis_version": 1,
+    "comparison_available": true,
+    "expected_comparison_count": 15,
+    "complete_comparison_count": 15,
+    "checkpoint_mismatch_count": 0,
+    "system_nondeterministic": false,
+    "candidate_nondeterministic": false,
+    "minimum_pixel_match_percent": 100.0,
+    "passed_correctness_gate": true
+  }
+}
+```
+
+Séries novas:
+
+- `visual_scene_geometry/v1`;
+- `visual_scene_materials/v1`;
+- `visual_scene_postprocess/v1`.
+
+A métrica primária é `p99_gpu_frame_ms`, menor é melhor. O veredito estatístico só é aceito depois que todos os checkpoints A/B da rodada passam pela tolerância visual e os hashes de cada braço permanecem determinísticos. Divergência gera heatmap PNG e entra no `failure_catalog` como `visual_scene_checkpoint_mismatch`.
+
+O perfil `turnip_full_qualification/v2` possui 13 etapas e inclui as três cenas. `turnip_full_qualification/v1` continua válido e importável; seus relatórios e rankings nunca são misturados aos de v2. `render_correctness_offscreen/v1`, os workloads da Fase 2, os traces da Fase 5 e `analysis_version = 1` permanecem inalterados.
+
+Limitação: as cenas são cargas Vulkan próprias, não capturas de jogos. A superfície Android e o swapchain fazem parte do caminho medido, mas CPU de emulador, I/O, compositor do jogo e shaders reais não são reproduzidos. Veja [PHASE8_VISIBLE_VULKAN_SCENES.md](PHASE8_VISIBLE_VULKAN_SCENES.md).
