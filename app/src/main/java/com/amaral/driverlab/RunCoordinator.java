@@ -51,6 +51,7 @@ final class RunCoordinator {
     private final int warmupSeconds;
     private final int measureSeconds;
     private final String workloadId;
+    private final String traceId;
     private final int pixelTolerance;
     private final int maximumDivergentBlocks;
     private final Listener listener;
@@ -65,7 +66,7 @@ final class RunCoordinator {
     private File currentResultFile;
 
     RunCoordinator(Activity activity, DriverPackage candidate, int mode, int rounds,
-                   int warmupSeconds, int measureSeconds, String workloadId,
+                   int warmupSeconds, int measureSeconds, String workloadId, String traceId,
                    int pixelTolerance, int maximumDivergentBlocks, Listener listener) {
         this.activity = activity;
         this.candidate = candidate;
@@ -77,6 +78,9 @@ final class RunCoordinator {
             throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
         }
         this.workloadId = workloadId;
+        this.traceId = WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)
+                ? (TraceReplayContract.isSupported(traceId) ? traceId
+                : TraceReplayContract.MIXED_TRACE_ID) : TraceReplayContract.MIXED_TRACE_ID;
         this.pixelTolerance = Math.max(0, Math.min(pixelTolerance, 255));
         this.maximumDivergentBlocks = Math.max(0, maximumDivergentBlocks);
         this.listener = listener;
@@ -139,6 +143,7 @@ final class RunCoordinator {
         intent.putExtra(RunnerActivity.EXTRA_WARMUP_SECONDS, warmupSeconds);
         intent.putExtra(RunnerActivity.EXTRA_MEASURE_SECONDS, measureSeconds);
         intent.putExtra(RunnerActivity.EXTRA_WORKLOAD_ID, workloadId);
+        intent.putExtra(RunnerActivity.EXTRA_TRACE_ID, traceId);
         intent.putExtra(RunnerActivity.EXTRA_WORKLOAD_VERSION,
                 WorkloadContract.versionFor(workloadId));
         intent.putExtra(RunnerActivity.EXTRA_PIXEL_TOLERANCE, pixelTolerance);
@@ -210,6 +215,7 @@ final class RunCoordinator {
         failure.put("round", phase.round);
         failure.put("workload_id", workloadId);
         failure.put("workload_version", WorkloadContract.versionFor(workloadId));
+        if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) failure.put("trace_id", traceId);
         failure.put("failure_type", failureType);
         failure.put("failure_stage", "runner_process");
         failure.put("error", error);
@@ -258,22 +264,31 @@ final class RunCoordinator {
             JSONObject capabilityDiff = capabilityDiff();
             JSONObject renderCorrectness = null;
             JSONObject statisticalAnalysis = null;
+            JSONObject traceReplay = null;
             String verdict;
             if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
                 renderCorrectness = analyzeRenderCorrectness(failureCatalog);
                 summary = correctionSummary(renderCorrectness, failureCatalog);
                 verdict = correctionVerdict(renderCorrectness, failureCatalog);
             } else {
-                summary = WorkloadContract.isPhase2(workloadId)
+                summary = (WorkloadContract.isPhase2(workloadId)
+                        || WorkloadContract.TRACE_REPLAY_ID.equals(workloadId))
                         ? Phase2Metrics.summarize(phaseResults, workloadId)
                         : summarizeTransfer();
                 statisticalAnalysis = StatisticalComparison.analyze(
                         phaseResults, workloadId);
-                verdict = mode == MODE_AB
-                        ? StatisticalComparison.verdictFor(statisticalAnalysis,
-                                summary.optInt("failed_phases", 0))
-                        : (summary.optInt("failed_phases", 0) > 0
-                                ? "failed_execution" : "completed_single_driver_measurement");
+                if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
+                    traceReplay = TraceReplayAnalysis.analyze(phaseResults, rounds, mode);
+                    appendTraceFailures(failureCatalog, traceReplay);
+                    verdict = TraceReplayAnalysis.verdictFor(
+                            traceReplay, statisticalAnalysis, mode);
+                } else {
+                    verdict = mode == MODE_AB
+                            ? StatisticalComparison.verdictFor(statisticalAnalysis,
+                                    summary.optInt("failed_phases", 0))
+                            : (summary.optInt("failed_phases", 0) > 0
+                                    ? "failed_execution" : "completed_single_driver_measurement");
+                }
             }
             report.put("summary", summary);
             report.put("analysis_contract", StatisticalComparison.contractJson());
@@ -281,12 +296,16 @@ final class RunCoordinator {
                     statisticalAnalysis == null ? JSONObject.NULL : statisticalAnalysis);
             report.put("render_correctness",
                     renderCorrectness == null ? JSONObject.NULL : renderCorrectness);
+            report.put("trace_contract", WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)
+                    ? TraceReplayContract.contractJson(traceId) : JSONObject.NULL);
+            report.put("trace_replay",
+                    traceReplay == null ? JSONObject.NULL : traceReplay);
             report.put("capability_diff",
                     capabilityDiff == null ? JSONObject.NULL : capabilityDiff);
             report.put("failure_catalog", failureCatalog);
             report.put("verdict", verdict);
             report.put("validity_warnings", buildWarnings(
-                    renderCorrectness, failureCatalog, statisticalAnalysis));
+                    renderCorrectness, failureCatalog, statisticalAnalysis, traceReplay));
             report.put("phase4_contract", Phase4Contract.contractJson());
             report.put("hardware_identity", HardwareIdentity.fromReport(report));
 
@@ -311,6 +330,11 @@ final class RunCoordinator {
             config.put("minimum_block_match_percent",
                     WorkloadContract.MINIMUM_BLOCK_MATCH_PERCENT);
             config.put("maximum_divergent_blocks", maximumDivergentBlocks);
+        } else if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
+            config.put("warmup_seconds", warmupSeconds);
+            config.put("measure_seconds", measureSeconds);
+            config.put("primary_metric", WorkloadContract.TRACE_REPLAY_METRIC);
+            config.put("trace", TraceReplayContract.definition(traceId));
         } else {
             config.put("warmup_seconds", warmupSeconds);
             config.put("measure_seconds", measureSeconds);
@@ -559,8 +583,43 @@ final class RunCoordinator {
                 : values.get(middle);
     }
 
+    private void appendTraceFailures(JSONArray failures, JSONObject traceReplay) throws Exception {
+        JSONArray comparisons = traceReplay.optJSONArray("comparisons");
+        if (comparisons != null) {
+            for (int index = 0; index < comparisons.length(); ++index) {
+                JSONObject comparison = comparisons.optJSONObject(index);
+                if (comparison == null || comparison.optBoolean("match", true)) continue;
+                failures.put(new JSONObject()
+                        .put("phase", "paired")
+                        .put("driver_mode", "system_vs_custom")
+                        .put("round", comparison.optInt("round", -1))
+                        .put("failure_type", "trace_output_mismatch")
+                        .put("failure_stage", "trace_correctness_gate")
+                        .put("system_sha256", comparison.optString("system_sha256"))
+                        .put("candidate_sha256", comparison.optString("candidate_sha256"))
+                        .put("message", "Saída binária do trace divergiu no par A/B."));
+            }
+        }
+        if (traceReplay.optBoolean("system_nondeterministic", false)) {
+            failures.put(new JSONObject()
+                    .put("phase", "system")
+                    .put("driver_mode", "system")
+                    .put("failure_type", "trace_nondeterminism")
+                    .put("failure_stage", "trace_correctness_gate")
+                    .put("message", "O braço do sistema produziu hashes diferentes entre rodadas."));
+        }
+        if (traceReplay.optBoolean("candidate_nondeterministic", false)) {
+            failures.put(new JSONObject()
+                    .put("phase", "candidate")
+                    .put("driver_mode", "custom")
+                    .put("failure_type", "trace_nondeterminism")
+                    .put("failure_stage", "trace_correctness_gate")
+                    .put("message", "O candidato produziu hashes diferentes entre rodadas."));
+        }
+    }
+
     private JSONArray buildWarnings(JSONObject correction, JSONArray failureCatalog,
-                                      JSONObject statisticalAnalysis) throws Exception {
+                                      JSONObject statisticalAnalysis, JSONObject traceReplay) throws Exception {
         JSONArray warnings = new JSONArray();
         double minimumTemperature = Double.POSITIVE_INFINITY;
         double maximumTemperature = Double.NEGATIVE_INFINITY;
@@ -605,6 +664,18 @@ final class RunCoordinator {
         }
         if (rounds < 3) {
             warnings.put("Menos de três rodadas: resultado exploratório, não conclusivo.");
+        }
+        if (traceReplay != null) {
+            if (traceReplay.optBoolean("system_nondeterministic", false)
+                    || traceReplay.optBoolean("candidate_nondeterministic", false)) {
+                warnings.put("Trace não determinístico: hashes variaram entre rodadas do mesmo braço.");
+            }
+            if (traceReplay.optInt("output_mismatch_count", 0) > 0) {
+                warnings.put("Saída do trace divergiu entre sistema e candidato; performance bloqueada.");
+            }
+            if (mode == MODE_AB && traceReplay.optInt("complete_pair_count", 0) < rounds) {
+                warnings.put("Trace replay sem todos os pares A/B completos.");
+            }
         }
         if (statisticalAnalysis != null) {
             int paired = statisticalAnalysis.optInt("paired_sample_count", 0);

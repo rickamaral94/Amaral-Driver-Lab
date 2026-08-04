@@ -41,6 +41,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
     private static final String PREFS = "driver_lab_settings";
     private static final String[] WORKLOAD_IDS = {
             WorkloadContract.RENDER_CORRECTNESS_ID,
+            WorkloadContract.TRACE_REPLAY_ID,
             WorkloadContract.SHADER_COMPILE_ID,
             WorkloadContract.RENDERPASS_TILING_ID,
             WorkloadContract.COMPUTE_ARITHMETIC_ID,
@@ -56,6 +57,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
     private SecureTokenStore tokenStore;
     private Spinner driverSpinner;
     private Spinner workloadSpinner;
+    private Spinner traceSpinner;
     private Spinner modeSpinner;
     private EditText warmupInput;
     private EditText durationInput;
@@ -120,6 +122,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
                 android.R.layout.simple_spinner_dropdown_item,
                 new String[]{
                         "Correção offscreen v1 · recomendado",
+                        "Trace replay Vulkan v1",
                         "Compilação de shaders v1",
                         "Render pass / tiling v1",
                         "Compute aritmético v1",
@@ -141,6 +144,23 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         workloadNote = text("", 13, false);
         workloadNote.setTextColor(Color.DKGRAY);
         root.addView(workloadNote, margins(0, 4, 0, 10));
+
+        traceSpinner = new Spinner(this);
+        traceSpinner.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item,
+                new String[]{
+                        TraceReplayContract.labelFor(TraceReplayContract.MIXED_TRACE_ID),
+                        TraceReplayContract.labelFor(TraceReplayContract.COMPUTE_CHAIN_TRACE_ID)
+                }));
+        traceSpinner.setSelection(preferences.getInt("trace_position", 0));
+        traceSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                preferences.edit().putInt("trace_position", position).apply();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        root.addView(traceSpinner, margins(0, 0, 0, 10));
+        controls.add(traceSpinner);
 
         LinearLayout correctionInputs = new LinearLayout(this);
         correctionInputs.setOrientation(LinearLayout.HORIZONTAL);
@@ -241,17 +261,25 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         String workloadId = selectedWorkloadId();
         boolean correction = WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId);
         boolean performance = WorkloadContract.isPerformance(workloadId);
+        boolean traceReplay = WorkloadContract.TRACE_REPLAY_ID.equals(workloadId);
         workloadNote.setText(WorkloadContract.limitationFor(workloadId));
         warmupInput.setEnabled(!busy && performance);
         durationInput.setEnabled(!busy && performance);
         pixelToleranceInput.setEnabled(!busy && correction);
         maximumDivergentBlocksInput.setEnabled(!busy && correction);
+        if (traceSpinner != null) traceSpinner.setEnabled(!busy && traceReplay);
     }
 
     private String selectedWorkloadId() {
         int position = workloadSpinner == null ? 0 : workloadSpinner.getSelectedItemPosition();
         if (position < 0 || position >= WORKLOAD_IDS.length) position = 0;
         return WORKLOAD_IDS[position];
+    }
+
+    private String selectedTraceId() {
+        int position = traceSpinner == null ? 0 : traceSpinner.getSelectedItemPosition();
+        return position == 1 ? TraceReplayContract.COMPUTE_CHAIN_TRACE_ID
+                : TraceReplayContract.MIXED_TRACE_ID;
     }
 
     private void loadDrivers() {
@@ -384,7 +412,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
             setBusy(true);
             resultPreview.setText("");
             new RunCoordinator(this, selectedDriver(), mode, rounds, warmup, duration,
-                    workloadId, tolerance, maximumDivergent, this).start();
+                    workloadId, selectedTraceId(), tolerance, maximumDivergent, this).start();
         } catch (Throwable error) {
             status.setText(error.getMessage());
             setBusy(false);
@@ -456,6 +484,30 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
             JSONArray failures = report.optJSONArray("failure_catalog");
             if (failures != null && failures.length() > 0) {
                 headline.append(" · eventos de falha ").append(failures.length());
+            }
+        } else if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
+            JSONObject trace = report.optJSONObject("trace_replay");
+            if (trace != null) {
+                if (trace.optBoolean("passed_correctness_gate", false)) {
+                    headline.append(" · SAÍDA REPRODUZÍVEL");
+                } else if (trace.optBoolean("comparison_available", false)) {
+                    headline.append(" · DIVERGÊNCIA DE SAÍDA");
+                } else {
+                    headline.append(" · SEM REFERÊNCIA A/B");
+                }
+                headline.append(" · pares ").append(trace.optInt("complete_pair_count", 0));
+                headline.append(" · mismatches ").append(trace.optInt("output_mismatch_count", 0));
+            }
+            JSONObject analysis = report.optJSONObject("statistical_analysis");
+            if (analysis != null && analysis.optBoolean("available", false)) {
+                double improvement = analysis.optDouble(
+                        "median_paired_improvement_percent", Double.NaN);
+                if (Double.isFinite(improvement)) {
+                    headline.append(String.format(Locale.US,
+                            " · melhora mediana %+.2f%%", improvement));
+                }
+                headline.append(" · ").append(analysis.optString(
+                        "classification", "inconclusive"));
             }
         } else {
             JSONObject analysis = report.optJSONObject("statistical_analysis");

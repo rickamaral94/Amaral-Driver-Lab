@@ -41,6 +41,7 @@ public final class RunnerActivity extends Activity {
     static final String EXTRA_WORKLOAD_VERSION = "workload_version";
     static final String EXTRA_PIXEL_TOLERANCE = "pixel_tolerance";
     static final String EXTRA_MAX_DIVERGENT_BLOCKS = "max_divergent_blocks";
+    static final String EXTRA_TRACE_ID = "trace_id";
 
     private static native String runNativeBenchmark(
             String driverDirectory,
@@ -65,6 +66,16 @@ public final class RunnerActivity extends Activity {
             String temporaryDirectory,
             int warmupSeconds,
             int measureSeconds);
+
+    private static native String runNativeTraceReplay(
+            String traceId,
+            String driverDirectory,
+            String driverName,
+            String nativeLibraryDirectory,
+            String temporaryDirectory,
+            int warmupSeconds,
+            int measureSeconds,
+            String rawOutputPath);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -118,6 +129,14 @@ public final class RunnerActivity extends Activity {
             }
             int workloadVersion = getIntent().getIntExtra(
                     EXTRA_WORKLOAD_VERSION, WorkloadContract.versionFor(workloadId));
+            String traceId = getIntent().getStringExtra(EXTRA_TRACE_ID);
+            if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
+                if (!TraceReplayContract.isSupported(traceId)) {
+                    throw new IllegalArgumentException("Trace não suportado: " + traceId);
+                }
+            } else {
+                traceId = TraceReplayContract.MIXED_TRACE_ID;
+            }
             if (workloadVersion != WorkloadContract.versionFor(workloadId)) {
                 throw new IllegalArgumentException("Versão de workload incompatível");
             }
@@ -153,6 +172,12 @@ public final class RunnerActivity extends Activity {
                 workloadConfig.put("minimum_block_match_percent",
                         WorkloadContract.MINIMUM_BLOCK_MATCH_PERCENT);
                 workloadConfig.put("maximum_divergent_blocks", maxDivergentBlocks);
+            } else if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
+                workloadConfig.put("warmup_seconds", warmup);
+                workloadConfig.put("measure_seconds", measure);
+                workloadConfig.put("trace", TraceReplayContract.definition(traceId));
+                result.put("trace_id", traceId);
+                result.put("trace_version", TraceReplayContract.TRACE_VERSION);
             } else {
                 workloadConfig.put("warmup_seconds", warmup);
                 workloadConfig.put("measure_seconds", measure);
@@ -184,6 +209,17 @@ public final class RunnerActivity extends Activity {
                         getApplicationInfo().nativeLibraryDir,
                         temporary.getAbsolutePath(),
                         rawEvidence.getAbsolutePath());
+            } else if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
+                rawEvidence = siblingEvidence(resultFile, ".trace.raw");
+                nativeJson = runNativeTraceReplay(
+                        traceId,
+                        driverDir == null ? "" : driverDir,
+                        driverName == null ? "" : driverName,
+                        getApplicationInfo().nativeLibraryDir,
+                        temporary.getAbsolutePath(),
+                        warmup,
+                        measure,
+                        rawEvidence.getAbsolutePath());
             } else if (WorkloadContract.isPhase2(workloadId)) {
                 nativeJson = runNativePhase2Workload(
                         workloadId,
@@ -208,6 +244,8 @@ public final class RunnerActivity extends Activity {
             boolean nativeSuccess = nativeResult.optBoolean("success", false);
             if (nativeSuccess && WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
                 result.put("evidence", finalizeRenderEvidence(resultFile, rawEvidence, nativeResult));
+            } else if (nativeSuccess && WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
+                result.put("evidence", finalizeTraceEvidence(resultFile, rawEvidence, nativeResult));
             }
             result.put("success", nativeSuccess);
             if (!nativeSuccess) {
@@ -326,6 +364,74 @@ public final class RunnerActivity extends Activity {
         evidence.put("height", height);
         evidence.put("format", "RGBA8_UNORM");
         evidence.put("png_size_bytes", png.length());
+        return evidence;
+    }
+
+    private JSONObject finalizeTraceEvidence(File resultFile, File rawFile,
+                                             JSONObject nativeResult) throws Exception {
+        int expectedBytes = nativeResult.optInt("output_bytes", -1);
+        int graphicsBytes = nativeResult.optInt("graphics_output_bytes", 0);
+        int width = nativeResult.optInt("graphics_width", 0);
+        int height = nativeResult.optInt("graphics_height", 0);
+        if (expectedBytes <= 0 || expectedBytes > 8 * 1024 * 1024) {
+            throw new IllegalStateException("Tamanho de saída do trace inválido");
+        }
+        if (rawFile == null || !rawFile.isFile() || rawFile.length() != expectedBytes) {
+            throw new IllegalStateException("Saída binária do trace ausente ou incompleta");
+        }
+        byte[] outputBytes = readExactly(rawFile, expectedBytes);
+        String sha256 = sha256(outputBytes);
+        File binary = siblingEvidence(resultFile, ".trace.bin");
+        if (binary.isFile() && !binary.delete()) {
+            throw new IllegalStateException("Não foi possível substituir evidência anterior");
+        }
+        if (!rawFile.renameTo(binary)) {
+            try (FileOutputStream stream = new FileOutputStream(binary, false)) {
+                stream.write(outputBytes);
+                stream.getFD().sync();
+            }
+            if (!rawFile.delete()) throw new IllegalStateException("Falha ao remover temporário do trace");
+        }
+
+        JSONObject evidence = new JSONObject();
+        evidence.put("kind", "versioned_vulkan_trace_output");
+        evidence.put("relative_path", binary.getName());
+        evidence.put("sha256_output", sha256);
+        evidence.put("output_size_bytes", expectedBytes);
+        evidence.put("output_format", nativeResult.optString("output_format", "binary"));
+        evidence.put("trace_id", nativeResult.optString("trace_id"));
+        evidence.put("trace_version", nativeResult.optInt("trace_version", 1));
+
+        if (graphicsBytes > 0) {
+            int expectedGraphics = Math.multiplyExact(Math.multiplyExact(width, height), 4);
+            if (graphicsBytes != expectedGraphics || graphicsBytes > outputBytes.length) {
+                throw new IllegalStateException("Segmento gráfico do trace inválido");
+            }
+            int[] argb = new int[width * height];
+            for (int pixel = 0, offset = 0; pixel < argb.length; ++pixel, offset += 4) {
+                int red = outputBytes[offset] & 0xff;
+                int green = outputBytes[offset + 1] & 0xff;
+                int blue = outputBytes[offset + 2] & 0xff;
+                int alpha = outputBytes[offset + 3] & 0xff;
+                argb[pixel] = (alpha << 24) | (red << 16) | (green << 8) | blue;
+            }
+            File png = siblingEvidence(resultFile, ".trace.png");
+            Bitmap bitmap = Bitmap.createBitmap(argb, width, height, Bitmap.Config.ARGB_8888);
+            try (FileOutputStream stream = new FileOutputStream(png, false)) {
+                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) {
+                    throw new IllegalStateException("Falha ao codificar preview do trace");
+                }
+                stream.getFD().sync();
+            } finally {
+                bitmap.recycle();
+            }
+            evidence.put("preview_png", png.getName());
+            evidence.put("graphics_width", width);
+            evidence.put("graphics_height", height);
+            evidence.put("graphics_format", "RGBA8_UNORM");
+        }
+        nativeResult.put("output_sha256", sha256);
+        nativeResult.put("evidence_binary", binary.getName());
         return evidence;
     }
 

@@ -16,7 +16,8 @@ APK Android arm64, sem root, para comparar o driver Vulkan do sistema com pacote
 - telemetria de aparelho, Vulkan, bateria, temperatura, energia/corrente disponíveis, estado térmico e cauda do logcat;
 - exportação JSON e publicação opcional em GitHub Issues por Device Flow, sem PAT ou client secret no APK;
 - histórico local de suítes, diff lado a lado, ranking por hardware/workload e bisect de builds sequenciais;
-- envelope público anônimo opcional, validado e assinado por hash canônico, sem envio automático.
+- envelope público anônimo opcional, validado e assinado por hash canônico, sem envio automático;
+- command trace Vulkan próprio, versionado, com gate de correção e análise A/B.
 
 A correção offscreen valida somente a cena fixa incluída no APK. Ela **não prova ganho em jogos** nem correção em todos os shaders, APIs ou emuladores.
 
@@ -101,7 +102,7 @@ O APK executa código nativo do ZIP. Use somente pacotes próprios ou hashes ver
 
 ## Esquema de resultados
 
-A versão atual usa `schema_version = 5`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
+A versão atual usa `schema_version = 6`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
 
 Mudanças na geometria, SPIR-V, ordem dos draws, resolução, formato, cálculo ou regra padrão de comparação exigem uma nova `workload_version`.
 
@@ -131,7 +132,7 @@ Siga [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md). Sem GitHub App config
 
 ## Estado do projeto
 
-As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado, sem redefinir as séries existentes.
+As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance.
 
 
 ## Fase 3: comparação estatística
@@ -160,3 +161,13 @@ Abra **HISTÓRICO · DIFF · RANKING · BISECT** na tela principal para indexar 
 - exportar manualmente um envelope técnico sem modelo do aparelho, fingerprint, caminhos, logs ou imagens.
 
 Avisos bloqueantes e falhas impedem ranking válido, bisect conclusivo e publicação pública. Veja [docs/PHASE4_HISTORY_REGRESSION.md](docs/PHASE4_HISTORY_REGRESSION.md).
+
+
+## Fase 5: trace replay Vulkan versionado
+
+Selecione **Trace replay Vulkan v1** e escolha um dos traces embutidos:
+
+- **Misto: render pass + compute + barreiras v1**;
+- **Compute: cadeia de dependências v1**.
+
+Cada braço é executado em um processo novo. A saída binária recebe SHA-256, e o modo A/B exige hashes idênticos em todos os pares antes de aceitar a análise de performance. O workload usa `median_replay_ms`, mas não é uma captura de jogo e não representa FPS. Veja [docs/PHASE5_VERSIONED_TRACE_REPLAY.md](docs/PHASE5_VERSIONED_TRACE_REPLAY.md).

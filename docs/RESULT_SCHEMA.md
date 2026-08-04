@@ -2,13 +2,13 @@
 
 Cada suíte grava `files/runs/suite-<timestamp>/suite.json`. Cada processo isolado grava um `phase-*.json`; workloads de correção também preservam um `phase-*.png` lossless como evidência visual.
 
-## Versão atual: `schema_version = 2`
+## Versão atual: `schema_version = 6`
 
-A versão 2 é uma evolução **aditiva e compatível** da versão 1. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
+A versão 6 é uma evolução **aditiva e compatível** das versões anteriores. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
 
 | Campo | Significado |
 |---|---|
-| `schema_version` | Versão do formato do resultado; atualmente `2` |
+| `schema_version` | Versão do formato do resultado; atualmente `6` |
 | `suite_id` | Identificador local imutável da suíte |
 | `app_version` | Versão do APK que gerou o resultado |
 | `mode` | `system_only`, `candidate_only` ou `ab_system_vs_candidate` |
@@ -309,3 +309,42 @@ O envelope público usa um schema separado e não substitui `suite.json`:
 A assinatura é uma verificação de integridade determinística, não uma assinatura criptográfica de identidade. A publicação é recusada diante de falhas, avisos bloqueantes, hardware desconhecido ou amostra insuficiente.
 
 Veja [PHASE4_HISTORY_REGRESSION.md](PHASE4_HISTORY_REGRESSION.md).
+
+
+## Fase 5: `schema_version = 6`
+
+A versão 6 adiciona `vulkan_command_trace_replay/v1`, sem redefinir qualquer workload anterior.
+
+```json
+{
+  "workload_id": "vulkan_command_trace_replay",
+  "workload_version": 1,
+  "workload_config": {
+    "warmup_seconds": 3,
+    "measure_seconds": 10,
+    "primary_metric": "median_replay_ms",
+    "trace": {
+      "trace_id": "mixed_graphics_compute_barrier",
+      "trace_version": 1,
+      "trace_format_version": 1,
+      "definition_sha256": "<64 hex>"
+    }
+  },
+  "trace_contract": {
+    "trace_analysis_version": 1,
+    "correctness_gate": "exact_output_sha256_before_performance_verdict"
+  },
+  "trace_replay": {
+    "comparison_available": true,
+    "complete_pair_count": 5,
+    "output_mismatch_count": 0,
+    "system_nondeterministic": false,
+    "candidate_nondeterministic": false,
+    "passed_correctness_gate": true
+  }
+}
+```
+
+A métrica `median_replay_ms` é aceita para inferência somente depois da aprovação do gate de correção. `trace_output_mismatch` e `trace_nondeterminism` entram no `failure_catalog` e bloqueiam ranking, bisect conclusivo e publicação pública.
+
+Alterar ordem de comandos, shaders, seeds, dimensões, contagens de draw/dispatch, barreiras, formato de saída ou política de comparação exige nova `trace_version` ou `trace_format_version`. Resultados schema 1–5 permanecem válidos, mas não possuem os blocos `trace_contract` e `trace_replay`.

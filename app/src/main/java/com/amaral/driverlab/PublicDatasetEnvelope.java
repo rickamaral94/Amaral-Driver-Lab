@@ -84,6 +84,17 @@ final class PublicDatasetEnvelope {
                     analysis.has("probability_of_superiority_percent")
                             ? analysis.opt("probability_of_superiority_percent") : JSONObject.NULL);
         }
+        JSONObject trace = record.report.optJSONObject("trace_replay");
+        if (trace != null) {
+            output.put("trace_analysis_version",
+                    trace.optInt("trace_analysis_version", 0));
+            output.put("trace_complete_pair_count",
+                    trace.optInt("complete_pair_count", 0));
+            output.put("trace_output_mismatch_count",
+                    trace.optInt("output_mismatch_count", 0));
+            output.put("trace_correctness_gate_passed",
+                    trace.optBoolean("passed_correctness_gate", false));
+        }
         JSONObject summary = record.report.optJSONObject("summary");
         if (summary != null) {
             output.put("system", summary.has("system") ? summary.opt("system") : JSONObject.NULL);
