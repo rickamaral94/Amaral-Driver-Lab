@@ -52,6 +52,7 @@ public final class DeepDiagnosticsActivity extends LocalizedActivity
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(AmaralColors.BACKGROUND);
         root.setPadding(dp(18), dp(18), dp(18), dp(36));
         scroll.addView(root);
 
@@ -59,10 +60,10 @@ public final class DeepDiagnosticsActivity extends LocalizedActivity
         TextView subtitle = text(
                 "Matriz de formatos, shaders/cache, memória, sincronização e Soak Test A/B.",
                 14, false);
-        subtitle.setTextColor(Color.DKGRAY);
+        subtitle.setTextColor(AmaralColors.TEXT_SECONDARY);
         root.addView(subtitle, margins(0, 4, 0, 12));
         TextView note = text(Phase10Contract.LIMITATION, 13, false);
-        note.setTextColor(Color.DKGRAY);
+        note.setTextColor(AmaralColors.TEXT_SECONDARY);
         root.addView(note, margins(0, 0, 0, 16));
 
         root.addView(text("Driver candidato", 18, true));
@@ -93,7 +94,7 @@ public final class DeepDiagnosticsActivity extends LocalizedActivity
         root.addView(status, margins(0, 0, 0, 10));
         preview = text("", 12, false);
         preview.setTextIsSelectable(true);
-        preview.setBackgroundColor(0xffeeeeee);
+        preview.setBackgroundColor(AmaralColors.SURFACE);
         preview.setPadding(dp(10), dp(10), dp(10), dp(10));
         root.addView(preview);
         setContentView(scroll);

@@ -17,6 +17,12 @@ import java.util.WeakHashMap;
 
 /** Base Activity that applies the persisted locale and localizes legacy programmatic views. */
 abstract class LocalizedActivity extends Activity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        AppTheme.apply(this);
+    }
+
     private final Set<TextView> watched = Collections.newSetFromMap(new WeakHashMap<>());
     private boolean translating;
 

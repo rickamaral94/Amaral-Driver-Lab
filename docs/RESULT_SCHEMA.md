@@ -602,3 +602,20 @@ Novos relatórios incluem:
 O idioma altera somente rótulos, explicações, dialogs e o `summary.html`. Campos como `recommendation`, `p99_gpu_frame_ms`, `driver_sha256`, `VK_ERROR_DEVICE_LOST` e `visual_scene_geometry/v1` permanecem canônicos.
 
 Schemas 1–12 continuam válidos. A Fase 12 não cria uma nova metodologia: resultados permanecem comparáveis quando as chaves técnicas já exigidas coincidirem. Full Qualification v1, v2 e v3 continuam separados por `profile_version`, não pelo idioma do relatório.
+
+## Fase 13 — contrato de apresentação, sem novo schema
+
+A Fase 13 mantém `schema_version = 13`. O redesign altera navegação, hierarquia, ajuda contextual, progresso e apresentação dos resultados, mas não adiciona ou redefine campos técnicos obrigatórios.
+
+Contrato de implementação:
+
+```text
+ux_schema_version = 1
+result_schema_version = 13
+modes = basic | advanced
+guided_step_count = 5
+technical_identifiers_stable = true
+methodology_changed = false
+```
+
+A preferência de modo é local e não é exportada como chave de comparabilidade. Full Qualification v1, v2 e v3, workloads, métricas, hashes, gates, pesos e enums permanecem exatamente nas séries definidas anteriormente.

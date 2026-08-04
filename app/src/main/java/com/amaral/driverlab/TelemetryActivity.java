@@ -47,12 +47,13 @@ public final class TelemetryActivity extends LocalizedActivity {
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(AmaralColors.BACKGROUND);
         root.setPadding(dp(18), dp(18), dp(18), dp(36));
         scroll.addView(root);
 
         root.addView(text("Fase 9 · Telemetria de emuladores", 24, true));
         TextView note = text(Phase9Contract.LIMITATION, 13, false);
-        note.setTextColor(Color.DKGRAY);
+        note.setTextColor(AmaralColors.TEXT_SECONDARY);
         root.addView(note, margins(0, 4, 0, 14));
 
         LinearLayout actions = new LinearLayout(this);
@@ -96,7 +97,7 @@ public final class TelemetryActivity extends LocalizedActivity {
         root.addView(status, margins(0, 0, 0, 8));
         preview = text("", 12, false);
         preview.setTextIsSelectable(true);
-        preview.setBackgroundColor(0xffeeeeee);
+        preview.setBackgroundColor(AmaralColors.SURFACE);
         preview.setPadding(dp(10), dp(10), dp(10), dp(10));
         root.addView(preview);
         setContentView(scroll);

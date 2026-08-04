@@ -12,6 +12,7 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import org.json.JSONArray;
@@ -28,6 +29,9 @@ import java.util.Locale;
 public final class QualificationActivity extends LocalizedActivity
         implements QualificationCoordinator.Listener {
     private static final int REQUEST_EXPORT_BUNDLE = 7001;
+    static final String EXTRA_GUIDED = "guided";
+    static final String EXTRA_AUTOSTART = "autostart";
+    static final String EXTRA_DRIVER_SHA = "driver_sha";
 
     private final List<DriverPackage> drivers = new ArrayList<>();
     private Spinner driverSpinner;
@@ -37,6 +41,7 @@ public final class QualificationActivity extends LocalizedActivity
     private Button resumeButton;
     private Button pauseButton;
     private Button exportButton;
+    private ProgressBar overallProgress;
     private QualificationCoordinator coordinator;
     private File currentQualificationFile;
     private File currentBundleFile;
@@ -45,15 +50,23 @@ public final class QualificationActivity extends LocalizedActivity
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        AppTheme.apply(this);
         buildUi();
         loadDrivers();
+        selectDriverBySha(getIntent().getStringExtra(EXTRA_DRIVER_SHA));
         findLatestQualification();
+        if (getIntent().getBooleanExtra(EXTRA_AUTOSTART, false)) {
+            startButton.post(() -> {
+                if (!busy && selectedDriver() != null) preflightAndStart();
+            });
+        }
     }
 
     private void buildUi() {
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(AmaralColors.BACKGROUND);
         root.setPadding(dp(18), dp(18), dp(18), dp(36));
         scroll.addView(root);
 
@@ -61,7 +74,7 @@ public final class QualificationActivity extends LocalizedActivity
         TextView subtitle = text(
                 "Executa o Full v3 com cenas visíveis, todos os testes anteriores, diagnóstico profundo, soak curto e bundle completo.",
                 14, false);
-        subtitle.setTextColor(Color.DKGRAY);
+        subtitle.setTextColor(AmaralColors.TEXT_SECONDARY);
         root.addView(subtitle, margins(0, 4, 0, 14));
 
         TextView note = text("Perfil imutável: " + Phase11Contract.PROFILE_LABEL
@@ -69,7 +82,7 @@ public final class QualificationActivity extends LocalizedActivity
                 + Phase11Contract.AUTOMATED_LOGICAL_TESTS + " testes automáticos · "
                 + "1 evidência real opcional.\nDiagnóstico profundo: 128 MiB · soak curto: 5 ciclos.\n\n"
                 + Phase11Contract.LIMITATION, 13, false);
-        note.setTextColor(Color.DKGRAY);
+        note.setTextColor(AmaralColors.TEXT_SECONDARY);
         root.addView(note, margins(0, 0, 0, 16));
 
         root.addView(text("Driver candidato", 18, true));
@@ -87,12 +100,21 @@ public final class QualificationActivity extends LocalizedActivity
         root.addView(exportButton, margins(0, 5, 0, 0));
         root.addView(refreshButton, margins(0, 5, 0, 16));
 
+        overallProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        overallProgress.setMax(QualificationProfile.steps().size());
+        overallProgress.setProgressTintList(android.content.res.ColorStateList.valueOf(
+                AmaralColors.BRAND_SECONDARY));
+        overallProgress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                AmaralColors.SURFACE_HIGHLIGHT));
+        overallProgress.setContentDescription(getString(R.string.phase13_execution_progress_description));
+        root.addView(overallProgress, margins(0, 0, 0, 14));
+
         status = text("Pronto.", 14, true);
         status.setTextIsSelectable(true);
         root.addView(status, margins(0, 0, 0, 10));
         preview = text("", 12, false);
         preview.setTextIsSelectable(true);
-        preview.setBackgroundColor(0xffeeeeee);
+        preview.setBackgroundColor(AmaralColors.SURFACE);
         preview.setPadding(dp(10), dp(10), dp(10), dp(10));
         root.addView(preview);
         setContentView(scroll);
@@ -228,6 +250,7 @@ public final class QualificationActivity extends LocalizedActivity
         int completed = QualificationStore.countStatus(manifest, "completed");
         int failed = QualificationStore.countStatus(manifest, "failed");
         int pending = QualificationStore.countStatus(manifest, "pending");
+        if (overallProgress != null) overallProgress.setProgress(completed);
         status.setText(manifest.getString("qualification_id") + " · "
                 + execution.optString("state") + "\nEtapas: " + completed + " concluídas · "
                 + failed + " falhas · " + pending + " pendentes\nPerfil SHA-256: "
@@ -336,6 +359,17 @@ public final class QualificationActivity extends LocalizedActivity
         updateButtons();
     }
 
+
+    private void selectDriverBySha(String sha) {
+        if (sha == null || sha.isEmpty() || driverSpinner == null) return;
+        for (int index = 0; index < drivers.size(); index++) {
+            if (sha.equals(drivers.get(index).sha256)) {
+                driverSpinner.setSelection(index);
+                return;
+            }
+        }
+    }
+
     private DriverPackage selectedDriver() {
         if (drivers.isEmpty()) return null;
         int position = driverSpinner.getSelectedItemPosition();
@@ -369,10 +403,7 @@ public final class QualificationActivity extends LocalizedActivity
     }
 
     private Button button(String label, View.OnClickListener listener) {
-        Button button = new Button(this);
-        button.setText(label);
-        button.setOnClickListener(listener);
-        return button;
+        return AppTheme.secondaryButton(this, label, listener);
     }
 
     private TextView text(String value, int sizeSp, boolean bold) {
@@ -380,6 +411,7 @@ public final class QualificationActivity extends LocalizedActivity
         view.setText(value);
         view.setTextSize(sizeSp);
         if (bold) view.setTypeface(view.getTypeface(), android.graphics.Typeface.BOLD);
+        view.setTextColor(AmaralColors.TEXT_PRIMARY);
         return view;
     }
 

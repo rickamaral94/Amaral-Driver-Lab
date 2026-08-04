@@ -18,6 +18,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.DriverLab">
 
+
+        <activity
+            android:name=".AdvancedSettingsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".GuidedTestFlowActivity"
+            android:exported="false" />
+
         <activity
             android:name=".DeepDiagnosticsActivity"
             android:exported="false" />

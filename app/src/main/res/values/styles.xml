@@ -1,25 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.DriverLab" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.DriverLab" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#1565C0</item>
-        <item name="android:navigationBarColor">#101820</item>
-        <item name="android:statusBarColor">#101820</item>
+        <item name="android:windowBackground">@color/amaral_background</item>
+        <item name="android:colorAccent">@color/amaral_secondary</item>
+        <item name="android:colorControlActivated">@color/amaral_secondary</item>
+        <item name="android:colorControlHighlight">@color/amaral_surface_highlight</item>
+        <item name="android:navigationBarColor">@color/amaral_background</item>
+        <item name="android:statusBarColor">@color/amaral_background</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:textColorPrimary">@color/amaral_text_primary</item>
+        <item name="android:textColorSecondary">@color/amaral_text_secondary</item>
+        <item name="android:windowDisablePreview">true</item>
     </style>
 
-    <style name="Theme.DriverLab.VisualRunner" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.DriverLab.VisualRunner" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowBackground">#000000</item>
-        <item name="android:colorAccent">#1565C0</item>
+        <item name="android:colorAccent">@color/amaral_secondary</item>
     </style>
 
-    <style name="Theme.DriverLab.Runner" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.DriverLab.Runner" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:colorAccent">#1565C0</item>
+        <item name="android:colorAccent">@color/amaral_secondary</item>
     </style>
 </resources>

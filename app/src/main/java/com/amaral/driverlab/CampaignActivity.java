@@ -99,12 +99,13 @@ public final class CampaignActivity extends LocalizedActivity implements Campaig
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(AmaralColors.BACKGROUND);
         root.setPadding(dp(18), dp(18), dp(18), dp(36));
         scroll.addView(root);
 
         root.addView(text("Fase 6 · Campanhas de regressão", 24, true));
         TextView note = text(Phase6Contract.LIMITATION, 13, false);
-        note.setTextColor(Color.DKGRAY);
+        note.setTextColor(AmaralColors.TEXT_SECONDARY);
         root.addView(note, margins(0, 4, 0, 16));
 
         root.addView(text("1. Drivers candidatos", 18, true));
@@ -437,6 +438,7 @@ public final class CampaignActivity extends LocalizedActivity implements Campaig
         view.setText(value);
         view.setTextSize(sizeSp);
         if (bold) view.setTypeface(view.getTypeface(), android.graphics.Typeface.BOLD);
+        view.setTextColor(AmaralColors.TEXT_PRIMARY);
         return view;
     }
 

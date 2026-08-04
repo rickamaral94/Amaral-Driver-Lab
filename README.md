@@ -233,3 +233,11 @@ O botão de bandeira no canto superior direito permite escolher **Português do 
 A interface herdada das Fases 1–11, dialogs, spinners, mensagens e o `summary.html` usam o idioma selecionado. O JSON permanece técnico e estável: nomes de campos, enums, códigos Vulkan, hashes, métricas e IDs de workload não são traduzidos. A mudança eleva o resultado para `schema_version = 13`, sem redefinir workloads nem os perfis Full v1, v2 ou v3.
 
 Veja [docs/PHASE12_LOCALIZATION.md](docs/PHASE12_LOCALIZATION.md) e [docs/TRANSLATION_GUIDE.md](docs/TRANSLATION_GUIDE.md).
+
+## Fase 13 — UX guiada e identidade Amaral
+
+A tela inicial agora prioriza o **Full Qualification v3**, separa Comparações, Testes individuais e Resultados, e mantém a área técnica atrás do modo avançado persistente. O fluxo guiado organiza driver, teste, preparação, execução e resultado em cinco etapas, com progresso segmentado e conclusão antes das métricas brutas.
+
+A identidade visual usa tokens derivados do logo Amaral, estados acessíveis com cor + ícone + texto, ajuda contextual em três níveis e suporte aos oito idiomas da Fase 12. A mudança é exclusivamente de apresentação: workloads, scores, gates, hashes, IDs técnicos e séries históricas permanecem inalterados.
+
+Veja [docs/PHASE13_UX_REDESIGN.md](docs/PHASE13_UX_REDESIGN.md), [docs/BRAND_GUIDELINES.md](docs/BRAND_GUIDELINES.md), [docs/HELP_CONTENT_GUIDE.md](docs/HELP_CONTENT_GUIDE.md) e [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md).
