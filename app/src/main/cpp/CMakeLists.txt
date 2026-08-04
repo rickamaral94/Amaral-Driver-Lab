@@ -51,6 +51,8 @@ driverlab_compile_shader("shaders/phase2_draw.vert" "phase2_draw_vert")
 driverlab_compile_shader("shaders/phase2_alu.frag" "phase2_alu_frag")
 driverlab_compile_shader("shaders/phase2_branch.frag" "phase2_branch_frag")
 driverlab_compile_shader("shaders/phase2_compute.comp" "phase2_compute_comp")
+driverlab_compile_shader("shaders/trace_solid.frag" "trace_solid_frag")
+driverlab_compile_shader("shaders/trace_integer.comp" "trace_integer_comp")
 
 add_custom_target(driverlab_shaders DEPENDS ${DRIVERLAB_SHADER_OUTPUTS})
 

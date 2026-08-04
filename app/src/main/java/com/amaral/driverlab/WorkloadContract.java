@@ -5,7 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 final class WorkloadContract {
-    static final int RESULT_SCHEMA_VERSION = 5;
+    static final int RESULT_SCHEMA_VERSION = 6;
 
     static final int STATISTICAL_ANALYSIS_VERSION = 1;
     static final int BOOTSTRAP_ITERATIONS = 5_000;
@@ -62,6 +62,15 @@ final class WorkloadContract {
     static final String THERMAL_SUSTAIN_ID = "thermal_sustain_efficiency";
     static final int THERMAL_SUSTAIN_VERSION = 1;
     static final String THERMAL_SUSTAIN_METRIC = "sustained_throughput_gops";
+
+    static final String TRACE_REPLAY_ID = "vulkan_command_trace_replay";
+    static final int TRACE_REPLAY_VERSION = 1;
+    static final String TRACE_REPLAY_METRIC = "median_replay_ms";
+    static final String TRACE_REPLAY_LIMITATION =
+            "Reexecuta command traces Vulkan próprios e determinísticos do APK; não importa "
+                    + "capturas de jogos, não reproduz CPU/I/O de emuladores e não garante FPS ou "
+                    + "compatibilidade em aplicações reais.";
+
     static final String THERMAL_SUSTAIN_LIMITATION =
             "Mede sustentação de uma carga compute fixa e energia do aparelho inteiro; sensores "
                     + "podem ser ausentes e o resultado não representa autonomia ou jogos.";
@@ -98,6 +107,7 @@ final class WorkloadContract {
     static boolean isSupported(String workloadId) {
         return TRANSFER_ID.equals(workloadId)
                 || RENDER_CORRECTNESS_ID.equals(workloadId)
+                || TRACE_REPLAY_ID.equals(workloadId)
                 || PHASE2_IDS.contains(workloadId);
     }
 
@@ -106,7 +116,8 @@ final class WorkloadContract {
     }
 
     static boolean isPerformance(String workloadId) {
-        return TRANSFER_ID.equals(workloadId) || isPhase2(workloadId);
+        return TRANSFER_ID.equals(workloadId) || TRACE_REPLAY_ID.equals(workloadId)
+                || isPhase2(workloadId);
     }
 
     static int versionFor(String workloadId) {
@@ -117,6 +128,7 @@ final class WorkloadContract {
         if (COMPUTE_ARITHMETIC_ID.equals(workloadId)) return COMPUTE_ARITHMETIC_VERSION;
         if (STABLE_SCENE_ID.equals(workloadId)) return STABLE_SCENE_VERSION;
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return THERMAL_SUSTAIN_VERSION;
+        if (TRACE_REPLAY_ID.equals(workloadId)) return TRACE_REPLAY_VERSION;
         throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
     }
 
@@ -128,6 +140,7 @@ final class WorkloadContract {
         if (COMPUTE_ARITHMETIC_ID.equals(workloadId)) return COMPUTE_ARITHMETIC_LIMITATION;
         if (STABLE_SCENE_ID.equals(workloadId)) return STABLE_SCENE_LIMITATION;
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return THERMAL_SUSTAIN_LIMITATION;
+        if (TRACE_REPLAY_ID.equals(workloadId)) return TRACE_REPLAY_LIMITATION;
         throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
     }
 
@@ -139,11 +152,13 @@ final class WorkloadContract {
         if (COMPUTE_ARITHMETIC_ID.equals(workloadId)) return "compute aritmético v1";
         if (STABLE_SCENE_ID.equals(workloadId)) return "frametime estável v1";
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return "sustentação térmica v1";
+        if (TRACE_REPLAY_ID.equals(workloadId)) return "trace replay Vulkan v1";
         throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
     }
 
     static String nativeNameFor(String workloadId) {
         if (TRANSFER_ID.equals(workloadId)) return TRANSFER_NATIVE_NAME;
+        if (TRACE_REPLAY_ID.equals(workloadId)) return "vulkan_command_trace_replay_v1";
         return workloadId + "_v" + versionFor(workloadId);
     }
 
@@ -154,19 +169,22 @@ final class WorkloadContract {
         if (COMPUTE_ARITHMETIC_ID.equals(workloadId)) return COMPUTE_ARITHMETIC_METRIC;
         if (STABLE_SCENE_ID.equals(workloadId)) return STABLE_SCENE_METRIC;
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return THERMAL_SUSTAIN_METRIC;
+        if (TRACE_REPLAY_ID.equals(workloadId)) return TRACE_REPLAY_METRIC;
         throw new IllegalArgumentException("Workload sem métrica primária: " + workloadId);
     }
 
     static boolean lowerIsBetter(String workloadId) {
         return SHADER_COMPILE_ID.equals(workloadId)
                 || RENDERPASS_TILING_ID.equals(workloadId)
-                || STABLE_SCENE_ID.equals(workloadId);
+                || STABLE_SCENE_ID.equals(workloadId)
+                || TRACE_REPLAY_ID.equals(workloadId);
     }
 
     static long timeoutSeconds(String workloadId, int warmupSeconds, int measureSeconds) {
         if (RENDER_CORRECTNESS_ID.equals(workloadId)) return 90L;
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return warmupSeconds + measureSeconds + 90L;
         if (SHADER_COMPILE_ID.equals(workloadId)) return 180L;
+        if (TRACE_REPLAY_ID.equals(workloadId)) return warmupSeconds + measureSeconds + 120L;
         return warmupSeconds + measureSeconds + 60L;
     }
 }

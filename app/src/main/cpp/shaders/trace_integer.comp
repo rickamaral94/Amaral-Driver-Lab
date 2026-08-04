@@ -1,0 +1,20 @@
+#version 450
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+layout(constant_id = 0) const uint STEPS = 16u;
+layout(constant_id = 1) const uint VARIANT = 0u;
+
+layout(set = 0, binding = 0, std430) buffer Values {
+    uint data[];
+} values;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    uint value = values.data[index] ^ (index * 0x9e3779b9u) ^ VARIANT;
+    for (uint step = 0u; step < STEPS; ++step) {
+        value = value * 1664525u + 1013904223u;
+        value ^= (value >> 13u);
+        value = (value << 7u) | (value >> 25u);
+    }
+    values.data[index] = value;
+}

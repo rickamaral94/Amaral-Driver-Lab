@@ -9,8 +9,10 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstddef>
 #include <cstring>
 #include <iomanip>
+#include <fstream>
 #include <limits>
 #include <numeric>
 #include <sstream>
@@ -26,6 +28,14 @@ constexpr char kRenderPassTilingId[] = "renderpass_tiling_gmem";
 constexpr char kComputeArithmeticId[] = "compute_arithmetic";
 constexpr char kStableSceneId[] = "stable_scene_frametime";
 constexpr char kThermalSustainId[] = "thermal_sustain_efficiency";
+constexpr char kTraceReplayId[] = "vulkan_command_trace_replay";
+constexpr char kMixedTraceId[] = "mixed_graphics_compute_barrier";
+constexpr char kComputeChainTraceId[] = "compute_dependency_chain";
+constexpr uint32_t kTraceFormatVersion = 1;
+constexpr uint32_t kTraceVersion = 1;
+constexpr uint32_t kTraceWidth = 320;
+constexpr uint32_t kTraceHeight = 180;
+constexpr uint32_t kTraceComputeWords = 65536;
 constexpr uint32_t kWorkloadVersion = 1;
 constexpr uint32_t kShaderPipelineCount = 24;
 constexpr uint32_t kTilingDrawCount = 2048;
@@ -49,6 +59,12 @@ static const uint32_t kBranchFragmentSpirv[] =
 ;
 static const uint32_t kComputeSpirv[] =
 #include "phase2_compute_comp.inc"
+;
+static const uint32_t kTraceSolidFragmentSpirv[] =
+#include "trace_solid_frag.inc"
+;
+static const uint32_t kTraceIntegerComputeSpirv[] =
+#include "trace_integer_comp.inc"
 ;
 
 using Clock = std::chrono::steady_clock;
@@ -720,6 +736,8 @@ public:
     PFN_vkCmdDraw vkCmdDraw = nullptr;
     PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets = nullptr;
     PFN_vkCmdDispatch vkCmdDispatch = nullptr;
+    PFN_vkCmdCopyBuffer vkCmdCopyBuffer = nullptr;
+    PFN_vkCmdCopyImageToBuffer vkCmdCopyImageToBuffer = nullptr;
     PFN_vkQueueSubmit vkQueueSubmit = nullptr;
     PFN_vkQueueWaitIdle vkQueueWaitIdle = nullptr;
     PFN_vkDeviceWaitIdle vkDeviceWaitIdle = nullptr;
@@ -783,6 +801,8 @@ private:
         LOAD(vkCmdDraw);
         LOAD(vkCmdBindDescriptorSets);
         LOAD(vkCmdDispatch);
+        LOAD(vkCmdCopyBuffer);
+        LOAD(vkCmdCopyImageToBuffer);
         LOAD(vkQueueSubmit);
         LOAD(vkQueueWaitIdle);
         LOAD(vkDeviceWaitIdle);
@@ -921,9 +941,13 @@ public:
         aluFragment = context.createShader(kAluFragmentSpirv, sizeof(kAluFragmentSpirv));
         branchFragment = context.createShader(kBranchFragmentSpirv, sizeof(kBranchFragmentSpirv));
         computeShader = context.createShader(kComputeSpirv, sizeof(kComputeSpirv));
+        traceFragment = context.createShader(kTraceSolidFragmentSpirv, sizeof(kTraceSolidFragmentSpirv));
+        traceCompute = context.createShader(kTraceIntegerComputeSpirv, sizeof(kTraceIntegerComputeSpirv));
     }
 
     ~Phase2Workloads() {
+        if (traceCompute != VK_NULL_HANDLE) context.vkDestroyShaderModule(context.device, traceCompute, nullptr);
+        if (traceFragment != VK_NULL_HANDLE) context.vkDestroyShaderModule(context.device, traceFragment, nullptr);
         if (computeShader != VK_NULL_HANDLE) context.vkDestroyShaderModule(context.device, computeShader, nullptr);
         if (branchFragment != VK_NULL_HANDLE) context.vkDestroyShaderModule(context.device, branchFragment, nullptr);
         if (aluFragment != VK_NULL_HANDLE) context.vkDestroyShaderModule(context.device, aluFragment, nullptr);
@@ -946,6 +970,15 @@ public:
                               std::max(30, std::min(measureSeconds, 900)), true);
         }
         throw std::invalid_argument("Unsupported phase two workload: " + workloadId);
+    }
+
+    std::string runTrace(const std::string &traceId, int warmupSeconds, int measureSeconds,
+                         const std::string &rawOutputPath) {
+        if (traceId != kMixedTraceId && traceId != kComputeChainTraceId) {
+            throw std::invalid_argument("Unsupported trace: " + traceId);
+        }
+        return runTraceReplay(traceId, std::max(0, warmupSeconds),
+                              std::max(1, measureSeconds), rawOutputPath);
     }
 
 private:
@@ -1810,6 +1843,510 @@ private:
         }
     }
 
+    struct TraceSetup {
+        BufferResource seed;
+        BufferResource working;
+        BufferResource readback;
+        VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
+        VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        VkPipelineLayout computeLayout = VK_NULL_HANDLE;
+        VkPipeline computePipeline = VK_NULL_HANDLE;
+        ImageResource color;
+        VkRenderPass renderPass = VK_NULL_HANDLE;
+        VkFramebuffer framebuffer = VK_NULL_HANDLE;
+        VkPipelineLayout graphicsLayout = VK_NULL_HANDLE;
+        VkPipeline graphicsPipeline = VK_NULL_HANDLE;
+        VkCommandPool commandPool = VK_NULL_HANDLE;
+        VkCommandBuffer command = VK_NULL_HANDLE;
+        TimestampQuery query;
+        VkDeviceSize graphicsBytes = 0;
+        VkDeviceSize computeBytes = 0;
+        VkDeviceSize totalBytes = 0;
+        uint32_t drawCount = 0;
+        uint32_t dispatchCount = 0;
+        bool graphics = false;
+    };
+
+    VkRenderPass createTraceRenderPass() {
+        VkAttachmentDescription attachment{};
+        attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+        attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+        attachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+        VkAttachmentReference reference{};
+        reference.attachment = 0;
+        reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &reference;
+        VkSubpassDependency dependencies[2]{};
+        dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependencies[0].dstSubpass = 0;
+        dependencies[0].srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependencies[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dependencies[1].srcSubpass = 0;
+        dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+        dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependencies[1].dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dependencies[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        VkRenderPassCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        info.attachmentCount = 1;
+        info.pAttachments = &attachment;
+        info.subpassCount = 1;
+        info.pSubpasses = &subpass;
+        info.dependencyCount = 2;
+        info.pDependencies = dependencies;
+        VkRenderPass renderPass = VK_NULL_HANDLE;
+        check(context.vkCreateRenderPass(context.device, &info, nullptr, &renderPass),
+              "vkCreateRenderPass(trace)");
+        return renderPass;
+    }
+
+    VkPipeline createTraceGraphicsPipeline(VkRenderPass renderPass, VkPipelineLayout layout) {
+        std::array<VkPipelineShaderStageCreateInfo, 2> stages{};
+        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = drawVertex;
+        stages[0].pName = "main";
+        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = traceFragment;
+        stages[1].pName = "main";
+        VkPipelineVertexInputStateCreateInfo vertexInput{};
+        vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        VkPipelineInputAssemblyStateCreateInfo assembly{};
+        assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        VkViewport viewport{};
+        viewport.width = static_cast<float>(kTraceWidth);
+        viewport.height = static_cast<float>(kTraceHeight);
+        viewport.maxDepth = 1.0F;
+        VkRect2D scissor{{0, 0}, {kTraceWidth, kTraceHeight}};
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.pViewports = &viewport;
+        viewportState.scissorCount = 1;
+        viewportState.pScissors = &scissor;
+        VkPipelineRasterizationStateCreateInfo raster{};
+        raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        raster.polygonMode = VK_POLYGON_MODE_FILL;
+        raster.cullMode = VK_CULL_MODE_NONE;
+        raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        raster.lineWidth = 1.0F;
+        VkPipelineMultisampleStateCreateInfo multisample{};
+        multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        VkPipelineColorBlendAttachmentState attachment{};
+        attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        VkPipelineColorBlendStateCreateInfo blend{};
+        blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        blend.attachmentCount = 1;
+        blend.pAttachments = &attachment;
+        VkGraphicsPipelineCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        info.stageCount = static_cast<uint32_t>(stages.size());
+        info.pStages = stages.data();
+        info.pVertexInputState = &vertexInput;
+        info.pInputAssemblyState = &assembly;
+        info.pViewportState = &viewportState;
+        info.pRasterizationState = &raster;
+        info.pMultisampleState = &multisample;
+        info.pColorBlendState = &blend;
+        info.layout = layout;
+        info.renderPass = renderPass;
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        check(context.vkCreateGraphicsPipelines(context.device, VK_NULL_HANDLE, 1, &info,
+                                                nullptr, &pipeline),
+              "vkCreateGraphicsPipelines(trace)");
+        return pipeline;
+    }
+
+    VkPipeline createTraceComputePipeline(VkPipelineLayout layout, uint32_t variant) {
+        struct Specialization { uint32_t steps; uint32_t variant; } values{16U, variant};
+        std::array<VkSpecializationMapEntry, 2> entries{};
+        entries[0] = {0, offsetof(Specialization, steps), sizeof(uint32_t)};
+        entries[1] = {1, offsetof(Specialization, variant), sizeof(uint32_t)};
+        VkSpecializationInfo specialization{};
+        specialization.mapEntryCount = static_cast<uint32_t>(entries.size());
+        specialization.pMapEntries = entries.data();
+        specialization.dataSize = sizeof(values);
+        specialization.pData = &values;
+        VkPipelineShaderStageCreateInfo stage{};
+        stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        stage.module = traceCompute;
+        stage.pName = "main";
+        stage.pSpecializationInfo = &specialization;
+        VkComputePipelineCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        info.stage = stage;
+        info.layout = layout;
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        check(context.vkCreateComputePipelines(context.device, VK_NULL_HANDLE, 1, &info,
+                                               nullptr, &pipeline),
+              "vkCreateComputePipelines(trace)");
+        return pipeline;
+    }
+
+    TraceSetup createTraceSetup(const std::string &traceId) {
+        TraceSetup setup;
+        setup.graphics = traceId == kMixedTraceId;
+        setup.drawCount = setup.graphics ? 64U : 0U;
+        setup.dispatchCount = setup.graphics ? 4U : 12U;
+        setup.graphicsBytes = setup.graphics
+                ? static_cast<VkDeviceSize>(kTraceWidth) * kTraceHeight * 4U : 0U;
+        setup.computeBytes = static_cast<VkDeviceSize>(kTraceComputeWords) * sizeof(uint32_t);
+        setup.totalBytes = setup.graphicsBytes + setup.computeBytes;
+        setup.seed = context.createBuffer(setup.computeBytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                                          VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+        setup.working = context.createBuffer(setup.computeBytes,
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+                        | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        setup.readback = context.createBuffer(setup.totalBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                                              VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+        void *mapped = nullptr;
+        check(context.vkMapMemory(context.device, setup.seed.memory, 0,
+                                  setup.seed.allocationSize, 0, &mapped),
+              "vkMapMemory(trace_seed)");
+        auto *words = static_cast<uint32_t *>(mapped);
+        for (uint32_t index = 0; index < kTraceComputeWords; ++index) {
+            words[index] = 0x6d2b79f5U ^ (index * 0x9e3779b9U);
+        }
+        if ((setup.seed.memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
+            VkMappedMemoryRange range{};
+            range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+            range.memory = setup.seed.memory;
+            range.offset = 0;
+            range.size = VK_WHOLE_SIZE;
+            check(context.vkFlushMappedMemoryRanges(context.device, 1, &range),
+                  "vkFlushMappedMemoryRanges(trace_seed)");
+        }
+        context.vkUnmapMemory(context.device, setup.seed.memory);
+
+        setup.setLayout = createComputeSetLayout();
+        setup.computeLayout = createComputeLayout(setup.setLayout);
+        setup.computePipeline = createTraceComputePipeline(
+                setup.computeLayout, setup.graphics ? 1U : 2U);
+        VkDescriptorPoolSize poolSize{};
+        poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        poolSize.descriptorCount = 1;
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.maxSets = 1;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        check(context.vkCreateDescriptorPool(context.device, &poolInfo, nullptr,
+                                             &setup.descriptorPool),
+              "vkCreateDescriptorPool(trace)");
+        VkDescriptorSetAllocateInfo allocate{};
+        allocate.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocate.descriptorPool = setup.descriptorPool;
+        allocate.descriptorSetCount = 1;
+        allocate.pSetLayouts = &setup.setLayout;
+        check(context.vkAllocateDescriptorSets(context.device, &allocate, &setup.descriptorSet),
+              "vkAllocateDescriptorSets(trace)");
+        VkDescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = setup.working.buffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = setup.computeBytes;
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = setup.descriptorSet;
+        write.dstBinding = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        write.pBufferInfo = &bufferInfo;
+        context.vkUpdateDescriptorSets(context.device, 1, &write, 0, nullptr);
+
+        if (setup.graphics) {
+            setup.color = context.createImage(kTraceWidth, kTraceHeight,
+                    VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_1_BIT,
+                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                    VK_IMAGE_ASPECT_COLOR_BIT);
+            setup.renderPass = createTraceRenderPass();
+            VkFramebufferCreateInfo framebuffer{};
+            framebuffer.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebuffer.renderPass = setup.renderPass;
+            framebuffer.attachmentCount = 1;
+            framebuffer.pAttachments = &setup.color.view;
+            framebuffer.width = kTraceWidth;
+            framebuffer.height = kTraceHeight;
+            framebuffer.layers = 1;
+            check(context.vkCreateFramebuffer(context.device, &framebuffer, nullptr,
+                                              &setup.framebuffer),
+                  "vkCreateFramebuffer(trace)");
+            setup.graphicsLayout = createDrawLayout();
+            setup.graphicsPipeline = createTraceGraphicsPipeline(
+                    setup.renderPass, setup.graphicsLayout);
+        }
+
+        setup.commandPool = context.createCommandPool();
+        if (setup.graphics) {
+            VkCommandBuffer initialize = context.allocateCommandBuffer(setup.commandPool);
+            TimestampQuery noQuery{};
+            context.beginTimedCommand(initialize, noQuery);
+            VkImageMemoryBarrier image{};
+            image.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            image.srcAccessMask = 0;
+            image.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+                    | VK_ACCESS_TRANSFER_READ_BIT;
+            image.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            image.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+            image.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            image.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            image.image = setup.color.image;
+            image.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            image.subresourceRange.levelCount = 1;
+            image.subresourceRange.layerCount = 1;
+            context.vkCmdPipelineBarrier(initialize, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0, 0, nullptr, 0, nullptr, 1, &image);
+            context.endTimedCommand(initialize, noQuery);
+            context.submitTimed(initialize, noQuery);
+        }
+
+        setup.command = context.allocateCommandBuffer(setup.commandPool);
+        setup.query = context.createTimestampQuery();
+        context.beginTimedCommand(setup.command, setup.query);
+        VkBufferCopy seedCopy{0, 0, setup.computeBytes};
+        context.vkCmdCopyBuffer(setup.command, setup.seed.buffer, setup.working.buffer,
+                                1, &seedCopy);
+        VkBufferMemoryBarrier toCompute{};
+        toCompute.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        toCompute.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toCompute.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        toCompute.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toCompute.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toCompute.buffer = setup.working.buffer;
+        toCompute.offset = 0;
+        toCompute.size = setup.computeBytes;
+        context.vkCmdPipelineBarrier(setup.command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+                                     0, nullptr, 1, &toCompute, 0, nullptr);
+
+        if (setup.graphics) {
+            VkClearValue clear{};
+            clear.color = {{0.0F, 0.0F, 0.0F, 1.0F}};
+            VkRenderPassBeginInfo begin{};
+            begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            begin.renderPass = setup.renderPass;
+            begin.framebuffer = setup.framebuffer;
+            begin.renderArea = {{0, 0}, {kTraceWidth, kTraceHeight}};
+            begin.clearValueCount = 1;
+            begin.pClearValues = &clear;
+            context.vkCmdBeginRenderPass(setup.command, &begin, VK_SUBPASS_CONTENTS_INLINE);
+            context.vkCmdBindPipeline(setup.command, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                      setup.graphicsPipeline);
+            for (uint32_t index = 0; index < setup.drawCount; ++index) {
+                const uint32_t column = index % 8U;
+                const uint32_t row = index / 8U;
+                DrawPush push{{0.14F, 0.14F,
+                               -0.84F + static_cast<float>(column) * 0.24F,
+                               -0.82F + static_cast<float>(row) * 0.23F},
+                              {0.0F, 0.0F, 0.0F, 1.0F}};
+                context.vkCmdPushConstants(setup.command, setup.graphicsLayout,
+                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                        0, sizeof(push), &push);
+                context.vkCmdDraw(setup.command, 3, 1, 0, 0);
+            }
+            context.vkCmdEndRenderPass(setup.command);
+        }
+
+        context.vkCmdBindPipeline(setup.command, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                  setup.computePipeline);
+        context.vkCmdBindDescriptorSets(setup.command, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                        setup.computeLayout, 0, 1, &setup.descriptorSet,
+                                        0, nullptr);
+        for (uint32_t index = 0; index < setup.dispatchCount; ++index) {
+            context.vkCmdDispatch(setup.command, kTraceComputeWords / 256U, 1, 1);
+            if (index + 1U < setup.dispatchCount) {
+                VkBufferMemoryBarrier dependency{};
+                dependency.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+                dependency.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+                dependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+                dependency.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                dependency.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                dependency.buffer = setup.working.buffer;
+                dependency.offset = 0;
+                dependency.size = setup.computeBytes;
+                context.vkCmdPipelineBarrier(setup.command,
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+                        0, nullptr, 1, &dependency, 0, nullptr);
+            }
+        }
+        VkBufferMemoryBarrier computeToTransfer{};
+        computeToTransfer.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        computeToTransfer.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        computeToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        computeToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        computeToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        computeToTransfer.buffer = setup.working.buffer;
+        computeToTransfer.offset = 0;
+        computeToTransfer.size = setup.computeBytes;
+        context.vkCmdPipelineBarrier(setup.command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                     VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                                     0, nullptr, 1, &computeToTransfer, 0, nullptr);
+        if (setup.graphics) {
+            VkBufferImageCopy region{};
+            region.bufferOffset = 0;
+            region.bufferRowLength = 0;
+            region.bufferImageHeight = 0;
+            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.imageSubresource.layerCount = 1;
+            region.imageExtent = {kTraceWidth, kTraceHeight, 1};
+            context.vkCmdCopyImageToBuffer(setup.command, setup.color.image,
+                    VK_IMAGE_LAYOUT_GENERAL, setup.readback.buffer, 1, &region);
+        }
+        VkBufferCopy outputCopy{0, setup.graphicsBytes, setup.computeBytes};
+        context.vkCmdCopyBuffer(setup.command, setup.working.buffer, setup.readback.buffer,
+                                1, &outputCopy);
+        VkBufferMemoryBarrier toHost{};
+        toHost.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        toHost.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toHost.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+        toHost.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toHost.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toHost.buffer = setup.readback.buffer;
+        toHost.offset = 0;
+        toHost.size = setup.totalBytes;
+        context.vkCmdPipelineBarrier(setup.command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                     VK_PIPELINE_STAGE_HOST_BIT, 0,
+                                     0, nullptr, 1, &toHost, 0, nullptr);
+        context.endTimedCommand(setup.command, setup.query);
+        return setup;
+    }
+
+    void destroyTraceSetup(TraceSetup &setup) {
+        if (setup.commandPool != VK_NULL_HANDLE) context.vkDestroyCommandPool(context.device, setup.commandPool, nullptr);
+        context.destroyTimestampQuery(setup.query);
+        if (setup.graphicsPipeline != VK_NULL_HANDLE) context.vkDestroyPipeline(context.device, setup.graphicsPipeline, nullptr);
+        if (setup.graphicsLayout != VK_NULL_HANDLE) context.vkDestroyPipelineLayout(context.device, setup.graphicsLayout, nullptr);
+        if (setup.framebuffer != VK_NULL_HANDLE) context.vkDestroyFramebuffer(context.device, setup.framebuffer, nullptr);
+        if (setup.renderPass != VK_NULL_HANDLE) context.vkDestroyRenderPass(context.device, setup.renderPass, nullptr);
+        context.destroyImage(setup.color);
+        if (setup.computePipeline != VK_NULL_HANDLE) context.vkDestroyPipeline(context.device, setup.computePipeline, nullptr);
+        if (setup.computeLayout != VK_NULL_HANDLE) context.vkDestroyPipelineLayout(context.device, setup.computeLayout, nullptr);
+        if (setup.descriptorPool != VK_NULL_HANDLE) context.vkDestroyDescriptorPool(context.device, setup.descriptorPool, nullptr);
+        if (setup.setLayout != VK_NULL_HANDLE) context.vkDestroyDescriptorSetLayout(context.device, setup.setLayout, nullptr);
+        context.destroyBuffer(setup.readback);
+        context.destroyBuffer(setup.working);
+        context.destroyBuffer(setup.seed);
+        setup = {};
+    }
+
+    std::string runTraceReplay(const std::string &traceId, int warmupSeconds,
+                               int measureSeconds, const std::string &rawOutputPath) {
+        context.setStage("trace_replay_setup");
+        if (rawOutputPath.empty()) throw std::invalid_argument("Trace output path is missing");
+        TraceSetup setup = createTraceSetup(traceId);
+        try {
+            auto warmStart = Clock::now();
+            do {
+                context.submitTimed(setup.command, setup.query);
+            } while (elapsedMs(warmStart) < static_cast<double>(warmupSeconds) * 1000.0);
+
+            context.setStage("trace_replay_measure");
+            std::vector<double> durations;
+            auto measureStart = Clock::now();
+            do {
+                durations.push_back(context.submitTimed(setup.command, setup.query));
+            } while ((elapsedMs(measureStart) < static_cast<double>(measureSeconds) * 1000.0
+                      || durations.size() < 8U) && durations.size() < 500U);
+
+            context.setStage("trace_replay_readback");
+            void *mapped = nullptr;
+            check(context.vkMapMemory(context.device, setup.readback.memory, 0,
+                                      setup.readback.allocationSize, 0, &mapped),
+                  "vkMapMemory(trace_readback)");
+            if ((setup.readback.memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
+                VkMappedMemoryRange range{};
+                range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+                range.memory = setup.readback.memory;
+                range.offset = 0;
+                range.size = VK_WHOLE_SIZE;
+                check(context.vkInvalidateMappedMemoryRanges(context.device, 1, &range),
+                      "vkInvalidateMappedMemoryRanges(trace_readback)");
+            }
+            const auto *bytes = static_cast<const uint8_t *>(mapped);
+            uint64_t checksum = 1469598103934665603ULL;
+            for (VkDeviceSize offset = setup.graphicsBytes; offset < setup.totalBytes; offset += 257U) {
+                checksum ^= bytes[offset];
+                checksum *= 1099511628211ULL;
+            }
+            std::ofstream output(rawOutputPath, std::ios::binary | std::ios::trunc);
+            if (!output) {
+                context.vkUnmapMemory(context.device, setup.readback.memory);
+                throw std::runtime_error("Unable to open trace output file");
+            }
+            output.write(reinterpret_cast<const char *>(bytes),
+                         static_cast<std::streamsize>(setup.totalBytes));
+            output.flush();
+            const bool outputOk = static_cast<bool>(output);
+            output.close();
+            context.vkUnmapMemory(context.device, setup.readback.memory);
+            if (!outputOk) throw std::runtime_error("Unable to persist trace output");
+
+            const bool timestamps = setup.query.supported;
+            const VkDeviceSize graphicsBytes = setup.graphicsBytes;
+            const VkDeviceSize computeBytes = setup.computeBytes;
+            const VkDeviceSize totalBytes = setup.totalBytes;
+            const uint32_t drawCount = setup.drawCount;
+            const uint32_t dispatchCount = setup.dispatchCount;
+            destroyTraceSetup(setup);
+
+            std::ostringstream json;
+            json << "{\"success\":true"
+                 << ",\"workload_id\":\"" << kTraceReplayId << "\""
+                 << ",\"workload_version\":" << kWorkloadVersion
+                 << ",\"trace_id\":\"" << jsonEscape(traceId) << "\""
+                 << ",\"trace_version\":" << kTraceVersion
+                 << ",\"trace_format_version\":" << kTraceFormatVersion
+                 << ",\"custom_driver\":" << (context.isCustomDriver() ? "true" : "false")
+                 << ",\"sample_count\":" << durations.size()
+                 << ",\"median_replay_ms\":" << median(durations)
+                 << ",\"p95_replay_ms\":" << percentile(durations, 0.95)
+                 << ",\"p99_replay_ms\":" << percentile(durations, 0.99)
+                 << ",\"gpu_timestamps_used\":" << (timestamps ? "true" : "false")
+                 << ",\"draw_count\":" << drawCount
+                 << ",\"dispatch_count\":" << dispatchCount
+                 << ",\"graphics_width\":" << (graphicsBytes > 0 ? kTraceWidth : 0)
+                 << ",\"graphics_height\":" << (graphicsBytes > 0 ? kTraceHeight : 0)
+                 << ",\"graphics_output_bytes\":" << graphicsBytes
+                 << ",\"compute_output_bytes\":" << computeBytes
+                 << ",\"output_bytes\":" << totalBytes
+                 << ",\"output_format\":\""
+                 << (graphicsBytes > 0 ? "RGBA8_UNORM+UINT32" : "UINT32") << "\""
+                 << ",\"validation_checksum\":" << checksum
+                 << ",\"sample_durations_ms\":";
+            appendDoubleArray(json, durations);
+            json << ",\"capabilities\":" << context.capabilities
+                 << ",\"metric_note\":\"Versioned in-app Vulkan command trace only; it is not a game capture and does not represent application FPS.\""
+                 << '}';
+            return json.str();
+        } catch (...) {
+            destroyTraceSetup(setup);
+            throw;
+        }
+    }
+
     std::string runStableScene(int warmupSeconds, int measureSeconds) {
         context.setStage("stable_scene_setup");
         RenderSetup setup = createRenderSetup(VK_SAMPLE_COUNT_1_BIT, true,
@@ -1854,6 +2391,8 @@ private:
     VkShaderModule aluFragment = VK_NULL_HANDLE;
     VkShaderModule branchFragment = VK_NULL_HANDLE;
     VkShaderModule computeShader = VK_NULL_HANDLE;
+    VkShaderModule traceFragment = VK_NULL_HANDLE;
+    VkShaderModule traceCompute = VK_NULL_HANDLE;
 };
 
 }  // namespace
@@ -1885,3 +2424,34 @@ Java_com_amaral_driverlab_RunnerActivity_runNativePhase2Workload(
         return environment->NewStringUTF(result.c_str());
     }
 }
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_amaral_driverlab_RunnerActivity_runNativeTraceReplay(
+        JNIEnv *environment,
+        jclass,
+        jstring traceId,
+        jstring driverDirectory,
+        jstring driverName,
+        jstring nativeLibraryDirectory,
+        jstring temporaryDirectory,
+        jint warmupSeconds,
+        jint measureSeconds,
+        jstring rawOutputPath) {
+    const std::string trace = UtfString(environment, traceId).string();
+    VulkanContext context;
+    try {
+        context.initialize(UtfString(environment, driverDirectory).string(),
+                           UtfString(environment, driverName).string(),
+                           UtfString(environment, nativeLibraryDirectory).string(),
+                           UtfString(environment, temporaryDirectory).string());
+        Phase2Workloads workloads(context);
+        const std::string result = workloads.runTrace(
+                trace, static_cast<int>(warmupSeconds), static_cast<int>(measureSeconds),
+                UtfString(environment, rawOutputPath).string());
+        return environment->NewStringUTF(result.c_str());
+    } catch (const std::exception &error) {
+        const std::string result = context.failureJson(kTraceReplayId, error);
+        return environment->NewStringUTF(result.c_str());
+    }
+}
+
