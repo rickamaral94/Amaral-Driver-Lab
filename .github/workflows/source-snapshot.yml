@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   snapshot:
@@ -14,23 +14,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: agent/phase10-deep-turnip-diagnostics
-          fetch-depth: 0
-      - name: Fix canonical Vulkan format token
-        shell: bash
-        run: |
-          set -euo pipefail
-          file='app/src/main/cpp/phase2_workloads.cpp'
-          test "$(grep -c 'VK_FORMAT_R11G11B10_UFLOAT_PACK32' "$file")" = '1'
-          sed -i 's/VK_FORMAT_R11G11B10_UFLOAT_PACK32/VK_FORMAT_B10G11R11_UFLOAT_PACK32/' "$file"
-          test "$(grep -c 'VK_FORMAT_R11G11B10_UFLOAT_PACK32' "$file")" = '0'
-          test "$(grep -c 'VK_FORMAT_B10G11R11_UFLOAT_PACK32' "$file")" -ge '1'
-          git config user.name 'OpenAI Agent'
-          git config user.email 'agent@openai.com'
-          git add "$file"
-          git commit -m 'fix: use canonical Vulkan packed float format'
-          git push origin HEAD:agent/phase10-deep-turnip-diagnostics
       - name: Upload source snapshot
         uses: actions/upload-artifact@v4
         with:
