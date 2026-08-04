@@ -44,7 +44,7 @@ final class VisualSceneAnalysis {
                 failedPhases++;
                 continue;
             }
-            boolean custom = "custom".equals(phase.optString("driver_mode"));
+            boolean custom = DriverExecutionIdentity.isCandidateArm(phase);
             for (int frame : VisualSceneContract.CHECKPOINT_FRAMES) {
                 JSONObject checkpoint = checkpoint(evidence, frame);
                 if (checkpoint == null) {
@@ -183,7 +183,7 @@ final class VisualSceneAnalysis {
             JSONObject phase = phases.optJSONObject(index);
             if (phase == null || !phase.optBoolean("success", false)) continue;
             if (phase.optInt("round", -1) != round) continue;
-            if (custom == "custom".equals(phase.optString("driver_mode"))) return phase;
+            if (custom == DriverExecutionIdentity.isCandidateArm(phase)) return phase;
         }
         return null;
     }

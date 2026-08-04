@@ -505,4 +505,6 @@ Pipeline chaud : %s%%</item>
     <string name="phase13_legacy_full_title">Full v3 étendu</string>
     <string name="phase13_legacy_full_detail">Investigation avancée longue avec charges synthétiques, maintien thermique, diagnostic approfondi et soak de cinq cycles.</string>
     <string name="phase13_start_legacy_full">DÉMARRER LE FULL v3 ÉTENDU</string>
+    <string name="phase13_hardware_target_title">Cible matérielle d’optimisation</string>
+    <string name="phase13_metrics_comparison_title">Valeurs absolues et comparaison par test</string>
 </resources>

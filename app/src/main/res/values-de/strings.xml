@@ -505,4 +505,6 @@ Warme Pipeline: %s%%</item>
     <string name="phase13_legacy_full_title">Erweiterter Full v3</string>
     <string name="phase13_legacy_full_detail">Lange erweiterte Untersuchung mit synthetischen Tests, thermischer Dauerlast, Tiefendiagnose und Fünf-Zyklen-Soak.</string>
     <string name="phase13_start_legacy_full">ERWEITERTEN FULL v3 STARTEN</string>
+    <string name="phase13_hardware_target_title">Hardware-Ziel für Optimierung</string>
+    <string name="phase13_metrics_comparison_title">Absolute Werte und Vergleich pro Test</string>
 </resources>

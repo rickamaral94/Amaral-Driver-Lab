@@ -25,13 +25,17 @@ final class DeepDiagnosticsCoordinator {
     }
 
     private static final class Phase {
-        final boolean custom;
+        final boolean candidateArm;
         final String label;
         final DriverPackage driver;
-        Phase(boolean custom, DriverPackage driver) {
-            this.custom = custom;
-            this.label = custom ? "candidate" : "system";
+        Phase(boolean candidateArm, DriverPackage driver) {
+            this.candidateArm = candidateArm;
+            this.label = candidateArm ? "candidate" : "system";
             this.driver = driver;
+        }
+        boolean usesCustomDriver() { return driver != null; }
+        String executionRole() {
+            return DriverExecutionIdentity.role(candidateArm, usesCustomDriver());
         }
     }
 
@@ -120,7 +124,10 @@ final class DeepDiagnosticsCoordinator {
         intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_CYCLES, cycles);
         intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_MEMORY_MIB, memoryMiB);
         intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE,
-                phase.custom ? "custom" : "system");
+                DriverExecutionIdentity.mode(phase.usesCustomDriver()));
+        intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_ROLE, phase.executionRole());
+        intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_DISPLAY_NAME,
+                phase.driver == null ? "" : phase.driver.displayName());
         if (phase.driver != null) {
             intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_DIR,
                     phase.driver.directory.getAbsolutePath());
@@ -168,7 +175,10 @@ final class DeepDiagnosticsCoordinator {
                 .put("phase10_contract", Phase10Contract.contractJson())
                     .put("phase11_contract", Phase11Contract.contractJson())
                 .put("phase", phase.label)
-                .put("driver_mode", phase.custom ? "custom" : "system")
+                .put("driver_mode", DriverExecutionIdentity.mode(phase.usesCustomDriver()))
+                .put("driver_role", phase.executionRole())
+                .put("driver_display_name", phase.driver == null
+                        ? JSONObject.NULL : phase.driver.displayName())
                 .put("driver_sha256", phase.driver == null
                         ? JSONObject.NULL : phase.driver.sha256)
                 .put("success", false)
@@ -181,8 +191,8 @@ final class DeepDiagnosticsCoordinator {
 
     private void finish() {
         try {
-            JSONObject system = find("system");
-            JSONObject candidateResult = find("custom");
+            JSONObject system = find(false);
+            JSONObject candidateResult = find(true);
             JSONObject comparison = DeepDiagnosticsComparison.compare(system, candidateResult);
             String reportId = "phase10-" + startedAt;
             JSONObject report = new JSONObject()
@@ -226,10 +236,11 @@ final class DeepDiagnosticsCoordinator {
         }
     }
 
-    private JSONObject find(String driverMode) {
+    private JSONObject find(boolean candidateArm) {
         for (int index = 0; index < results.length(); ++index) {
             JSONObject phase = results.optJSONObject(index);
-            if (phase != null && driverMode.equals(phase.optString("driver_mode"))) return phase;
+            if (phase != null
+                    && candidateArm == DriverExecutionIdentity.isCandidateArm(phase)) return phase;
         }
         return null;
     }

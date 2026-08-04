@@ -59,8 +59,8 @@ final class GitHubIssuePublisher {
                                        JSONObject manifest) throws Exception {
         validateRepository(owner, repository);
         String body = qualificationIssueBody(manifest, false);
-        if (body.length() > 5500) {
-            body = body.substring(0, 5500)
+        if (body.length() > 8000) {
+            body = body.substring(0, 8000)
                     + "\n\n_Log completo disponível no Amaral Driver Lab._";
         }
         Uri uri = Uri.parse("https://github.com/" + owner + "/" + repository + "/issues/new")
@@ -76,9 +76,12 @@ final class GitHubIssuePublisher {
         JSONObject hardware = report == null ? null : report.optJSONObject("hardware_identity");
         JSONObject driver = manifest.optJSONObject("driver");
         String model = hardware == null ? Build.MODEL : hardware.optString("model", Build.MODEL);
+        String gpu = hardware == null ? "" : hardware.optString("gpu_model", "");
         String state = manifest.optJSONObject("execution") == null ? "unknown"
                 : manifest.optJSONObject("execution").optString("state", "unknown");
-        String title = "[Full v3] " + model + " · " + driverLabel(driver) + " · " + state;
+        String title = "[Turnip Validation] " + model
+                + (gpu.isEmpty() ? "" : " · " + gpu)
+                + " · " + driverLabel(driver) + " · " + state;
         return title.length() > 240 ? title.substring(0, 240) : title;
     }
 
@@ -86,29 +89,32 @@ final class GitHubIssuePublisher {
         JSONObject report = manifest.optJSONObject("report");
         JSONObject score = report == null ? null : report.optJSONObject("score");
         JSONObject human = report == null ? null : report.optJSONObject("human_summary");
-        JSONObject hardware = report == null ? null : report.optJSONObject("hardware_identity");
         JSONObject candidate = manifest.optJSONObject("driver");
         JSONObject reference = manifest.optJSONObject("reference_driver");
         String mode = manifest.optString("comparison_mode", "system_vs_turnip");
         String referenceLabel = "turnip_vs_turnip".equals(mode)
                 ? driverLabel(reference) : "Driver do sistema Android";
         StringBuilder body = new StringBuilder();
-        body.append("## Full Qualification v3 — Amaral Driver Lab\n\n");
+        body.append("## Turnip Validation — Amaral Driver Lab\n\n");
         if (human != null) {
             body.append("**").append(human.optString("headline", "Resultado")).append("**\n\n")
                     .append(human.optString("detail", "")).append("\n\n");
         }
-        body.append("| Campo | Valor |\n|---|---|\n")
+        body.append(QualificationOptimizationReport.hardwareMarkdown(manifest));
+        body.append("### Drivers avaliados\n\n")
+                .append("| Papel | Pacote | SHA-256 |\n|---|---|---|\n")
+                .append("| Referência | ").append(table(referenceLabel)).append(" | `")
+                .append(reference == null ? "system" : table(reference.optString("sha256")))
+                .append("` |\n")
+                .append("| Candidato | ").append(table(driverLabel(candidate))).append(" | `")
+                .append(candidate == null ? "—" : table(candidate.optString("sha256")))
+                .append("` |\n\n");
+        body.append("### Resumo da execução\n\n")
+                .append("| Campo | Valor |\n|---|---|\n")
                 .append("| Qualification | `").append(table(manifest.optString("qualification_id"))).append("` |\n")
-                .append("| Aparelho | ").append(table(hardware == null ? Build.MODEL
-                        : hardware.optString("manufacturer") + " " + hardware.optString("model"))).append(" |\n")
                 .append("| Comparação | ").append(table(referenceLabel)).append(" × ")
                 .append(table(driverLabel(candidate))).append(" |\n")
                 .append("| Modo | `").append(table(mode)).append("` |\n")
-                .append("| Candidato SHA-256 | `").append(candidate == null ? "—"
-                        : table(candidate.optString("sha256"))).append("` |\n")
-                .append("| Referência SHA-256 | `").append(reference == null ? "system"
-                        : table(reference.optString("sha256"))).append("` |\n")
                 .append("| Estado | `").append(table(manifest.optJSONObject("execution") == null
                         ? "unknown" : manifest.optJSONObject("execution").optString("state"))).append("` |\n")
                 .append("| Etapas concluídas/falhas | ")
@@ -120,18 +126,25 @@ final class GitHubIssuePublisher {
                     .append("| Compatibilidade | ").append(score.opt("compatibility_index")).append(" / 100 |\n")
                     .append("| Ganho ponderado | ").append(score.opt("weighted_improvement_percent")).append("% |\n")
                     .append("| Confiança | ").append(table(score.optString("confidence", "—"))).append(" |\n");
+        }
+        body.append("\n")
+                .append(QualificationOptimizationReport.loaderMarkdown(manifest))
+                .append(QualificationOptimizationReport.metricsMarkdown(manifest))
+                .append(QualificationOptimizationReport.findingsMarkdown(manifest));
+        if (score != null) {
             JSONArray reasons = score.optJSONArray("gate_reasons");
             if (reasons != null && reasons.length() > 0) {
-                body.append("\n### Bloqueios e ressalvas\n\n");
+                body.append("### Bloqueios e ressalvas\n\n");
                 for (int index = 0; index < reasons.length(); index++) {
                     body.append("- ").append(reasons.optString(index)).append("\n");
                 }
+                body.append("\n");
             }
         }
         JSONArray steps = manifest.optJSONObject("execution") == null ? null
                 : manifest.optJSONObject("execution").optJSONArray("steps");
         if (steps != null) {
-            body.append("\n### Etapas com falha\n\n");
+            body.append("### Etapas com falha\n\n");
             boolean any = false;
             for (int index = 0; index < steps.length(); index++) {
                 JSONObject step = steps.optJSONObject(index);
@@ -143,6 +156,7 @@ final class GitHubIssuePublisher {
                                 : failure.optString("message", "falha sem detalhe")).append("\n");
             }
             if (!any) body.append("- Nenhuma.\n");
+            body.append("\n");
         }
         if (includeJson) {
             String encoded;
@@ -150,7 +164,7 @@ final class GitHubIssuePublisher {
             catch (Exception ignored) { encoded = manifest.toString(); }
             boolean truncated = encoded.length() > 45_000;
             if (truncated) encoded = encoded.substring(0, 45_000);
-            body.append("\n<details><summary>qualification.json")
+            body.append("<details><summary>qualification.json")
                     .append(truncated ? " (parcial)" : "")
                     .append("</summary>\n\n```json\n")
                     .append(encoded).append("\n```\n</details>\n");

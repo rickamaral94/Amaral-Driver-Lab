@@ -32,6 +32,9 @@ final class FailureCatalog {
                     validation.put("phase_index", index);
                     validation.put("phase", phase.optString("phase", "unknown"));
                     validation.put("driver_mode", phase.optString("driver_mode", "unknown"));
+                    validation.put("driver_role", phase.optString("driver_role", "unknown"));
+                    validation.put("driver_display_name", phase.opt("driver_display_name"));
+                    validation.put("driver_sha256", phase.opt("driver_sha256"));
                     validation.put("round", phase.optInt("round", -1));
                     validation.put("failure_type", "validation_error");
                     validation.put("message", validationErrors.optString(validationIndex));
@@ -82,6 +85,9 @@ final class FailureCatalog {
         failure.put("phase_index", phaseIndex);
         failure.put("phase", phase.optString("phase", "unknown"));
         failure.put("driver_mode", phase.optString("driver_mode", "unknown"));
+        failure.put("driver_role", phase.optString("driver_role", "unknown"));
+        failure.put("driver_display_name", phase.opt("driver_display_name"));
+        failure.put("driver_sha256", phase.opt("driver_sha256"));
         failure.put("round", phase.optInt("round", -1));
         failure.put("failure_type", normalize(failureType));
         failure.put("failure_stage", details.optString("failure_stage",

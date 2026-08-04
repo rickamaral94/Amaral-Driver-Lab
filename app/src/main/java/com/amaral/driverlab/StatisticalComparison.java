@@ -89,8 +89,8 @@ final class StatisticalComparison {
                 continue;
             }
             Pair pair = pairs.computeIfAbsent(round, Pair::new);
-            boolean custom = "custom".equals(phase.optString("driver_mode"));
-            if (custom) {
+            boolean candidateArm = DriverExecutionIdentity.isCandidateArm(phase);
+            if (candidateArm) {
                 candidateValues.add(value);
                 if (pair.candidate != null) duplicateMeasurements++;
                 else {

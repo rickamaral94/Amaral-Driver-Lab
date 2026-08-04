@@ -505,4 +505,6 @@ Pipeline warm: %s%%</item>
     <string name="phase13_legacy_full_title">Full v3 esteso</string>
     <string name="phase13_legacy_full_detail">Indagine avanzata lunga con test sintetici, tenuta termica, diagnostica profonda e soak di cinque cicli.</string>
     <string name="phase13_start_legacy_full">AVVIA FULL v3 ESTESO</string>
+    <string name="phase13_hardware_target_title">Target hardware per ottimizzazione</string>
+    <string name="phase13_metrics_comparison_title">Valori assoluti e confronto per test</string>
 </resources>

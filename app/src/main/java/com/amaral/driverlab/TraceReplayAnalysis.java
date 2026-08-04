@@ -28,7 +28,7 @@ final class TraceReplayAnalysis {
                 failedPhases++;
                 continue;
             }
-            if ("custom".equals(phase.optString("driver_mode"))) candidateHashes.add(hash);
+            if (DriverExecutionIdentity.isCandidateArm(phase)) candidateHashes.add(hash);
             else systemHashes.add(hash);
         }
 
@@ -94,7 +94,7 @@ final class TraceReplayAnalysis {
             JSONObject phase = phases.optJSONObject(index);
             if (phase == null || !phase.optBoolean("success", false)) continue;
             if (phase.optInt("round", -1) != round) continue;
-            if (custom == "custom".equals(phase.optString("driver_mode"))) return phase;
+            if (custom == DriverExecutionIdentity.isCandidateArm(phase)) return phase;
         }
         return null;
     }

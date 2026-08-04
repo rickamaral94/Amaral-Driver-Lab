@@ -505,4 +505,6 @@ SHA-256 </item>
     <string name="phase13_legacy_full_title">扩展 Full v3</string>
     <string name="phase13_legacy_full_detail">包含合成负载、持续热测试、深度诊断和五轮 soak 的长时间高级调查。</string>
     <string name="phase13_start_legacy_full">开始扩展 FULL v3</string>
+    <string name="phase13_hardware_target_title">硬件优化目标</string>
+    <string name="phase13_metrics_comparison_title">按测试显示绝对值和对比</string>
 </resources>

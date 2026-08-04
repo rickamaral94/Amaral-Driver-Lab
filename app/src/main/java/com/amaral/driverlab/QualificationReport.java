@@ -89,6 +89,8 @@ final class QualificationReport {
                 : new JSONObject().put("status", "not_part_of_profile")
                 .put("optional", true).put("automatically_changes_score", false);
         JSONObject human = humanSummary(driver, referenceDriver, comparisonMode, score);
+        JSONObject optimization = QualificationOptimizationReport.build(
+                manifest, scoredSteps, hardware, score);
         int reportVersion = profileVersion >= 3 ? Phase11Contract.REPORT_VERSION
                 : profileVersion >= 2 ? Phase8Contract.CURRENT_QUALIFICATION_REPORT_VERSION
                 : Phase7Contract.REPORT_VERSION;
@@ -131,6 +133,7 @@ final class QualificationReport {
                 .put("score", score)
                 .put("telemetry_attachment", telemetry)
                 .put("human_summary", human)
+                .put("optimization_report", optimization)
                 .put("local_leaderboard", JSONObject.NULL)
                 .put("limitations", limitation);
     }

@@ -57,8 +57,8 @@ final class HardwareIdentity {
                     ? nativeResult.optString("gpu_name", "")
                     : capabilities.optString("gpu_name", nativeResult.optString("gpu_name", ""));
             if (name.isEmpty()) continue;
-            if (!"custom".equals(phase.optString("driver_mode"))) return name;
-            fallback = name;
+            if (fallback.isEmpty()) fallback = name;
+            if (DriverExecutionIdentity.isReferenceArm(phase)) return name;
         }
         return fallback.isEmpty() ? "unknown" : fallback;
     }

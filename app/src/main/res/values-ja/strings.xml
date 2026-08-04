@@ -505,4 +505,6 @@ SHA-256 </item>
     <string name="phase13_legacy_full_title">拡張 Full v3</string>
     <string name="phase13_legacy_full_detail">合成テスト、熱持続、詳細診断、5サイクルの soak を含む長時間の高度調査です。</string>
     <string name="phase13_start_legacy_full">拡張 FULL v3 を開始</string>
+    <string name="phase13_hardware_target_title">最適化対象ハードウェア</string>
+    <string name="phase13_metrics_comparison_title">テスト別の絶対値と比較</string>
 </resources>

@@ -103,6 +103,12 @@ public final class QualificationLogActivity extends LocalizedActivity {
         }
 
         root.addView(summaryCard(), AppTheme.matchWrap(this, 0, 14));
+        root.addView(diagnosticCard(getString(R.string.phase13_hardware_target_title),
+                QualificationOptimizationReport.hardwareDisplay(manifest)),
+                AppTheme.matchWrap(this, 0, 14));
+        root.addView(diagnosticCard(getString(R.string.phase13_metrics_comparison_title),
+                QualificationOptimizationReport.metricsDisplay(manifest)),
+                AppTheme.matchWrap(this, 0, 14));
 
         issueButton = AppTheme.primaryButton(this, getString(R.string.phase13_send_issue),
                 view -> sendIssue());
@@ -182,6 +188,16 @@ public final class QualificationLogActivity extends LocalizedActivity {
                             QualificationStore.countStatus(manifest, "pending"))),
                     AppTheme.matchWrap(this, 12, 0));
         }
+        return card;
+    }
+
+    private LinearLayout diagnosticCard(String title, String content) {
+        LinearLayout card = AppTheme.card(this);
+        card.addView(AppTheme.heading(this, title, 16));
+        TextView body = AppTheme.body(this, content);
+        body.setTextIsSelectable(true);
+        body.setTypeface(android.graphics.Typeface.MONOSPACE);
+        card.addView(body, AppTheme.matchWrap(this, 10, 0));
         return card;
     }
 

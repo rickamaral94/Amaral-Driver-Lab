@@ -34,7 +34,7 @@ final class Phase2Metrics {
                 continue;
             }
             if (!nativeResult.optBoolean("gpu_timestamps_used", true)) timestampFallback = true;
-            if ("custom".equals(phase.optString("driver_mode"))) candidate.add(value);
+            if (DriverExecutionIdentity.isCandidateArm(phase)) candidate.add(value);
             else system.add(value);
         }
 

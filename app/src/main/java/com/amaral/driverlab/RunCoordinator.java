@@ -484,7 +484,7 @@ final class RunCoordinator {
             }
             double value = nativeResult.optDouble(WorkloadContract.TRANSFER_METRIC, Double.NaN);
             if (!Double.isFinite(value)) continue;
-            if ("custom".equals(phase.optString("driver_mode"))) {
+            if (DriverExecutionIdentity.isCandidateArm(phase)) {
                 candidateValues.add(value);
             } else {
                 system.add(value);
@@ -569,7 +569,7 @@ final class RunCoordinator {
             for (int index = 0; index < phaseResults.length(); ++index) {
                 JSONObject phase = phaseResults.optJSONObject(index);
                 if (phase == null || !phase.optBoolean("success", false)) continue;
-                collectHash(phase, "custom".equals(phase.optString("driver_mode"))
+                collectHash(phase, DriverExecutionIdentity.isCandidateArm(phase)
                         ? candidateHashes : systemHashes);
             }
         }
@@ -628,11 +628,11 @@ final class RunCoordinator {
         return CapabilityDiff.compare(systemCapabilities, candidateCapabilities);
     }
 
-    private JSONObject firstCapabilities(boolean custom) {
+    private JSONObject firstCapabilities(boolean candidateArm) {
         for (int index = 0; index < phaseResults.length(); ++index) {
             JSONObject phase = phaseResults.optJSONObject(index);
             if (phase == null || !phase.optBoolean("success", false)) continue;
-            if (custom != "custom".equals(phase.optString("driver_mode"))) continue;
+            if (candidateArm != DriverExecutionIdentity.isCandidateArm(phase)) continue;
             JSONObject nativeResult = phase.optJSONObject("native");
             if (nativeResult == null) continue;
             JSONObject capabilities = nativeResult.optJSONObject("capabilities");
@@ -641,12 +641,12 @@ final class RunCoordinator {
         return null;
     }
 
-    private JSONObject findSuccessfulPhase(int round, boolean custom) {
+    private JSONObject findSuccessfulPhase(int round, boolean candidateArm) {
         for (int index = 0; index < phaseResults.length(); ++index) {
             JSONObject phase = phaseResults.optJSONObject(index);
             if (phase == null || !phase.optBoolean("success", false)) continue;
             if (phase.optInt("round", -1) != round) continue;
-            if (custom == "custom".equals(phase.optString("driver_mode"))) return phase;
+            if (candidateArm == DriverExecutionIdentity.isCandidateArm(phase)) return phase;
         }
         return null;
     }
