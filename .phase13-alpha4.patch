@@ -1,0 +1,229 @@
+diff --git a/app/build.gradle b/app/build.gradle
+index 2ab80c4..55e671b 100644
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -17,8 +17,8 @@ android {
+         applicationId 'com.amaral.driverlab'
+         minSdk 28
+         targetSdk 35
+-        versionCode 16
+-        versionName '0.13.0-alpha3'
++        versionCode 17
++        versionName '0.13.0-alpha4'
+ 
+         buildConfigField 'String', 'GITHUB_CLIENT_ID', '"' + configuredClientId + '"'
+ 
+diff --git a/app/src/main/java/com/amaral/driverlab/DriverExecutionIdentity.java b/app/src/main/java/com/amaral/driverlab/DriverExecutionIdentity.java
+new file mode 100644
+index 0000000..b1d87eb
+--- /dev/null
++++ b/app/src/main/java/com/amaral/driverlab/DriverExecutionIdentity.java
+@@ -0,0 +1,19 @@
++package com.amaral.driverlab;
++
++/** Keeps the analytical arm separate from the Vulkan loader actually used. */
++final class DriverExecutionIdentity {
++    static final String ROLE_SYSTEM = "system";
++    static final String ROLE_REFERENCE = "reference";
++    static final String ROLE_CANDIDATE = "candidate";
++
++    private DriverExecutionIdentity() {}
++
++    static String role(boolean candidateArm, boolean hasCustomDriver) {
++        if (candidateArm) return ROLE_CANDIDATE;
++        return hasCustomDriver ? ROLE_REFERENCE : ROLE_SYSTEM;
++    }
++
++    static String mode(boolean hasCustomDriver) {
++        return hasCustomDriver ? "custom" : "system";
++    }
++}
+diff --git a/app/src/main/java/com/amaral/driverlab/RunCoordinator.java b/app/src/main/java/com/amaral/driverlab/RunCoordinator.java
+index 510e5d8..53a4afc 100644
+--- a/app/src/main/java/com/amaral/driverlab/RunCoordinator.java
++++ b/app/src/main/java/com/amaral/driverlab/RunCoordinator.java
+@@ -32,17 +32,26 @@ final class RunCoordinator {
+     }
+ 
+     private static final class Phase {
+-        final boolean custom;
++        final boolean candidateArm;
+         final int round;
+         final String label;
+         final DriverPackage driver;
+ 
+-        Phase(boolean custom, int round, DriverPackage driver) {
+-            this.custom = custom;
++        Phase(boolean candidateArm, int round, DriverPackage driver) {
++            this.candidateArm = candidateArm;
+             this.round = round;
+-            this.label = custom ? "candidate" : "system";
++            // Keep the historical analytical baseline label for score compatibility.
++            this.label = candidateArm ? "candidate" : "system";
+             this.driver = driver;
+         }
++
++        boolean usesCustomDriver() {
++            return driver != null;
++        }
++
++        String executionRole() {
++            return DriverExecutionIdentity.role(candidateArm, usesCustomDriver());
++        }
+     }
+ 
+     private final Activity activity;
+@@ -208,7 +217,10 @@ final class RunCoordinator {
+         intent.putExtra(RunnerActivity.EXTRA_PIXEL_TOLERANCE, pixelTolerance);
+         intent.putExtra(RunnerActivity.EXTRA_MAX_DIVERGENT_BLOCKS, maximumDivergentBlocks);
+         intent.putExtra(RunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE,
+-                phase.custom ? "custom" : "system");
++                DriverExecutionIdentity.mode(phase.usesCustomDriver()));
++        intent.putExtra(RunnerActivity.EXTRA_DRIVER_ROLE, phase.executionRole());
++        intent.putExtra(RunnerActivity.EXTRA_DRIVER_DISPLAY_NAME,
++                phase.driver == null ? "" : phase.driver.displayName());
+         if (phase.driver != null) {
+             intent.putExtra(RunnerActivity.EXTRA_DRIVER_DIR,
+                     phase.driver.directory.getAbsolutePath());
+@@ -273,7 +285,11 @@ final class RunCoordinator {
+         failure.put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION);
+         failure.put("success", false);
+         failure.put("phase", phase.label);
+-        failure.put("driver_mode", phase.custom ? "custom" : "system");
++        failure.put("driver_mode",
++                DriverExecutionIdentity.mode(phase.usesCustomDriver()));
++        failure.put("driver_role", phase.executionRole());
++        failure.put("driver_display_name", phase.driver == null
++                ? JSONObject.NULL : phase.driver.displayName());
+         failure.put("driver_sha256", phase.driver == null
+                 ? JSONObject.NULL : phase.driver.sha256);
+         failure.put("round", phase.round);
+diff --git a/app/src/main/java/com/amaral/driverlab/RunnerActivity.java b/app/src/main/java/com/amaral/driverlab/RunnerActivity.java
+index 1acbf5e..1871a9a 100644
+--- a/app/src/main/java/com/amaral/driverlab/RunnerActivity.java
++++ b/app/src/main/java/com/amaral/driverlab/RunnerActivity.java
+@@ -35,6 +35,8 @@ public final class RunnerActivity extends LocalizedActivity {
+     static final String EXTRA_DRIVER_SHA = "driver_sha";
+     static final String EXTRA_PHASE_LABEL = "phase_label";
+     static final String EXTRA_DRIVER_MODE_OVERRIDE = "driver_mode_override";
++    static final String EXTRA_DRIVER_ROLE = "driver_role";
++    static final String EXTRA_DRIVER_DISPLAY_NAME = "driver_display_name";
+     static final String EXTRA_ROUND = "round";
+     static final String EXTRA_WARMUP_SECONDS = "warmup_seconds";
+     static final String EXTRA_MEASURE_SECONDS = "measure_seconds";
+@@ -121,6 +123,8 @@ public final class RunnerActivity extends LocalizedActivity {
+             String phase = getIntent().getStringExtra(EXTRA_PHASE_LABEL);
+             String driverDir = getIntent().getStringExtra(EXTRA_DRIVER_DIR);
+             String driverModeOverride = getIntent().getStringExtra(EXTRA_DRIVER_MODE_OVERRIDE);
++            String driverRole = getIntent().getStringExtra(EXTRA_DRIVER_ROLE);
++            String driverDisplayName = getIntent().getStringExtra(EXTRA_DRIVER_DISPLAY_NAME);
+             String driverName = getIntent().getStringExtra(EXTRA_DRIVER_NAME);
+             String driverMeta = getIntent().getStringExtra(EXTRA_DRIVER_META);
+             String driverSha = getIntent().getStringExtra(EXTRA_DRIVER_SHA);
+@@ -190,6 +194,16 @@ public final class RunnerActivity extends LocalizedActivity {
+                     ? driverModeOverride
+                     : driverDir == null || driverDir.isEmpty() ? "system" : "custom";
+             result.put("driver_mode", driverMode);
++            result.put("driver_role", driverRole == null || driverRole.isEmpty()
++                    ? ("candidate".equals(phase)
++                    ? DriverExecutionIdentity.ROLE_CANDIDATE
++                    : "custom".equals(driverMode)
++                    ? DriverExecutionIdentity.ROLE_REFERENCE
++                    : DriverExecutionIdentity.ROLE_SYSTEM)
++                    : driverRole);
++            result.put("driver_display_name",
++                    driverDisplayName == null || driverDisplayName.isEmpty()
++                            ? JSONObject.NULL : driverDisplayName);
+             result.put("driver_sha256", driverSha == null || driverSha.isEmpty()
+                     ? JSONObject.NULL : driverSha);
+             result.put("driver_metadata", driverMeta == null || driverMeta.isEmpty()
+diff --git a/app/src/main/java/com/amaral/driverlab/VisualRunnerActivity.java b/app/src/main/java/com/amaral/driverlab/VisualRunnerActivity.java
+index 840b9b5..1a93d98 100644
+--- a/app/src/main/java/com/amaral/driverlab/VisualRunnerActivity.java
++++ b/app/src/main/java/com/amaral/driverlab/VisualRunnerActivity.java
+@@ -90,9 +90,28 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
+         overlay.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+         String workloadId = getIntent().getStringExtra(RunnerActivity.EXTRA_WORKLOAD_ID);
+         String phase = getIntent().getStringExtra(RunnerActivity.EXTRA_PHASE_LABEL);
++        String role = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_ROLE);
++        String displayName = getIntent().getStringExtra(
++                RunnerActivity.EXTRA_DRIVER_DISPLAY_NAME);
++        if (role == null || role.isEmpty()) {
++            String driverDir = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_DIR);
++            role = DriverExecutionIdentity.role("candidate".equals(phase),
++                    driverDir != null && !driverDir.isEmpty());
++        }
++        String armLabel;
++        if (DriverExecutionIdentity.ROLE_CANDIDATE.equals(role)) {
++            armLabel = getString(R.string.phase13_candidate_driver_label);
++        } else if (DriverExecutionIdentity.ROLE_REFERENCE.equals(role)) {
++            armLabel = getString(R.string.phase13_reference_driver_label);
++        } else {
++            armLabel = getString(R.string.phase13_system_driver);
++        }
++        if (displayName != null && !displayName.isEmpty()
++                && !DriverExecutionIdentity.ROLE_SYSTEM.equals(role)) {
++            armLabel += " · " + displayName;
++        }
+         overlay.setText("Amaral Driver Lab · cena Vulkan visível\n"
+-                + VisualSceneContract.labelFor(workloadId) + " · "
+-                + ("candidate".equals(phase) ? "driver candidato" : "driver do sistema")
++                + VisualSceneContract.labelFor(workloadId) + " · " + armLabel
+                 + "\nCheckpoints: frames 30, 90 e 150");
+         FrameLayout.LayoutParams overlayParams = new FrameLayout.LayoutParams(
+                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+@@ -170,6 +189,9 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
+             String driverDir = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_DIR);
+             String driverModeOverride = getIntent().getStringExtra(
+                     RunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE);
++            String driverRole = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_ROLE);
++            String driverDisplayName = getIntent().getStringExtra(
++                    RunnerActivity.EXTRA_DRIVER_DISPLAY_NAME);
+             String driverName = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_NAME);
+             String driverMetadata = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_META);
+             String driverSha = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_SHA);
+@@ -198,6 +220,13 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
+                             || "custom".equals(driverModeOverride)
+                             ? driverModeOverride
+                             : driverDir == null || driverDir.isEmpty() ? "system" : "custom")
++                    .put("driver_role", driverRole == null || driverRole.isEmpty()
++                            ? DriverExecutionIdentity.role("candidate".equals(phase),
++                            driverDir != null && !driverDir.isEmpty())
++                            : driverRole)
++                    .put("driver_display_name",
++                            driverDisplayName == null || driverDisplayName.isEmpty()
++                                    ? JSONObject.NULL : driverDisplayName)
+                     .put("driver_sha256", driverSha == null || driverSha.isEmpty()
+                             ? JSONObject.NULL : driverSha)
+                     .put("driver_metadata", driverMetadata == null || driverMetadata.isEmpty()
+diff --git a/app/src/test/java/com/amaral/driverlab/DriverExecutionIdentityTest.java b/app/src/test/java/com/amaral/driverlab/DriverExecutionIdentityTest.java
+new file mode 100644
+index 0000000..b6959a1
+--- /dev/null
++++ b/app/src/test/java/com/amaral/driverlab/DriverExecutionIdentityTest.java
+@@ -0,0 +1,25 @@
++package com.amaral.driverlab;
++
++import static org.junit.Assert.assertEquals;
++
++import org.junit.Test;
++
++public final class DriverExecutionIdentityTest {
++    @Test
++    public void systemBaselineUsesSystemLoaderAndRole() {
++        assertEquals("system", DriverExecutionIdentity.mode(false));
++        assertEquals("system", DriverExecutionIdentity.role(false, false));
++    }
++
++    @Test
++    public void turnipReferenceUsesCustomLoaderAndReferenceRole() {
++        assertEquals("custom", DriverExecutionIdentity.mode(true));
++        assertEquals("reference", DriverExecutionIdentity.role(false, true));
++    }
++
++    @Test
++    public void candidateUsesCustomLoaderAndCandidateRole() {
++        assertEquals("custom", DriverExecutionIdentity.mode(true));
++        assertEquals("candidate", DriverExecutionIdentity.role(true, true));
++    }
++}
