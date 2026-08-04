@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - agent/phase9-emulator-telemetry-sdk
+  pull_request:
+    branches:
+      - agent/phase8-visible-vulkan-scenes
 
 permissions:
   contents: write
 
 jobs:
   materialize:
-    if: github.event.head_commit.message == 'chore: stage phase 9 source'
+    if: github.event_name == 'pull_request' || github.event.head_commit.message == 'chore: stage phase 9 source'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
