@@ -1,35 +1,33 @@
-name: Apply Phase 13 alpha5
+name: Source Snapshot
 
 on:
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-alpha5:
+  snapshot:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout PR branch
+      - name: Checkout
         uses: actions/checkout@v4
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
         with:
-          ref: agent/phase13-ux-redesign
-          fetch-depth: 0
-      - name: Verify, apply and publish alpha5
-        shell: bash
-        run: |
-          set -euo pipefail
-          base64 --decode .phase13-alpha5-complete.patch.gz.b64 > /tmp/phase13-alpha5.patch.gz
-          echo "54ba98f193518613445bdeb7221e2b9a4779ff241060eee38688487797d05aac  /tmp/phase13-alpha5.patch.gz" | sha256sum -c -
-          gzip --decompress --stdout /tmp/phase13-alpha5.patch.gz > /tmp/phase13-alpha5.patch
-          echo "c26df5653df2f3f335c8d59434225f7853d857dbad4f18bbda375441ec801c4b  /tmp/phase13-alpha5.patch" | sha256sum -c -
-          git apply --check /tmp/phase13-alpha5.patch
-          git apply /tmp/phase13-alpha5.patch
-          rm -rf .phase13-alpha5 .phase13-alpha5-complete.patch.gz.b64
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "enrich Turnip optimization issue reports"
-          git push origin "HEAD:agent/phase13-ux-redesign"
+          name: amaral-driver-lab-source
+          path: |
+            app
+            telemetry-sdk
+            docs
+            README.md
+            build.gradle
+            settings.gradle
+            gradle.properties
+            gradlew
+            gradlew.bat
+            gradle
+          if-no-files-found: error
+          retention-days: 3
