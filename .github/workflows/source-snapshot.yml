@@ -26,8 +26,8 @@ jobs:
           for part in .phase13-alpha5/part-*.b64; do
             base64 --decode "$part" >> /tmp/phase13-alpha5.patch
           done
-          git apply --check /tmp/phase13-alpha5.patch
-          git apply /tmp/phase13-alpha5.patch
+          git apply --recount --check /tmp/phase13-alpha5.patch
+          git apply --recount /tmp/phase13-alpha5.patch
           rm -rf .phase13-alpha5
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
