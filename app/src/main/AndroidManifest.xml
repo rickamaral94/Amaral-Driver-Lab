@@ -17,6 +17,10 @@
         android:theme="@style/Theme.DriverLab">
 
         <activity
+            android:name=".DeepDiagnosticsActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".TelemetryActivity"
             android:exported="false" />
 
@@ -31,6 +35,14 @@
         <activity
             android:name=".Phase4Activity"
             android:exported="false" />
+
+        <activity
+            android:name=".DeepDiagnosticsRunnerActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:process=":runner"
+            android:theme="@style/Theme.DriverLab.Runner" />
 
         <activity
             android:name=".VisualRunnerActivity"

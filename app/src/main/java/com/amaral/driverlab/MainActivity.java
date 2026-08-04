@@ -234,8 +234,15 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         phase9Button.setText("TELEMETRIA DE EMULADORES · FASE 9");
         phase9Button.setOnClickListener(view ->
                 startActivity(new Intent(this, TelemetryActivity.class)));
-        root.addView(phase9Button, margins(0, 0, 0, 20));
+        root.addView(phase9Button, margins(0, 0, 0, 6));
         controls.add(phase9Button);
+
+        Button phase10Button = new Button(this);
+        phase10Button.setText("DIAGNÓSTICO PROFUNDO TURNIP · FASE 10");
+        phase10Button.setOnClickListener(view ->
+                startActivity(new Intent(this, DeepDiagnosticsActivity.class)));
+        root.addView(phase10Button, margins(0, 0, 0, 20));
+        controls.add(phase10Button);
 
         root.addView(text("4. GitHub Issues", 19, true), margins(0, 0, 0, 8));
         ownerInput = textInput("Owner", preferences.getString("github_owner", "rickamaral94"));

@@ -486,3 +486,39 @@ A sessão externa usa schema próprio (`emulator_telemetry_schema_version = 1`) 
 Resultados schema 10 continuam comparáveis com schema 1–9 quando hardware, `workload_id`, `workload_version`, `workload_config`, trace/scene e `analysis_version` coincidirem. Full Qualification v1 e v2 permanecem em séries separadas pelas versões de perfil já existentes.
 
 Telemetria real não entra em ranking sintético, bisect, campanha ou score Full. Veja [PHASE9_EMULATOR_TELEMETRY.md](PHASE9_EMULATOR_TELEMETRY.md).
+
+
+## Fase 10: `schema_version = 11`
+
+A versão 11 adiciona somente o contrato informativo da Fase 10 aos novos artefatos e cria um relatório separado para diagnóstico profundo:
+
+```json
+{
+  "schema_version": 11,
+  "phase10_contract": {
+    "deep_diagnostic_schema_version": 1,
+    "deep_diagnostic_report_version": 1,
+    "format_matrix_version": 1,
+    "shader_corpus_version": 1,
+    "pipeline_cache_diagnostic_version": 1,
+    "memory_pressure_version": 1,
+    "synchronization_version": 1,
+    "soak_test_version": 1,
+    "profile": {
+      "profile_id": "turnip_deep_diagnostics",
+      "profile_version": 1,
+      "modules": [
+        "format_matrix",
+        "shader_pipeline_corpus",
+        "memory_pressure",
+        "synchronization",
+        "reliability_probe"
+      ]
+    }
+  }
+}
+```
+
+O relatório em `deep-diagnostics/report-<timestamp>/report.json` contém dois braços, `system` e `custom`, mais uma comparação descritiva. O modo `soak` substitui os cinco módulos pelo objeto `soak` versionado.
+
+A série exige o mesmo `profile_sha256`, modo, ciclos, limite de memória e hardware. Ela não entra no índice Full, ranking, campanha, bisect ou telemetria de emuladores. Schemas 1–10 continuam válidos e os IDs/versões anteriores permanecem inalterados. Veja [PHASE10_DEEP_TURNIP_DIAGNOSTICS.md](PHASE10_DEEP_TURNIP_DIAGNOSTICS.md).

@@ -66,6 +66,21 @@ static const uint32_t kTraceSolidFragmentSpirv[] =
 static const uint32_t kTraceIntegerComputeSpirv[] =
 #include "trace_integer_comp.inc"
 ;
+static const uint32_t kDiagnosticBranchSpirv[] =
+#include "diag_branch_comp.inc"
+;
+static const uint32_t kDiagnosticAtomicSpirv[] =
+#include "diag_atomic_comp.inc"
+;
+static const uint32_t kDiagnosticSharedSpirv[] =
+#include "diag_shared_comp.inc"
+;
+static const uint32_t kDiagnosticLargeSpirv[] =
+#include "diag_large_comp.inc"
+;
+static const uint32_t kDiagnosticEmptySpirv[] =
+#include "diag_empty_comp.inc"
+;
 
 using Clock = std::chrono::steady_clock;
 
@@ -332,6 +347,10 @@ public:
                 getInstanceProcAddr, instance, "vkGetPhysicalDeviceMemoryProperties");
         getPhysicalDeviceFormatProperties = requireInstance<PFN_vkGetPhysicalDeviceFormatProperties>(
                 getInstanceProcAddr, instance, "vkGetPhysicalDeviceFormatProperties");
+        getPhysicalDeviceImageFormatProperties =
+                requireInstance<PFN_vkGetPhysicalDeviceImageFormatProperties>(
+                        getInstanceProcAddr, instance,
+                        "vkGetPhysicalDeviceImageFormatProperties");
         enumerateDeviceExtensionProperties = requireInstance<PFN_vkEnumerateDeviceExtensionProperties>(
                 getInstanceProcAddr, instance, "vkEnumerateDeviceExtensionProperties");
         createDevice = requireInstance<PFN_vkCreateDevice>(getInstanceProcAddr, instance,
@@ -441,6 +460,22 @@ public:
     bool isCustomDriver() const { return customDriver; }
     bool timestampsSupported() const {
         return queueFamilyProperties.timestampValidBits > 0 && properties.limits.timestampPeriod > 0.0F;
+    }
+
+    bool supportsExtension(const char *name) const {
+        return hasExtension(extensions, name);
+    }
+
+    VkResult queryImageFormatProperties(VkFormat format, VkImageType type,
+                                        VkImageTiling tiling, VkImageUsageFlags usage,
+                                        VkImageCreateFlags flags,
+                                        VkImageFormatProperties *output) const {
+        return getPhysicalDeviceImageFormatProperties(
+                physicalDevice, format, type, tiling, usage, flags, output);
+    }
+
+    void queryFormatProperties(VkFormat format, VkFormatProperties *output) const {
+        getPhysicalDeviceFormatProperties(physicalDevice, format, output);
     }
 
     uint32_t findMemoryType(uint32_t bits, VkMemoryPropertyFlags required,
@@ -744,6 +779,13 @@ public:
     PFN_vkCreateQueryPool vkCreateQueryPool = nullptr;
     PFN_vkDestroyQueryPool vkDestroyQueryPool = nullptr;
     PFN_vkGetQueryPoolResults vkGetQueryPoolResults = nullptr;
+    PFN_vkCreateFence vkCreateFence = nullptr;
+    PFN_vkDestroyFence vkDestroyFence = nullptr;
+    PFN_vkWaitForFences vkWaitForFences = nullptr;
+    PFN_vkResetFences vkResetFences = nullptr;
+    PFN_vkCreateSemaphore vkCreateSemaphore = nullptr;
+    PFN_vkDestroySemaphore vkDestroySemaphore = nullptr;
+    PFN_vkCmdFillBuffer vkCmdFillBuffer = nullptr;
 
 private:
     void loadDeviceFunctions() {
@@ -809,6 +851,13 @@ private:
         LOAD(vkCreateQueryPool);
         LOAD(vkDestroyQueryPool);
         LOAD(vkGetQueryPoolResults);
+        LOAD(vkCreateFence);
+        LOAD(vkDestroyFence);
+        LOAD(vkWaitForFences);
+        LOAD(vkResetFences);
+        LOAD(vkCreateSemaphore);
+        LOAD(vkDestroySemaphore);
+        LOAD(vkCmdFillBuffer);
 #undef LOAD
     }
 
@@ -912,6 +961,7 @@ private:
     PFN_vkGetPhysicalDeviceQueueFamilyProperties getPhysicalDeviceQueueFamilyProperties = nullptr;
     PFN_vkGetPhysicalDeviceMemoryProperties getPhysicalDeviceMemoryProperties = nullptr;
     PFN_vkGetPhysicalDeviceFormatProperties getPhysicalDeviceFormatProperties = nullptr;
+    PFN_vkGetPhysicalDeviceImageFormatProperties getPhysicalDeviceImageFormatProperties = nullptr;
     PFN_vkEnumerateDeviceExtensionProperties enumerateDeviceExtensionProperties = nullptr;
     PFN_vkCreateDevice createDevice = nullptr;
     PFN_vkGetDeviceProcAddr getDeviceProcAddr = nullptr;
@@ -2395,6 +2445,827 @@ private:
     VkShaderModule traceCompute = VK_NULL_HANDLE;
 };
 
+struct DiagnosticFormatDefinition {
+    VkFormat format;
+    const char *name;
+    bool depth;
+    bool compressed;
+};
+
+const char *booleanJson(bool value) { return value ? "true" : "false"; }
+
+void appendSampleCounts(std::ostringstream &json, VkSampleCountFlags flags) {
+    const std::array<std::pair<VkSampleCountFlagBits, int>, 7> counts{{
+            {VK_SAMPLE_COUNT_1_BIT, 1}, {VK_SAMPLE_COUNT_2_BIT, 2},
+            {VK_SAMPLE_COUNT_4_BIT, 4}, {VK_SAMPLE_COUNT_8_BIT, 8},
+            {VK_SAMPLE_COUNT_16_BIT, 16}, {VK_SAMPLE_COUNT_32_BIT, 32},
+            {VK_SAMPLE_COUNT_64_BIT, 64}}};
+    json << '[';
+    bool first = true;
+    for (const auto &entry : counts) {
+        if ((flags & entry.first) == 0) continue;
+        if (!first) json << ',';
+        first = false;
+        json << entry.second;
+    }
+    json << ']';
+}
+
+uint64_t fnv1a64(const uint32_t *values, size_t count) {
+    uint64_t hash = 1469598103934665603ULL;
+    for (size_t index = 0; index < count; ++index) {
+        uint32_t value = values[index];
+        for (int shift = 0; shift < 32; shift += 8) {
+            hash ^= static_cast<uint8_t>((value >> shift) & 0xffU);
+            hash *= 1099511628211ULL;
+        }
+    }
+    return hash;
+}
+
+class DeepDiagnostics {
+public:
+    explicit DeepDiagnostics(VulkanContext &value) : context(value) {}
+
+    std::string run(const std::string &mode, int cycles, int requestedMemoryMiB) {
+        context.setStage("phase10_begin");
+        const int safeCycles = std::max(1, std::min(cycles, 50));
+        const int safeMemoryMiB = std::max(16, std::min(requestedMemoryMiB, 256));
+        std::ostringstream json;
+        json << "{\"success\":true"
+             << ",\"deep_diagnostic_schema_version\":1"
+             << ",\"profile_id\":\"turnip_deep_diagnostics\""
+             << ",\"profile_version\":1"
+             << ",\"mode\":\"" << jsonEscape(mode) << "\""
+             << ",\"custom_driver\":" << booleanJson(context.isCustomDriver())
+             << ",\"capabilities\":" << context.capabilities;
+        if (mode == "soak") {
+            json << ",\"soak\":" << soak(safeCycles, safeMemoryMiB);
+        } else {
+            json << ",\"format_matrix\":" << formatMatrix()
+                 << ",\"shader_pipeline_corpus\":" << shaderPipelineCorpus()
+                 << ",\"memory_pressure\":" << memoryPressure(safeMemoryMiB)
+                 << ",\"synchronization\":" << synchronization()
+                 << ",\"reliability_probe\":" << soak(std::min(safeCycles, 5),
+                                                          std::min(safeMemoryMiB, 32));
+        }
+        json << ",\"limitations\":\"Synthetic Vulkan diagnostics; safe memory caps and serialized submissions do not reproduce games, emulator CPU load, system compositor, or unrestricted out-of-memory behavior.\"}";
+        return json.str();
+    }
+
+private:
+    std::string formatMatrix() {
+        context.setStage("phase10_format_matrix");
+        const std::array<DiagnosticFormatDefinition, 26> formats{{
+                {VK_FORMAT_R8_UNORM, "R8_UNORM", false, false},
+                {VK_FORMAT_R8G8_UNORM, "R8G8_UNORM", false, false},
+                {VK_FORMAT_R8G8B8A8_UNORM, "R8G8B8A8_UNORM", false, false},
+                {VK_FORMAT_R8G8B8A8_SRGB, "R8G8B8A8_SRGB", false, false},
+                {VK_FORMAT_B8G8R8A8_UNORM, "B8G8R8A8_UNORM", false, false},
+                {VK_FORMAT_B8G8R8A8_SRGB, "B8G8R8A8_SRGB", false, false},
+                {VK_FORMAT_A2B10G10R10_UNORM_PACK32, "A2B10G10R10_UNORM_PACK32", false, false},
+                {VK_FORMAT_B10G11R11_UFLOAT_PACK32, "R11G11B10_UFLOAT_PACK32", false, false},
+                {VK_FORMAT_R16G16_SFLOAT, "R16G16_SFLOAT", false, false},
+                {VK_FORMAT_R16G16B16A16_SFLOAT, "R16G16B16A16_SFLOAT", false, false},
+                {VK_FORMAT_R32_SFLOAT, "R32_SFLOAT", false, false},
+                {VK_FORMAT_R32G32B32A32_SFLOAT, "R32G32B32A32_SFLOAT", false, false},
+                {VK_FORMAT_D16_UNORM, "D16_UNORM", true, false},
+                {VK_FORMAT_D24_UNORM_S8_UINT, "D24_UNORM_S8_UINT", true, false},
+                {VK_FORMAT_D32_SFLOAT, "D32_SFLOAT", true, false},
+                {VK_FORMAT_D32_SFLOAT_S8_UINT, "D32_SFLOAT_S8_UINT", true, false},
+                {VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK, "ETC2_R8G8B8_UNORM_BLOCK", false, true},
+                {VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK, "ETC2_R8G8B8A8_UNORM_BLOCK", false, true},
+                {VK_FORMAT_ASTC_4x4_UNORM_BLOCK, "ASTC_4x4_UNORM_BLOCK", false, true},
+                {VK_FORMAT_ASTC_6x6_UNORM_BLOCK, "ASTC_6x6_UNORM_BLOCK", false, true},
+                {VK_FORMAT_ASTC_8x8_UNORM_BLOCK, "ASTC_8x8_UNORM_BLOCK", false, true},
+                {VK_FORMAT_BC1_RGBA_UNORM_BLOCK, "BC1_RGBA_UNORM_BLOCK", false, true},
+                {VK_FORMAT_BC3_UNORM_BLOCK, "BC3_UNORM_BLOCK", false, true},
+                {VK_FORMAT_BC7_UNORM_BLOCK, "BC7_UNORM_BLOCK", false, true},
+                {VK_FORMAT_E5B9G9R9_UFLOAT_PACK32, "E5B9G9R9_UFLOAT_PACK32", false, false},
+                {VK_FORMAT_R64_UINT, "R64_UINT", false, false}}};
+        std::ostringstream json;
+        json << "{\"format_matrix_version\":1,\"format_count\":" << formats.size()
+             << ",\"formats\":[";
+        for (size_t index = 0; index < formats.size(); ++index) {
+            const auto &definition = formats[index];
+            if (index > 0) json << ',';
+            VkFormatProperties properties{};
+            context.queryFormatProperties(definition.format, &properties);
+            const VkFormatFeatureFlags optimal = properties.optimalTilingFeatures;
+            const VkFormatFeatureFlags linear = properties.linearTilingFeatures;
+            const VkFormatFeatureFlags buffer = properties.bufferFeatures;
+            VkImageFormatProperties sampledProperties{};
+            VkResult sampledResult = context.queryImageFormatProperties(
+                    definition.format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+                            | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                    0, &sampledProperties);
+            VkImageFormatProperties attachmentProperties{};
+            const VkImageUsageFlags attachmentUsage = definition.depth
+                    ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+                    : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            VkResult attachmentResult = definition.compressed ? VK_ERROR_FORMAT_NOT_SUPPORTED
+                    : context.queryImageFormatProperties(
+                            definition.format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                            attachmentUsage, 0, &attachmentProperties);
+            VkImageFormatProperties storageProperties{};
+            VkResult storageResult = definition.depth || definition.compressed
+                    ? VK_ERROR_FORMAT_NOT_SUPPORTED
+                    : context.queryImageFormatProperties(
+                            definition.format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                            VK_IMAGE_USAGE_STORAGE_BIT, 0, &storageProperties);
+            json << "{\"format\":\"" << definition.name << "\""
+                 << ",\"format_value\":" << static_cast<int>(definition.format)
+                 << ",\"depth_stencil\":" << booleanJson(definition.depth)
+                 << ",\"compressed\":" << booleanJson(definition.compressed)
+                 << ",\"linear_sampled\":"
+                 << booleanJson((linear & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0)
+                 << ",\"optimal_sampled\":"
+                 << booleanJson((optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0)
+                 << ",\"optimal_linear_filter\":"
+                 << booleanJson((optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0)
+                 << ",\"optimal_color_attachment\":"
+                 << booleanJson((optimal & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) != 0)
+                 << ",\"optimal_depth_stencil_attachment\":"
+                 << booleanJson((optimal & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)
+                 << ",\"optimal_storage_image\":"
+                 << booleanJson((optimal & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0)
+                 << ",\"optimal_blit_src\":"
+                 << booleanJson((optimal & VK_FORMAT_FEATURE_BLIT_SRC_BIT) != 0)
+                 << ",\"optimal_blit_dst\":"
+                 << booleanJson((optimal & VK_FORMAT_FEATURE_BLIT_DST_BIT) != 0)
+                 << ",\"buffer_vertex\":"
+                 << booleanJson((buffer & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) != 0)
+                 << ",\"buffer_storage_texel\":"
+                 << booleanJson((buffer & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT) != 0)
+                 << ",\"sampled_image_supported\":"
+                 << booleanJson(sampledResult == VK_SUCCESS)
+                 << ",\"attachment_image_supported\":"
+                 << booleanJson(attachmentResult == VK_SUCCESS)
+                 << ",\"storage_image_supported\":"
+                 << booleanJson(storageResult == VK_SUCCESS)
+                 << ",\"attachment_sample_counts\":";
+            appendSampleCounts(json, attachmentResult == VK_SUCCESS
+                    ? attachmentProperties.sampleCounts : 0);
+            json << '}';
+        }
+        json << "],\"limitations\":\"Queries Vulkan format properties and representative image usages; it does not exhaust every image type, create flag, modifier, external-memory path, or driver-internal tiling decision.\"}";
+        return json.str();
+    }
+
+    struct CorpusCase {
+        const char *id;
+        const uint32_t *code;
+        size_t codeSize;
+        uint32_t groups;
+    };
+
+    std::string shaderPipelineCorpus() {
+        context.setStage("phase10_shader_pipeline_corpus");
+        const std::array<CorpusCase, 6> cases{{
+                {"float_fma_loop", kComputeSpirv, sizeof(kComputeSpirv), 4},
+                {"integer_dependency", kTraceIntegerComputeSpirv,
+                 sizeof(kTraceIntegerComputeSpirv), 4},
+                {"divergent_branch_loop", kDiagnosticBranchSpirv,
+                 sizeof(kDiagnosticBranchSpirv), 16},
+                {"storage_atomic", kDiagnosticAtomicSpirv,
+                 sizeof(kDiagnosticAtomicSpirv), 16},
+                {"shared_memory_barrier", kDiagnosticSharedSpirv,
+                 sizeof(kDiagnosticSharedSpirv), 16},
+                {"large_mixed_arithmetic", kDiagnosticLargeSpirv,
+                 sizeof(kDiagnosticLargeSpirv), 16}}};
+
+        VkDescriptorSetLayout descriptorLayout = VK_NULL_HANDLE;
+        VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+        VkPipelineCache cache = VK_NULL_HANDLE;
+        VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        VkCommandPool commandPool = VK_NULL_HANDLE;
+        BufferResource buffer;
+        std::vector<uint8_t> cacheData;
+        std::ostringstream caseJson;
+        int successes = 0;
+        double coldTotal = 0.0;
+        double warmTotal = 0.0;
+        try {
+            VkDescriptorSetLayoutBinding binding{};
+            binding.binding = 0;
+            binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            binding.descriptorCount = 1;
+            binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            VkDescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            layoutInfo.bindingCount = 1;
+            layoutInfo.pBindings = &binding;
+            check(context.vkCreateDescriptorSetLayout(
+                    context.device, &layoutInfo, nullptr, &descriptorLayout),
+                  "vkCreateDescriptorSetLayout(phase10)");
+            VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+            pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+            pipelineLayoutInfo.setLayoutCount = 1;
+            pipelineLayoutInfo.pSetLayouts = &descriptorLayout;
+            check(context.vkCreatePipelineLayout(
+                    context.device, &pipelineLayoutInfo, nullptr, &pipelineLayout),
+                  "vkCreatePipelineLayout(phase10)");
+            VkPipelineCacheCreateInfo cacheInfo{};
+            cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+            check(context.vkCreatePipelineCache(context.device, &cacheInfo, nullptr, &cache),
+                  "vkCreatePipelineCache(phase10)");
+
+            buffer = context.createBuffer(
+                    4096U * sizeof(uint32_t),
+                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+                            | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            VkDescriptorPoolSize poolSize{};
+            poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            poolSize.descriptorCount = 1;
+            VkDescriptorPoolCreateInfo poolInfo{};
+            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            poolInfo.maxSets = 1;
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = &poolSize;
+            check(context.vkCreateDescriptorPool(
+                    context.device, &poolInfo, nullptr, &descriptorPool),
+                  "vkCreateDescriptorPool(phase10)");
+            VkDescriptorSetAllocateInfo setInfo{};
+            setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            setInfo.descriptorPool = descriptorPool;
+            setInfo.descriptorSetCount = 1;
+            setInfo.pSetLayouts = &descriptorLayout;
+            check(context.vkAllocateDescriptorSets(context.device, &setInfo, &descriptorSet),
+                  "vkAllocateDescriptorSets(phase10)");
+            VkDescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = buffer.buffer;
+            bufferInfo.offset = 0;
+            bufferInfo.range = 4096U * sizeof(uint32_t);
+            VkWriteDescriptorSet write{};
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = descriptorSet;
+            write.dstBinding = 0;
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            write.pBufferInfo = &bufferInfo;
+            context.vkUpdateDescriptorSets(context.device, 1, &write, 0, nullptr);
+            commandPool = context.createCommandPool();
+
+            caseJson << '[';
+            for (size_t index = 0; index < cases.size(); ++index) {
+                if (index > 0) caseJson << ',';
+                const auto &entry = cases[index];
+                VkShaderModule shader = VK_NULL_HANDLE;
+                VkPipeline coldPipeline = VK_NULL_HANDLE;
+                VkPipeline warmPipeline = VK_NULL_HANDLE;
+                try {
+                    auto shaderStart = Clock::now();
+                    shader = context.createShader(entry.code, entry.codeSize);
+                    const double shaderModuleMs = elapsedMs(shaderStart);
+                    VkPipelineShaderStageCreateInfo stage{};
+                    stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                    stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+                    stage.module = shader;
+                    stage.pName = "main";
+                    VkComputePipelineCreateInfo pipelineInfo{};
+                    pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+                    pipelineInfo.stage = stage;
+                    pipelineInfo.layout = pipelineLayout;
+                    auto coldStart = Clock::now();
+                    check(context.vkCreateComputePipelines(
+                            context.device, cache, 1, &pipelineInfo, nullptr, &coldPipeline),
+                          "vkCreateComputePipelines(cold phase10)");
+                    const double coldMs = elapsedMs(coldStart);
+                    auto warmStart = Clock::now();
+                    check(context.vkCreateComputePipelines(
+                            context.device, cache, 1, &pipelineInfo, nullptr, &warmPipeline),
+                          "vkCreateComputePipelines(warm phase10)");
+                    const double warmMs = elapsedMs(warmStart);
+                    initializeBuffer(buffer, 4096);
+                    VkCommandBuffer command = context.allocateCommandBuffer(commandPool);
+                    VkCommandBufferBeginInfo begin{};
+                    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+                    check(context.vkBeginCommandBuffer(command, &begin),
+                          "vkBeginCommandBuffer(shader corpus)");
+                    context.vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                              warmPipeline);
+                    context.vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                                    pipelineLayout, 0, 1, &descriptorSet,
+                                                    0, nullptr);
+                    context.vkCmdDispatch(command, entry.groups, 1, 1);
+                    check(context.vkEndCommandBuffer(command),
+                          "vkEndCommandBuffer(shader corpus)");
+                    VkSubmitInfo submit{};
+                    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                    submit.commandBufferCount = 1;
+                    submit.pCommandBuffers = &command;
+                    auto executeStart = Clock::now();
+                    check(context.vkQueueSubmit(context.queue, 1, &submit, VK_NULL_HANDLE),
+                          "vkQueueSubmit(shader corpus)");
+                    check(context.vkQueueWaitIdle(context.queue),
+                          "vkQueueWaitIdle(shader corpus)");
+                    const double executeMs = elapsedMs(executeStart);
+                    const uint64_t outputHash = hashBuffer(buffer, 1025);
+                    caseJson << "{\"case_id\":\"" << entry.id << "\""
+                             << ",\"success\":true"
+                             << ",\"shader_module_ms\":" << shaderModuleMs
+                             << ",\"cold_pipeline_ms\":" << coldMs
+                             << ",\"warm_pipeline_ms\":" << warmMs
+                             << ",\"execute_wall_ms\":" << executeMs
+                             << ",\"output_fnv1a64\":\"" << std::hex << outputHash
+                             << std::dec << "\"}";
+                    successes++;
+                    coldTotal += coldMs;
+                    warmTotal += warmMs;
+                } catch (const std::exception &error) {
+                    caseJson << "{\"case_id\":\"" << entry.id
+                             << "\",\"success\":false,\"error\":\""
+                             << jsonEscape(error.what()) << "\"}";
+                }
+                if (warmPipeline != VK_NULL_HANDLE) {
+                    context.vkDestroyPipeline(context.device, warmPipeline, nullptr);
+                }
+                if (coldPipeline != VK_NULL_HANDLE) {
+                    context.vkDestroyPipeline(context.device, coldPipeline, nullptr);
+                }
+                if (shader != VK_NULL_HANDLE) {
+                    context.vkDestroyShaderModule(context.device, shader, nullptr);
+                }
+            }
+            caseJson << ']';
+            size_t cacheSize = 0;
+            VkResult cacheSizeResult = context.vkGetPipelineCacheData(
+                    context.device, cache, &cacheSize, nullptr);
+            if (cacheSizeResult == VK_SUCCESS && cacheSize > 0 && cacheSize <= 16U * 1024U * 1024U) {
+                cacheData.resize(cacheSize);
+                VkResult dataResult = context.vkGetPipelineCacheData(
+                        context.device, cache, &cacheSize, cacheData.data());
+                if (dataResult != VK_SUCCESS) cacheData.clear();
+                else cacheData.resize(cacheSize);
+            }
+        } catch (...) {
+            cleanupPipelineResources(descriptorLayout, pipelineLayout, cache, descriptorPool,
+                                     commandPool, buffer);
+            throw;
+        }
+        cleanupPipelineResources(descriptorLayout, pipelineLayout, cache, descriptorPool,
+                                 commandPool, buffer);
+        std::ostringstream json;
+        json << "{\"shader_corpus_version\":1"
+             << ",\"pipeline_cache_diagnostic_version\":1"
+             << ",\"case_count\":" << cases.size()
+             << ",\"successful_cases\":" << successes
+             << ",\"all_cases_passed\":" << booleanJson(successes == static_cast<int>(cases.size()))
+             << ",\"cold_pipeline_total_ms\":" << coldTotal
+             << ",\"warm_pipeline_total_ms\":" << warmTotal
+             << ",\"warm_vs_cold_percent\":"
+             << (coldTotal > 0.0 ? (warmTotal / coldTotal - 1.0) * 100.0 : 0.0)
+             << ",\"pipeline_cache_serialized_bytes\":" << cacheData.size()
+             << ",\"cases\":" << caseJson.str()
+             << ",\"coverage\":{\"compute_pipeline_execution\":true"
+             << ",\"graphics_fragment_module_only\":false"
+             << ",\"subgroup_execution\":false}"
+             << ",\"limitations\":\"Version 1 executes a deterministic compute corpus covering floating point, integer dependencies, divergent branches, atomics, shared memory and a large mixed shader. Graphics-only derivatives, texture gathers and subgroup execution are not yet part of this corpus.\"}";
+        return json.str();
+    }
+
+    void initializeBuffer(BufferResource &buffer, size_t words) {
+        void *mapped = nullptr;
+        check(context.vkMapMemory(context.device, buffer.memory, 0, VK_WHOLE_SIZE,
+                                  0, &mapped), "vkMapMemory(phase10 initialize)");
+        auto *values = static_cast<uint32_t *>(mapped);
+        for (size_t index = 0; index < words; ++index) {
+            values[index] = static_cast<uint32_t>(index * 2654435761U) ^ 0x6d2b79f5U;
+        }
+        if ((buffer.memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
+            VkMappedMemoryRange range{};
+            range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+            range.memory = buffer.memory;
+            range.offset = 0;
+            range.size = VK_WHOLE_SIZE;
+            check(context.vkFlushMappedMemoryRanges(context.device, 1, &range),
+                  "vkFlushMappedMemoryRanges(phase10)");
+        }
+        context.vkUnmapMemory(context.device, buffer.memory);
+    }
+
+    uint64_t hashBuffer(BufferResource &buffer, size_t words) {
+        void *mapped = nullptr;
+        check(context.vkMapMemory(context.device, buffer.memory, 0, VK_WHOLE_SIZE,
+                                  0, &mapped), "vkMapMemory(phase10 hash)");
+        if ((buffer.memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
+            VkMappedMemoryRange range{};
+            range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+            range.memory = buffer.memory;
+            range.offset = 0;
+            range.size = VK_WHOLE_SIZE;
+            check(context.vkInvalidateMappedMemoryRanges(context.device, 1, &range),
+                  "vkInvalidateMappedMemoryRanges(phase10)");
+        }
+        const uint64_t hash = fnv1a64(static_cast<uint32_t *>(mapped), words);
+        context.vkUnmapMemory(context.device, buffer.memory);
+        return hash;
+    }
+
+    void cleanupPipelineResources(VkDescriptorSetLayout descriptorLayout,
+                                  VkPipelineLayout pipelineLayout,
+                                  VkPipelineCache cache,
+                                  VkDescriptorPool descriptorPool,
+                                  VkCommandPool commandPool,
+                                  BufferResource &buffer) {
+        if (context.device != VK_NULL_HANDLE) context.vkDeviceWaitIdle(context.device);
+        if (commandPool != VK_NULL_HANDLE) {
+            context.vkDestroyCommandPool(context.device, commandPool, nullptr);
+        }
+        if (descriptorPool != VK_NULL_HANDLE) {
+            context.vkDestroyDescriptorPool(context.device, descriptorPool, nullptr);
+        }
+        context.destroyBuffer(buffer);
+        if (cache != VK_NULL_HANDLE) context.vkDestroyPipelineCache(context.device, cache, nullptr);
+        if (pipelineLayout != VK_NULL_HANDLE) {
+            context.vkDestroyPipelineLayout(context.device, pipelineLayout, nullptr);
+        }
+        if (descriptorLayout != VK_NULL_HANDLE) {
+            context.vkDestroyDescriptorSetLayout(context.device, descriptorLayout, nullptr);
+        }
+    }
+
+    std::string memoryPressure(int requestedMemoryMiB) {
+        context.setStage("phase10_memory_pressure");
+        const uint64_t requested = static_cast<uint64_t>(requestedMemoryMiB) * 1024ULL * 1024ULL;
+        uint64_t largestDeviceHeap = 0;
+        uint64_t largestHeap = 0;
+        for (uint32_t index = 0; index < context.memoryProperties.memoryHeapCount; ++index) {
+            const auto &heap = context.memoryProperties.memoryHeaps[index];
+            largestHeap = std::max(largestHeap, static_cast<uint64_t>(heap.size));
+            if ((heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0) {
+                largestDeviceHeap = std::max(largestDeviceHeap, static_cast<uint64_t>(heap.size));
+            }
+        }
+        const uint64_t referenceHeap = largestDeviceHeap > 0 ? largestDeviceHeap : largestHeap;
+        const uint64_t heapCap = referenceHeap > 0 ? std::max<uint64_t>(16ULL * 1024ULL * 1024ULL,
+                                                                        referenceHeap / 8ULL)
+                                                    : requested;
+        const uint64_t safeTarget = std::min(requested, heapCap);
+        const uint64_t chunk = 8ULL * 1024ULL * 1024ULL;
+        std::vector<BufferResource> buffers;
+        uint64_t allocated = 0;
+        uint64_t peak = 0;
+        std::string firstFailure;
+        auto start = Clock::now();
+        while (allocated < safeTarget) {
+            const uint64_t next = std::min(chunk, safeTarget - allocated);
+            try {
+                BufferResource resource = context.createBuffer(
+                        next, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                        0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                allocated += resource.allocationSize;
+                peak = std::max(peak, allocated);
+                buffers.push_back(resource);
+            } catch (const std::exception &error) {
+                firstFailure = error.what();
+                break;
+            }
+        }
+        uint64_t freedForFragmentation = 0;
+        for (size_t index = 0; index < buffers.size(); index += 2) {
+            freedForFragmentation += buffers[index].allocationSize;
+            allocated -= buffers[index].allocationSize;
+            context.destroyBuffer(buffers[index]);
+        }
+        int replacementCount = 0;
+        uint64_t replacementBytes = 0;
+        while (replacementBytes + 4ULL * 1024ULL * 1024ULL <= freedForFragmentation) {
+            try {
+                BufferResource resource = context.createBuffer(
+                        4ULL * 1024ULL * 1024ULL,
+                        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                        0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                replacementBytes += resource.allocationSize;
+                allocated += resource.allocationSize;
+                peak = std::max(peak, allocated);
+                buffers.push_back(resource);
+                replacementCount++;
+            } catch (const std::exception &error) {
+                if (firstFailure.empty()) firstFailure = error.what();
+                break;
+            }
+        }
+        for (auto &resource : buffers) context.destroyBuffer(resource);
+        const double durationMs = elapsedMs(start);
+        std::ostringstream json;
+        json << "{\"memory_pressure_version\":1"
+             << ",\"requested_bytes\":" << requested
+             << ",\"safe_target_bytes\":" << safeTarget
+             << ",\"largest_device_local_heap_bytes\":" << largestDeviceHeap
+             << ",\"peak_allocated_bytes\":" << peak
+             << ",\"initial_allocation_count\":" << buffers.size()
+             << ",\"fragmentation_replacement_count\":" << replacementCount
+             << ",\"fragmentation_replacement_bytes\":" << replacementBytes
+             << ",\"completed_safe_target\":" << booleanJson(peak >= safeTarget)
+             << ",\"duration_ms\":" << durationMs;
+        if (firstFailure.empty()) json << ",\"first_failure\":null";
+        else json << ",\"first_failure\":\"" << jsonEscape(firstFailure) << "\"";
+        json << ",\"limitations\":\"Allocation is capped to the lower of the user request and one eighth of the largest relevant Vulkan heap. It diagnoses allocator behavior without intentionally exhausting Android memory.\"}";
+        return json.str();
+    }
+
+    bool validatePattern(BufferResource &buffer, uint32_t expected) {
+        void *mapped = nullptr;
+        check(context.vkMapMemory(context.device, buffer.memory, 0, VK_WHOLE_SIZE,
+                                  0, &mapped), "vkMapMemory(sync validate)");
+        if ((buffer.memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
+            VkMappedMemoryRange range{};
+            range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+            range.memory = buffer.memory;
+            range.offset = 0;
+            range.size = VK_WHOLE_SIZE;
+            check(context.vkInvalidateMappedMemoryRanges(context.device, 1, &range),
+                  "vkInvalidateMappedMemoryRanges(sync validate)");
+        }
+        const auto *words = static_cast<const uint32_t *>(mapped);
+        bool valid = words[0] == expected && words[(1024U * 1024U / 4U) - 1U] == expected;
+        context.vkUnmapMemory(context.device, buffer.memory);
+        return valid;
+    }
+
+    std::string synchronization() {
+        context.setStage("phase10_synchronization");
+        BufferResource source;
+        BufferResource destination;
+        VkCommandPool pool = VK_NULL_HANDLE;
+        VkFence fence = VK_NULL_HANDLE;
+        VkSemaphore semaphore = VK_NULL_HANDLE;
+        std::vector<double> fenceTimes;
+        bool fenceCopyValid = false;
+        bool binarySemaphoreValid = false;
+        try {
+            source = context.createBuffer(
+                    1024U * 1024U,
+                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            destination = context.createBuffer(
+                    1024U * 1024U,
+                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            pool = context.createCommandPool();
+            VkFenceCreateInfo fenceInfo{};
+            fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            check(context.vkCreateFence(context.device, &fenceInfo, nullptr, &fence),
+                  "vkCreateFence(phase10)");
+            VkSemaphoreCreateInfo semaphoreInfo{};
+            semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+            check(context.vkCreateSemaphore(
+                    context.device, &semaphoreInfo, nullptr, &semaphore),
+                  "vkCreateSemaphore(phase10)");
+
+            VkCommandBuffer command = context.allocateCommandBuffer(pool);
+            VkCommandBufferBeginInfo begin{};
+            begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            check(context.vkBeginCommandBuffer(command, &begin),
+                  "vkBeginCommandBuffer(fence copy)");
+            context.vkCmdFillBuffer(command, source.buffer, 0, VK_WHOLE_SIZE, 0x5a17c0deU);
+            VkBufferMemoryBarrier barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.buffer = source.buffer;
+            barrier.offset = 0;
+            barrier.size = VK_WHOLE_SIZE;
+            context.vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                                         0, nullptr, 1, &barrier, 0, nullptr);
+            VkBufferCopy copy{};
+            copy.size = 1024U * 1024U;
+            context.vkCmdCopyBuffer(command, source.buffer, destination.buffer, 1, &copy);
+            check(context.vkEndCommandBuffer(command), "vkEndCommandBuffer(fence copy)");
+            VkSubmitInfo submit{};
+            submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submit.commandBufferCount = 1;
+            submit.pCommandBuffers = &command;
+            check(context.vkQueueSubmit(context.queue, 1, &submit, fence),
+                  "vkQueueSubmit(fence copy)");
+            check(context.vkWaitForFences(context.device, 1, &fence, VK_TRUE,
+                                          5ULL * 1000ULL * 1000ULL * 1000ULL),
+                  "vkWaitForFences(fence copy)");
+            fenceCopyValid = validatePattern(destination, 0x5a17c0deU);
+
+            VkCommandBuffer signalCommand = context.allocateCommandBuffer(pool);
+            check(context.vkBeginCommandBuffer(signalCommand, &begin),
+                  "vkBeginCommandBuffer(semaphore signal)");
+            context.vkCmdFillBuffer(signalCommand, source.buffer, 0, VK_WHOLE_SIZE, 0x3c6ef372U);
+            check(context.vkEndCommandBuffer(signalCommand),
+                  "vkEndCommandBuffer(semaphore signal)");
+            VkSubmitInfo signalSubmit{};
+            signalSubmit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            signalSubmit.commandBufferCount = 1;
+            signalSubmit.pCommandBuffers = &signalCommand;
+            signalSubmit.signalSemaphoreCount = 1;
+            signalSubmit.pSignalSemaphores = &semaphore;
+            check(context.vkQueueSubmit(context.queue, 1, &signalSubmit, VK_NULL_HANDLE),
+                  "vkQueueSubmit(semaphore signal)");
+
+            VkCommandBuffer waitCommand = context.allocateCommandBuffer(pool);
+            check(context.vkBeginCommandBuffer(waitCommand, &begin),
+                  "vkBeginCommandBuffer(semaphore wait)");
+            context.vkCmdCopyBuffer(waitCommand, source.buffer, destination.buffer, 1, &copy);
+            check(context.vkEndCommandBuffer(waitCommand),
+                  "vkEndCommandBuffer(semaphore wait)");
+            check(context.vkResetFences(context.device, 1, &fence),
+                  "vkResetFences(semaphore)");
+            VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            VkSubmitInfo waitSubmit{};
+            waitSubmit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            waitSubmit.waitSemaphoreCount = 1;
+            waitSubmit.pWaitSemaphores = &semaphore;
+            waitSubmit.pWaitDstStageMask = &waitStage;
+            waitSubmit.commandBufferCount = 1;
+            waitSubmit.pCommandBuffers = &waitCommand;
+            check(context.vkQueueSubmit(context.queue, 1, &waitSubmit, fence),
+                  "vkQueueSubmit(semaphore wait)");
+            check(context.vkWaitForFences(context.device, 1, &fence, VK_TRUE,
+                                          5ULL * 1000ULL * 1000ULL * 1000ULL),
+                  "vkWaitForFences(semaphore wait)");
+            binarySemaphoreValid = validatePattern(destination, 0x3c6ef372U);
+
+            VkCommandBuffer empty = context.allocateCommandBuffer(pool);
+            check(context.vkBeginCommandBuffer(empty, &begin),
+                  "vkBeginCommandBuffer(empty sync)");
+            check(context.vkEndCommandBuffer(empty), "vkEndCommandBuffer(empty sync)");
+            VkSubmitInfo emptySubmit{};
+            emptySubmit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            emptySubmit.commandBufferCount = 1;
+            emptySubmit.pCommandBuffers = &empty;
+            for (int iteration = 0; iteration < 32; ++iteration) {
+                check(context.vkResetFences(context.device, 1, &fence),
+                      "vkResetFences(latency)");
+                auto start = Clock::now();
+                check(context.vkQueueSubmit(context.queue, 1, &emptySubmit, fence),
+                      "vkQueueSubmit(latency)");
+                check(context.vkWaitForFences(context.device, 1, &fence, VK_TRUE,
+                                              5ULL * 1000ULL * 1000ULL * 1000ULL),
+                      "vkWaitForFences(latency)");
+                fenceTimes.push_back(elapsedMs(start));
+            }
+        } catch (...) {
+            cleanupSynchronization(pool, fence, semaphore, source, destination);
+            throw;
+        }
+        cleanupSynchronization(pool, fence, semaphore, source, destination);
+        std::ostringstream json;
+        json << "{\"synchronization_version\":1"
+             << ",\"fence_copy_valid\":" << booleanJson(fenceCopyValid)
+             << ",\"binary_semaphore_chain_valid\":" << booleanJson(binarySemaphoreValid)
+             << ",\"fence_submit_wait_count\":" << fenceTimes.size()
+             << ",\"fence_submit_wait_p50_ms\":" << percentile(fenceTimes, 0.50)
+             << ",\"fence_submit_wait_p95_ms\":" << percentile(fenceTimes, 0.95)
+             << ",\"fence_submit_wait_p99_ms\":" << percentile(fenceTimes, 0.99)
+             << ",\"timeline_semaphore_extension_exposed\":"
+             << booleanJson(context.supportsExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME))
+             << ",\"timeline_semaphore_executed\":false"
+             << ",\"queue_ownership_transition_executed\":false"
+             << ",\"ownership_transition_reason\":\"v1 uses one graphics+compute queue family to avoid changing existing device feature negotiation\""
+             << ",\"passed\":" << booleanJson(fenceCopyValid && binarySemaphoreValid)
+             << ",\"limitations\":\"Version 1 validates fences, binary semaphores and transfer barriers on one queue family. Timeline semaphore and cross-family ownership execution are reported as future coverage rather than silently enabled in existing workloads.\"}";
+        return json.str();
+    }
+
+    void cleanupSynchronization(VkCommandPool pool, VkFence fence, VkSemaphore semaphore,
+                                BufferResource &source, BufferResource &destination) {
+        if (context.device != VK_NULL_HANDLE) context.vkDeviceWaitIdle(context.device);
+        if (fence != VK_NULL_HANDLE) context.vkDestroyFence(context.device, fence, nullptr);
+        if (semaphore != VK_NULL_HANDLE) {
+            context.vkDestroySemaphore(context.device, semaphore, nullptr);
+        }
+        if (pool != VK_NULL_HANDLE) context.vkDestroyCommandPool(context.device, pool, nullptr);
+        context.destroyBuffer(source);
+        context.destroyBuffer(destination);
+    }
+
+    void quickCycle(int memoryMiB) {
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        VkPipelineCache cache = VK_NULL_HANDLE;
+        VkShaderModule shader = VK_NULL_HANDLE;
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        VkCommandPool pool = VK_NULL_HANDLE;
+        VkFence fence = VK_NULL_HANDLE;
+        std::vector<BufferResource> buffers;
+        try {
+            VkPipelineLayoutCreateInfo layoutInfo{};
+            layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+            check(context.vkCreatePipelineLayout(context.device, &layoutInfo, nullptr, &layout),
+                  "vkCreatePipelineLayout(soak)");
+            VkPipelineCacheCreateInfo cacheInfo{};
+            cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+            check(context.vkCreatePipelineCache(context.device, &cacheInfo, nullptr, &cache),
+                  "vkCreatePipelineCache(soak)");
+            shader = context.createShader(kDiagnosticEmptySpirv,
+                                          sizeof(kDiagnosticEmptySpirv));
+            VkPipelineShaderStageCreateInfo stage{};
+            stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+            stage.module = shader;
+            stage.pName = "main";
+            VkComputePipelineCreateInfo pipelineInfo{};
+            pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+            pipelineInfo.stage = stage;
+            pipelineInfo.layout = layout;
+            // The shader references a descriptor, so pipeline creation validates the interface;
+            // execution is intentionally omitted from the quick soak cycle.
+            check(context.vkCreateComputePipelines(context.device, cache, 1, &pipelineInfo,
+                                                   nullptr, &pipeline),
+                  "vkCreateComputePipelines(soak)");
+            const int allocationCount = std::max(1, std::min(memoryMiB / 4, 8));
+            for (int index = 0; index < allocationCount; ++index) {
+                buffers.push_back(context.createBuffer(
+                        4ULL * 1024ULL * 1024ULL,
+                        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                        0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
+            }
+            pool = context.createCommandPool();
+            VkCommandBuffer command = context.allocateCommandBuffer(pool);
+            VkCommandBufferBeginInfo begin{};
+            begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            check(context.vkBeginCommandBuffer(command, &begin),
+                  "vkBeginCommandBuffer(soak)");
+            check(context.vkEndCommandBuffer(command), "vkEndCommandBuffer(soak)");
+            VkFenceCreateInfo fenceInfo{};
+            fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            check(context.vkCreateFence(context.device, &fenceInfo, nullptr, &fence),
+                  "vkCreateFence(soak)");
+            VkSubmitInfo submit{};
+            submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submit.commandBufferCount = 1;
+            submit.pCommandBuffers = &command;
+            check(context.vkQueueSubmit(context.queue, 1, &submit, fence),
+                  "vkQueueSubmit(soak)");
+            check(context.vkWaitForFences(context.device, 1, &fence, VK_TRUE,
+                                          5ULL * 1000ULL * 1000ULL * 1000ULL),
+                  "vkWaitForFences(soak)");
+        } catch (...) {
+            cleanupQuick(layout, cache, shader, pipeline, pool, fence, buffers);
+            throw;
+        }
+        cleanupQuick(layout, cache, shader, pipeline, pool, fence, buffers);
+    }
+
+    void cleanupQuick(VkPipelineLayout layout, VkPipelineCache cache, VkShaderModule shader,
+                      VkPipeline pipeline, VkCommandPool pool, VkFence fence,
+                      std::vector<BufferResource> &buffers) {
+        if (context.device != VK_NULL_HANDLE) context.vkDeviceWaitIdle(context.device);
+        if (fence != VK_NULL_HANDLE) context.vkDestroyFence(context.device, fence, nullptr);
+        if (pool != VK_NULL_HANDLE) context.vkDestroyCommandPool(context.device, pool, nullptr);
+        for (auto &buffer : buffers) context.destroyBuffer(buffer);
+        if (pipeline != VK_NULL_HANDLE) context.vkDestroyPipeline(context.device, pipeline, nullptr);
+        if (shader != VK_NULL_HANDLE) {
+            context.vkDestroyShaderModule(context.device, shader, nullptr);
+        }
+        if (cache != VK_NULL_HANDLE) context.vkDestroyPipelineCache(context.device, cache, nullptr);
+        if (layout != VK_NULL_HANDLE) context.vkDestroyPipelineLayout(context.device, layout, nullptr);
+    }
+
+    std::string soak(int cycles, int memoryMiB) {
+        context.setStage("phase10_soak");
+        std::vector<double> durations;
+        int completed = 0;
+        int failureCycle = 0;
+        std::string error;
+        for (int cycle = 1; cycle <= cycles; ++cycle) {
+            auto start = Clock::now();
+            try {
+                quickCycle(memoryMiB);
+                durations.push_back(elapsedMs(start));
+                completed++;
+            } catch (const std::exception &failure) {
+                failureCycle = cycle;
+                error = failure.what();
+                break;
+            }
+        }
+        std::ostringstream json;
+        json << "{\"soak_test_version\":1"
+             << ",\"requested_cycles\":" << cycles
+             << ",\"completed_cycles\":" << completed
+             << ",\"failure_cycle\":" << (failureCycle == 0 ? "null" : std::to_string(failureCycle))
+             << ",\"cycle_p50_ms\":" << (durations.empty() ? 0.0 : percentile(durations, 0.50))
+             << ",\"cycle_p95_ms\":" << (durations.empty() ? 0.0 : percentile(durations, 0.95))
+             << ",\"cycle_p99_ms\":" << (durations.empty() ? 0.0 : percentile(durations, 0.99))
+             << ",\"passed\":" << booleanJson(completed == cycles);
+        if (error.empty()) json << ",\"error\":null";
+        else json << ",\"error\":\"" << jsonEscape(error) << "\"";
+        json << ",\"limitations\":\"Each cycle recreates pipeline/cache objects, performs bounded memory churn and a fenced empty submit. It is a reliability probe, not a long game-session simulation or thermal endurance guarantee.\"}";
+        return json.str();
+    }
+
+    VulkanContext &context;
+};
+
 }  // namespace
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -2455,3 +3326,32 @@ Java_com_amaral_driverlab_RunnerActivity_runNativeTraceReplay(
     }
 }
 
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_amaral_driverlab_DeepDiagnosticsRunnerActivity_runNativeDeepDiagnostics(
+        JNIEnv *environment,
+        jclass,
+        jstring mode,
+        jstring driverDirectory,
+        jstring driverName,
+        jstring nativeLibraryDirectory,
+        jstring temporaryDirectory,
+        jint cycles,
+        jint memoryMiB) {
+    const std::string diagnosticMode = UtfString(environment, mode).string();
+    VulkanContext context;
+    try {
+        context.initialize(UtfString(environment, driverDirectory).string(),
+                           UtfString(environment, driverName).string(),
+                           UtfString(environment, nativeLibraryDirectory).string(),
+                           UtfString(environment, temporaryDirectory).string());
+        DeepDiagnostics diagnostics(context);
+        const std::string result = diagnostics.run(
+                diagnosticMode == "soak" ? "soak" : "full",
+                static_cast<int>(cycles), static_cast<int>(memoryMiB));
+        return environment->NewStringUTF(result.c_str());
+    } catch (const std::exception &error) {
+        const std::string result = context.failureJson("turnip_deep_diagnostics", error);
+        return environment->NewStringUTF(result.c_str());
+    }
+}

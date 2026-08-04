@@ -19,7 +19,8 @@ APK Android arm64, sem root, para comparar o driver Vulkan do sistema com pacote
 - envelope público anônimo opcional, validado e assinado por hash canônico, sem envio automático;
 - command trace Vulkan próprio, versionado, com gate de correção e análise A/B;
 - campanhas automatizadas de até 64 suítes, com ordem termicamente balanceada, retomada e manifesto auditável;
-- SDK Android de telemetria opt-in para emuladores, importação local, resumo de frame pacing, comparação descritiva e vínculo imutável com suítes.
+- SDK Android de telemetria opt-in para emuladores, importação local, resumo de frame pacing, comparação descritiva e vínculo imutável com suítes;
+- diagnóstico profundo A/B de formatos, corpus de shaders, pipeline cache, memória, sincronização e Soak Test.
 
 A correção offscreen valida somente a cena fixa incluída no APK. Ela **não prova ganho em jogos** nem correção em todos os shaders, APIs ou emuladores.
 
@@ -104,7 +105,7 @@ O APK executa código nativo do ZIP. Use somente pacotes próprios ou hashes ver
 
 ## Esquema de resultados
 
-A versão atual usa `schema_version = 10`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
+A versão atual usa `schema_version = 11`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
 
 Mudanças na geometria, SPIR-V, ordem dos draws, resolução, formato, cálculo ou regra padrão de comparação exigem uma nova `workload_version`.
 
@@ -134,7 +135,7 @@ Siga [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md). Sem GitHub App config
 
 ## Estado do projeto
 
-As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance. A Fase 6 executa matrizes de drivers × workloads/traces com plano imutável, retomada segura e rankings separados por chave comparável. A Fase 7 adiciona o Teste Full Recomendado, recomendação geral com gate de compatibilidade e pacote completo de diagnóstico. A Fase 8 adiciona três cenas Vulkan visíveis e animadas, checkpoints determinísticos e atualiza o Full Qualification para v2 sem redefinir as séries anteriores. A Fase 9 adiciona um SDK versionado de telemetria para emuladores, armazenamento local e comparação descritiva sem incorporar sessões reais ao score Full.
+As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance. A Fase 6 executa matrizes de drivers × workloads/traces com plano imutável, retomada segura e rankings separados por chave comparável. A Fase 7 adiciona o Teste Full Recomendado, recomendação geral com gate de compatibilidade e pacote completo de diagnóstico. A Fase 8 adiciona três cenas Vulkan visíveis e animadas, checkpoints determinísticos e atualiza o Full Qualification para v2 sem redefinir as séries anteriores. A Fase 9 adiciona um SDK versionado de telemetria para emuladores, armazenamento local e comparação descritiva sem incorporar sessões reais ao score Full. A Fase 10 adiciona uma série separada de diagnóstico profundo do Turnip, com matriz de formatos, corpus compute, cache, memória, sincronização e soak controlado.
 
 
 ## Fase 3: comparação estatística
@@ -208,3 +209,12 @@ Abra **TELEMETRIA DE EMULADORES · FASE 9** para importar um `session.json` prod
 O app calcula P50/P95/P99, 1% low descritivo, razões de stutter, eventos de crash/device lost e amostras térmicas. Duas sessões são comparadas somente quando emulador, build, jogo anônimo, configurações, hardware, relógio e política de amostragem coincidem; duração e contagem de frames também precisam ficar dentro de 10%. A comparação não usa frames como amostras independentes, não gera confiança estatística e não altera Full Qualification, ranking ou campanhas.
 
 O vínculo com uma suíte é salvo em `suite-link.json`, sem modificar `session.json` nem `suite.json`. Nenhum upload ocorre automaticamente. Veja [docs/PHASE9_EMULATOR_TELEMETRY.md](docs/PHASE9_EMULATOR_TELEMETRY.md).
+
+
+## Fase 10: diagnóstico profundo do Turnip
+
+Abra **DIAGNÓSTICO PROFUNDO TURNIP · FASE 10** para executar o perfil `turnip_deep_diagnostics/v1` em A/B. O relatório compara capacidades de formatos, seis shaders compute, criação cold/warm de pipelines, serialização de pipeline cache, pressão de memória com limite seguro, fences, binary semaphores, barriers e um reliability probe.
+
+O botão **SOAK TEST A/B** repete ciclos de criação/destruição de objetos Vulkan, memória limitada e submits com fence. Falhas de capacidade, shader, sincronização, crash ou `device lost` bloqueiam qualquer conclusão favorável de tempo.
+
+A Fase 10 forma uma série histórica própria. Ela não altera workloads anteriores, Full Qualification, campanhas, ranking ou telemetria de emuladores. Veja [docs/PHASE10_DEEP_TURNIP_DIAGNOSTICS.md](docs/PHASE10_DEEP_TURNIP_DIAGNOSTICS.md).
