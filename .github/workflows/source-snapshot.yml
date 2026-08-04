@@ -5,42 +5,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: agent/phase11-full-qualification-v3
-          fetch-depth: 0
-      - name: Materialize verified Phase 11 source
-        if: hashFiles('.phase11/part-00') != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git hash-object .phase11/part-00)" = "984a83e1d8c575776c808102a70a328202313f7c"
-          test "$(git hash-object .phase11/part-01)" = "f3cb8a5e2597f5b85fdcdccd30466489721c44dc"
-          test "$(git hash-object .phase11/part-0203)" = "62bc685db5ef7ebcf95f212a8500ae324c5d63fb"
-          test "$(git hash-object .phase11/part-0405)" = "6b41267d4c10616af7e27d7747f1f93bbfe922a9"
-          test "$(git hash-object .phase11/part-06)" = "66273f58f1d305139547e494d6c8a7cf8cf51835"
-          cat .phase11/part-00 .phase11/part-01 .phase11/part-0203 .phase11/part-0405 .phase11/part-06 > /tmp/phase11.patch.gz.b64
-          echo '73c296dee296ad949e0960d5323264e4c368ef2849ace5a7a97707ac0592cdb0  /tmp/phase11.patch.gz.b64' | sha256sum --check
-          base64 --decode /tmp/phase11.patch.gz.b64 > /tmp/phase11.patch.gz
-          echo '86a1d9578f4a99c8a79a0538cc91bfeb7a950443cb6e2874265c31b98652f193  /tmp/phase11.patch.gz' | sha256sum --check
-          gzip --decompress --stdout /tmp/phase11.patch.gz > /tmp/phase11.patch
-          echo '4fd378d371ea5d52913585d87792ae0e1ffb6326d8d89b2b7208caa5084de71a  /tmp/phase11.patch' | sha256sum --check
-          git apply --check /tmp/phase11.patch
-          git apply /tmp/phase11.patch
-          rm -rf .phase11
-          git config user.name 'OpenAI Agent'
-          git config user.email 'agent@openai.com'
-          git add -A
-          git commit -m 'feat: add phase 11 Full Qualification v3'
-          git push origin HEAD:agent/phase11-full-qualification-v3
       - name: Upload source snapshot
         uses: actions/upload-artifact@v4
         with:
