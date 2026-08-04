@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/phase12-complete-localization
+  pull_request:
+    branches:
+      - agent/phase11-full-qualification-v3
   workflow_dispatch:
 
 permissions:
