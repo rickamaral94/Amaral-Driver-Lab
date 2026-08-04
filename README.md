@@ -18,7 +18,8 @@ APK Android arm64, sem root, para comparar o driver Vulkan do sistema com pacote
 - histórico local de suítes, diff lado a lado, ranking por hardware/workload e bisect de builds sequenciais;
 - envelope público anônimo opcional, validado e assinado por hash canônico, sem envio automático;
 - command trace Vulkan próprio, versionado, com gate de correção e análise A/B;
-- campanhas automatizadas de até 64 suítes, com ordem termicamente balanceada, retomada e manifesto auditável.
+- campanhas automatizadas de até 64 suítes, com ordem termicamente balanceada, retomada e manifesto auditável;
+- SDK Android de telemetria opt-in para emuladores, importação local, resumo de frame pacing, comparação descritiva e vínculo imutável com suítes.
 
 A correção offscreen valida somente a cena fixa incluída no APK. Ela **não prova ganho em jogos** nem correção em todos os shaders, APIs ou emuladores.
 
@@ -103,7 +104,7 @@ O APK executa código nativo do ZIP. Use somente pacotes próprios ou hashes ver
 
 ## Esquema de resultados
 
-A versão atual usa `schema_version = 9`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
+A versão atual usa `schema_version = 10`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
 
 Mudanças na geometria, SPIR-V, ordem dos draws, resolução, formato, cálculo ou regra padrão de comparação exigem uma nova `workload_version`.
 
@@ -122,7 +123,7 @@ Requisitos:
 ```bash
 cp local.properties.example local.properties
 # ajuste sdk.dir
-./gradlew :app:testDebugUnitTest :app:assembleDebug
+./gradlew :app:testDebugUnitTest :telemetry-sdk:testDebugUnitTest :app:assembleDebug
 ```
 
 O CMake usa o `glslc` do NDK para compilar os shaders fixos em SPIR-V durante o build. O APK é publicado somente para `arm64-v8a`.
@@ -133,7 +134,7 @@ Siga [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md). Sem GitHub App config
 
 ## Estado do projeto
 
-As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance. A Fase 6 executa matrizes de drivers × workloads/traces com plano imutável, retomada segura e rankings separados por chave comparável. A Fase 7 adiciona o Teste Full Recomendado, recomendação geral com gate de compatibilidade e pacote completo de diagnóstico. A Fase 8 adiciona três cenas Vulkan visíveis e animadas, checkpoints determinísticos e atualiza o Full Qualification para v2 sem redefinir as séries anteriores.
+As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance. A Fase 6 executa matrizes de drivers × workloads/traces com plano imutável, retomada segura e rankings separados por chave comparável. A Fase 7 adiciona o Teste Full Recomendado, recomendação geral com gate de compatibilidade e pacote completo de diagnóstico. A Fase 8 adiciona três cenas Vulkan visíveis e animadas, checkpoints determinísticos e atualiza o Full Qualification para v2 sem redefinir as séries anteriores. A Fase 9 adiciona um SDK versionado de telemetria para emuladores, armazenamento local e comparação descritiva sem incorporar sessões reais ao score Full.
 
 
 ## Fase 3: comparação estatística
@@ -198,3 +199,12 @@ A Fase 8 adiciona três workloads independentes:
 As cenas são exibidas em tela cheia, renderizadas internamente em 960×540 e capturam checkpoints nos frames 30, 90 e 150. O braço candidato só recebe veredito de performance quando seus checkpoints passam pela comparação visual A/B e permanecem determinísticos entre rodadas. A métrica primária é `p99_gpu_frame_ms`, menor é melhor.
 
 O Teste Full Recomendado atual passa a usar `turnip_full_qualification/v2` com 13 etapas. Resultados v1 permanecem válidos, mas não entram no ranking v2. Veja [docs/PHASE8_VISIBLE_VULKAN_SCENES.md](docs/PHASE8_VISIBLE_VULKAN_SCENES.md).
+
+
+## Fase 9: SDK de telemetria para emuladores
+
+Abra **TELEMETRIA DE EMULADORES · FASE 9** para importar um `session.json` produzido pelo módulo `telemetry-sdk`. O contrato registra somente identidade anônima do jogo por SHA-256, versão do emulador, hash das configurações, identidade pública de hardware, braço do driver, frame times e eventos técnicos permitidos. Títulos, caminhos e identificadores de conta são recusados.
+
+O app calcula P50/P95/P99, 1% low descritivo, razões de stutter, eventos de crash/device lost e amostras térmicas. Duas sessões são comparadas somente quando emulador, build, jogo anônimo, configurações, hardware, relógio e política de amostragem coincidem; duração e contagem de frames também precisam ficar dentro de 10%. A comparação não usa frames como amostras independentes, não gera confiança estatística e não altera Full Qualification, ranking ou campanhas.
+
+O vínculo com uma suíte é salvo em `suite-link.json`, sem modificar `session.json` nem `suite.json`. Nenhum upload ocorre automaticamente. Veja [docs/PHASE9_EMULATOR_TELEMETRY.md](docs/PHASE9_EMULATOR_TELEMETRY.md).
