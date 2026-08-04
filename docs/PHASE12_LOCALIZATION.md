@@ -90,6 +90,8 @@ A conclusão da fase exige:
 - seletor com descrição para leitor de tela;
 - build, testes JVM e APK arm64 aprovados na CI.
 
+A validação automatizada deve ser executada sobre o commit final da própria branch, sem arquivos auxiliares de implantação ou snapshot.
+
 ## Limitação de validação física
 
 A implementação e a CI não substituem um teste manual no AYN Odin 2 Portal. Antes de encerrar a PR, devem ser conferidos no aparelho: persistência após reinício, troca durante navegação, processos runners, textos longos, caracteres CJK, HTML exportado e acessibilidade do seletor.
