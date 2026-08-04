@@ -35,6 +35,8 @@ public final class RunnerActivity extends LocalizedActivity {
     static final String EXTRA_DRIVER_SHA = "driver_sha";
     static final String EXTRA_PHASE_LABEL = "phase_label";
     static final String EXTRA_DRIVER_MODE_OVERRIDE = "driver_mode_override";
+    static final String EXTRA_DRIVER_ROLE = "driver_role";
+    static final String EXTRA_DRIVER_DISPLAY_NAME = "driver_display_name";
     static final String EXTRA_ROUND = "round";
     static final String EXTRA_WARMUP_SECONDS = "warmup_seconds";
     static final String EXTRA_MEASURE_SECONDS = "measure_seconds";
@@ -121,6 +123,8 @@ public final class RunnerActivity extends LocalizedActivity {
             String phase = getIntent().getStringExtra(EXTRA_PHASE_LABEL);
             String driverDir = getIntent().getStringExtra(EXTRA_DRIVER_DIR);
             String driverModeOverride = getIntent().getStringExtra(EXTRA_DRIVER_MODE_OVERRIDE);
+            String driverRole = getIntent().getStringExtra(EXTRA_DRIVER_ROLE);
+            String driverDisplayName = getIntent().getStringExtra(EXTRA_DRIVER_DISPLAY_NAME);
             String driverName = getIntent().getStringExtra(EXTRA_DRIVER_NAME);
             String driverMeta = getIntent().getStringExtra(EXTRA_DRIVER_META);
             String driverSha = getIntent().getStringExtra(EXTRA_DRIVER_SHA);
@@ -190,6 +194,16 @@ public final class RunnerActivity extends LocalizedActivity {
                     ? driverModeOverride
                     : driverDir == null || driverDir.isEmpty() ? "system" : "custom";
             result.put("driver_mode", driverMode);
+            result.put("driver_role", driverRole == null || driverRole.isEmpty()
+                    ? ("candidate".equals(phase)
+                    ? DriverExecutionIdentity.ROLE_CANDIDATE
+                    : "custom".equals(driverMode)
+                    ? DriverExecutionIdentity.ROLE_REFERENCE
+                    : DriverExecutionIdentity.ROLE_SYSTEM)
+                    : driverRole);
+            result.put("driver_display_name",
+                    driverDisplayName == null || driverDisplayName.isEmpty()
+                            ? JSONObject.NULL : driverDisplayName);
             result.put("driver_sha256", driverSha == null || driverSha.isEmpty()
                     ? JSONObject.NULL : driverSha);
             result.put("driver_metadata", driverMeta == null || driverMeta.isEmpty()

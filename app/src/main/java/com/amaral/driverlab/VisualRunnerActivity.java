@@ -90,9 +90,28 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         overlay.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         String workloadId = getIntent().getStringExtra(RunnerActivity.EXTRA_WORKLOAD_ID);
         String phase = getIntent().getStringExtra(RunnerActivity.EXTRA_PHASE_LABEL);
+        String role = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_ROLE);
+        String displayName = getIntent().getStringExtra(
+                RunnerActivity.EXTRA_DRIVER_DISPLAY_NAME);
+        if (role == null || role.isEmpty()) {
+            String driverDir = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_DIR);
+            role = DriverExecutionIdentity.role("candidate".equals(phase),
+                    driverDir != null && !driverDir.isEmpty());
+        }
+        String armLabel;
+        if (DriverExecutionIdentity.ROLE_CANDIDATE.equals(role)) {
+            armLabel = getString(R.string.phase13_candidate_driver_label);
+        } else if (DriverExecutionIdentity.ROLE_REFERENCE.equals(role)) {
+            armLabel = getString(R.string.phase13_reference_driver_label);
+        } else {
+            armLabel = getString(R.string.phase13_system_driver);
+        }
+        if (displayName != null && !displayName.isEmpty()
+                && !DriverExecutionIdentity.ROLE_SYSTEM.equals(role)) {
+            armLabel += " · " + displayName;
+        }
         overlay.setText("Amaral Driver Lab · cena Vulkan visível\n"
-                + VisualSceneContract.labelFor(workloadId) + " · "
-                + ("candidate".equals(phase) ? "driver candidato" : "driver do sistema")
+                + VisualSceneContract.labelFor(workloadId) + " · " + armLabel
                 + "\nCheckpoints: frames 30, 90 e 150");
         FrameLayout.LayoutParams overlayParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -170,6 +189,9 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             String driverDir = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_DIR);
             String driverModeOverride = getIntent().getStringExtra(
                     RunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE);
+            String driverRole = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_ROLE);
+            String driverDisplayName = getIntent().getStringExtra(
+                    RunnerActivity.EXTRA_DRIVER_DISPLAY_NAME);
             String driverName = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_NAME);
             String driverMetadata = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_META);
             String driverSha = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_SHA);
@@ -198,6 +220,13 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                             || "custom".equals(driverModeOverride)
                             ? driverModeOverride
                             : driverDir == null || driverDir.isEmpty() ? "system" : "custom")
+                    .put("driver_role", driverRole == null || driverRole.isEmpty()
+                            ? DriverExecutionIdentity.role("candidate".equals(phase),
+                            driverDir != null && !driverDir.isEmpty())
+                            : driverRole)
+                    .put("driver_display_name",
+                            driverDisplayName == null || driverDisplayName.isEmpty()
+                                    ? JSONObject.NULL : driverDisplayName)
                     .put("driver_sha256", driverSha == null || driverSha.isEmpty()
                             ? JSONObject.NULL : driverSha)
                     .put("driver_metadata", driverMetadata == null || driverMetadata.isEmpty()

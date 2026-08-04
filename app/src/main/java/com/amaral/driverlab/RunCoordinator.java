@@ -32,16 +32,25 @@ final class RunCoordinator {
     }
 
     private static final class Phase {
-        final boolean custom;
+        final boolean candidateArm;
         final int round;
         final String label;
         final DriverPackage driver;
 
-        Phase(boolean custom, int round, DriverPackage driver) {
-            this.custom = custom;
+        Phase(boolean candidateArm, int round, DriverPackage driver) {
+            this.candidateArm = candidateArm;
             this.round = round;
-            this.label = custom ? "candidate" : "system";
+            // Keep the historical analytical baseline label for score compatibility.
+            this.label = candidateArm ? "candidate" : "system";
             this.driver = driver;
+        }
+
+        boolean usesCustomDriver() {
+            return driver != null;
+        }
+
+        String executionRole() {
+            return DriverExecutionIdentity.role(candidateArm, usesCustomDriver());
         }
     }
 
@@ -208,7 +217,10 @@ final class RunCoordinator {
         intent.putExtra(RunnerActivity.EXTRA_PIXEL_TOLERANCE, pixelTolerance);
         intent.putExtra(RunnerActivity.EXTRA_MAX_DIVERGENT_BLOCKS, maximumDivergentBlocks);
         intent.putExtra(RunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE,
-                phase.custom ? "custom" : "system");
+                DriverExecutionIdentity.mode(phase.usesCustomDriver()));
+        intent.putExtra(RunnerActivity.EXTRA_DRIVER_ROLE, phase.executionRole());
+        intent.putExtra(RunnerActivity.EXTRA_DRIVER_DISPLAY_NAME,
+                phase.driver == null ? "" : phase.driver.displayName());
         if (phase.driver != null) {
             intent.putExtra(RunnerActivity.EXTRA_DRIVER_DIR,
                     phase.driver.directory.getAbsolutePath());
@@ -273,7 +285,11 @@ final class RunCoordinator {
         failure.put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION);
         failure.put("success", false);
         failure.put("phase", phase.label);
-        failure.put("driver_mode", phase.custom ? "custom" : "system");
+        failure.put("driver_mode",
+                DriverExecutionIdentity.mode(phase.usesCustomDriver()));
+        failure.put("driver_role", phase.executionRole());
+        failure.put("driver_display_name", phase.driver == null
+                ? JSONObject.NULL : phase.driver.displayName());
         failure.put("driver_sha256", phase.driver == null
                 ? JSONObject.NULL : phase.driver.sha256);
         failure.put("round", phase.round);
