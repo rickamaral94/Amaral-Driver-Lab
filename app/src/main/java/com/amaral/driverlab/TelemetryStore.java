@@ -105,7 +105,8 @@ final class TelemetryStore {
                 .put("hardware_public_key", session.hardwarePublicKey)
                 .put("source_session_mutated", false)
                 .put("suite_mutated", false)
-                .put("phase9_contract", Phase9Contract.contractJson());
+                .put("phase9_contract", Phase9Contract.contractJson())
+                .put("phase10_contract", Phase10Contract.contractJson());
         File directory = session.file == null ? null : session.file.getParentFile();
         if (directory == null || !ResultFiles.isInside(new File(filesDir, ROOT), directory)) {
             throw new IllegalArgumentException("sessão fora do armazenamento local");
@@ -139,6 +140,7 @@ final class TelemetryStore {
                 .put("telemetry_export_version", 1)
                 .put("exported_at_ms", System.currentTimeMillis())
                 .put("phase9_contract", Phase9Contract.contractJson())
+                .put("phase10_contract", Phase10Contract.contractJson())
                 .put("session_sha256", session.sessionSha256)
                 .put("session", new JSONObject(session.session.toString()))
                 .put("summary", new JSONObject(session.summary.toString()))

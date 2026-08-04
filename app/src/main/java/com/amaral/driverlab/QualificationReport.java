@@ -81,6 +81,7 @@ final class QualificationReport {
                 .put("phase8_contract", profileVersion >= 2
                         ? Phase8Contract.contractJson() : JSONObject.NULL)
                 .put("phase9_contract", Phase9Contract.contractJson())
+                .put("phase10_contract", Phase10Contract.contractJson())
                 .put("profile_id", Phase7Contract.PROFILE_ID)
                 .put("profile_version", profileVersion)
                 .put("profile_sha256", manifest.getString("profile_sha256"))

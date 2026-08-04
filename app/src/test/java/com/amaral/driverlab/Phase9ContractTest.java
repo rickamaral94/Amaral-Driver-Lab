@@ -21,6 +21,6 @@ public final class Phase9ContractTest {
         assertTrue(contract.getBoolean("source_session_immutable"));
         assertFalse(contract.getBoolean("automatic_upload"));
         assertFalse(contract.getBoolean("included_in_full_qualification_score"));
-        assertEquals(10, WorkloadContract.RESULT_SCHEMA_VERSION);
+        assertEquals(11, WorkloadContract.RESULT_SCHEMA_VERSION);
     }
 }

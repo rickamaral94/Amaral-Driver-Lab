@@ -57,6 +57,11 @@ driverlab_compile_shader("shaders/visual_scene.vert" "visual_scene_vert")
 driverlab_compile_shader("shaders/visual_scene.frag" "visual_scene_frag")
 driverlab_compile_shader("shaders/visual_post.vert" "visual_post_vert")
 driverlab_compile_shader("shaders/visual_post.frag" "visual_post_frag")
+driverlab_compile_shader("shaders/diag_branch.comp" "diag_branch_comp")
+driverlab_compile_shader("shaders/diag_atomic.comp" "diag_atomic_comp")
+driverlab_compile_shader("shaders/diag_shared.comp" "diag_shared_comp")
+driverlab_compile_shader("shaders/diag_large.comp" "diag_large_comp")
+driverlab_compile_shader("shaders/diag_empty.comp" "diag_empty_comp")
 
 add_custom_target(driverlab_shaders DEPENDS ${DRIVERLAB_SHADER_OUTPUTS})
 

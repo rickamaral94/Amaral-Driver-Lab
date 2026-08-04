@@ -36,6 +36,7 @@ final class QualificationStore {
                 .put("phase7_contract", Phase7Contract.contractJson())
                 .put("phase8_contract", Phase8Contract.contractJson())
                 .put("phase9_contract", Phase9Contract.contractJson())
+                .put("phase10_contract", Phase10Contract.contractJson())
                 .put("profile", profile)
                 .put("profile_sha256", profile.getString("profile_sha256"))
                 .put("driver", driver.toJson())
