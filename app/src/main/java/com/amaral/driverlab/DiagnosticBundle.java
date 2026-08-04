@@ -57,8 +57,11 @@ final class DiagnosticBundle {
                         .put("bytes", bytes.length)
                         .put("sha256", sha));
             }
+            int profileVersion = manifest.getJSONObject("profile").optInt("profile_version", 1);
+            int bundleVersion = profileVersion >= 3 ? Phase11Contract.BUNDLE_VERSION
+                    : Phase7Contract.BUNDLE_VERSION;
             JSONObject bundleManifest = new JSONObject()
-                    .put("diagnostic_bundle_version", Phase7Contract.BUNDLE_VERSION)
+                    .put("diagnostic_bundle_version", bundleVersion)
                     .put("qualification_id", manifest.getString("qualification_id"))
                     .put("profile_sha256", manifest.getString("profile_sha256"))
                     .put("driver_sha256", manifest.getJSONObject("driver").getString("sha256"))
@@ -72,8 +75,11 @@ final class DiagnosticBundle {
             zip.write(manifestBytes);
             zip.closeEntry();
         }
+        int profileVersion = manifest.getJSONObject("profile").optInt("profile_version", 1);
+        int bundleVersion = profileVersion >= 3 ? Phase11Contract.BUNDLE_VERSION
+                : Phase7Contract.BUNDLE_VERSION;
         return new JSONObject()
-                .put("diagnostic_bundle_version", Phase7Contract.BUNDLE_VERSION)
+                .put("diagnostic_bundle_version", bundleVersion)
                 .put("relative_path", bundle.getName())
                 .put("bytes", bundle.length())
                 .put("sha256", sha256(read(bundle)))

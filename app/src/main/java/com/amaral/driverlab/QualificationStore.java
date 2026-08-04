@@ -20,16 +20,20 @@ final class QualificationStore {
         for (QualificationProfile.Step step : QualificationProfile.steps()) {
             states.put(new JSONObject()
                     .put("step_id", step.stepId)
+                    .put("step_kind", step.kind)
                     .put("status", "pending")
                     .put("attempt_count", 0)
                     .put("started_at_ms", JSONObject.NULL)
                     .put("finished_at_ms", JSONObject.NULL)
                     .put("suite_relative_path", JSONObject.NULL)
                     .put("suite_id", JSONObject.NULL)
+                    .put("artifact_relative_path", JSONObject.NULL)
+                    .put("artifact_id", JSONObject.NULL)
+                    .put("result_type", JSONObject.NULL)
                     .put("failure", JSONObject.NULL));
         }
         JSONObject manifest = new JSONObject()
-                .put("qualification_schema_version", Phase7Contract.QUALIFICATION_SCHEMA_VERSION)
+                .put("qualification_schema_version", Phase11Contract.QUALIFICATION_SCHEMA_VERSION)
                 .put("qualification_id", id)
                 .put("created_at_ms", now)
                 .put("app_version", BuildConfig.VERSION_NAME)
@@ -37,6 +41,7 @@ final class QualificationStore {
                 .put("phase8_contract", Phase8Contract.contractJson())
                 .put("phase9_contract", Phase9Contract.contractJson())
                 .put("phase10_contract", Phase10Contract.contractJson())
+                .put("phase11_contract", Phase11Contract.contractJson())
                 .put("profile", profile)
                 .put("profile_sha256", profile.getString("profile_sha256"))
                 .put("driver", driver.toJson())
@@ -52,7 +57,9 @@ final class QualificationStore {
                         .put("steps", states))
                 .put("report", JSONObject.NULL)
                 .put("diagnostic_bundle", JSONObject.NULL)
-                .put("limitations", profile.optInt("profile_version", 1) >= 2
+                .put("limitations", profile.optInt("profile_version", 1) >= 3
+                        ? Phase11Contract.LIMITATION
+                        : profile.optInt("profile_version", 1) >= 2
                         ? Phase8Contract.LIMITATION : Phase7Contract.LIMITATION);
         File file = new File(directory, "qualification.json");
         save(file, manifest);
@@ -74,8 +81,12 @@ final class QualificationStore {
 
     static boolean verify(JSONObject manifest) {
         try {
-            if (manifest.optInt("qualification_schema_version", -1)
-                    != Phase7Contract.QUALIFICATION_SCHEMA_VERSION) return false;
+            int profileVersionHint = manifest.optJSONObject("profile") == null ? -1
+                    : manifest.optJSONObject("profile").optInt("profile_version", -1);
+            int expectedSchema = profileVersionHint >= 3
+                    ? Phase11Contract.QUALIFICATION_SCHEMA_VERSION
+                    : Phase7Contract.QUALIFICATION_SCHEMA_VERSION;
+            if (manifest.optInt("qualification_schema_version", -1) != expectedSchema) return false;
             if (!manifest.optString("qualification_id", "").matches("qualification-[0-9]{10,20}")) {
                 return false;
             }
@@ -194,6 +205,29 @@ final class QualificationStore {
                 .put("finished_at_ms", System.currentTimeMillis())
                 .put("suite_relative_path", relative(filesDir, suiteFile))
                 .put("suite_id", report.optString("suite_id", suiteFile.getParentFile().getName()))
+                .put("artifact_relative_path", relative(filesDir, suiteFile))
+                .put("artifact_id", report.optString("suite_id", suiteFile.getParentFile().getName()))
+                .put("result_type", "suite")
+                .put("failure", JSONObject.NULL);
+    }
+
+
+    static void markStepCompletedArtifact(File filesDir, JSONObject manifest, String stepId,
+                                          File artifactFile, JSONObject report,
+                                          String resultType) throws Exception {
+        JSONObject state = requireState(manifest, stepId);
+        if (!"running".equals(state.optString("status"))) {
+            throw new IllegalStateException("Etapa não está executando: " + stepId);
+        }
+        if (!ResultFiles.isInside(filesDir, artifactFile)) {
+            throw new IllegalArgumentException("Resultado fora do armazenamento interno");
+        }
+        String id = report.optString("report_id", artifactFile.getParentFile().getName());
+        state.put("status", "completed")
+                .put("finished_at_ms", System.currentTimeMillis())
+                .put("artifact_relative_path", relative(filesDir, artifactFile))
+                .put("artifact_id", id)
+                .put("result_type", resultType)
                 .put("failure", JSONObject.NULL);
     }
 
@@ -247,6 +281,7 @@ final class QualificationStore {
 
     static File suiteFile(File filesDir, JSONObject state) throws Exception {
         String path = state.optString("suite_relative_path", "");
+        if (path.isEmpty()) path = state.optString("artifact_relative_path", "");
         if (path.isEmpty()) return null;
         File file = new File(filesDir, path);
         if (!ResultFiles.isInside(filesDir, file)) throw new IllegalArgumentException("Caminho inválido");

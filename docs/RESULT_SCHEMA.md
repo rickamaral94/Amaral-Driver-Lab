@@ -522,3 +522,54 @@ A versão 11 adiciona somente o contrato informativo da Fase 10 aos novos artefa
 O relatório em `deep-diagnostics/report-<timestamp>/report.json` contém dois braços, `system` e `custom`, mais uma comparação descritiva. O modo `soak` substitui os cinco módulos pelo objeto `soak` versionado.
 
 A série exige o mesmo `profile_sha256`, modo, ciclos, limite de memória e hardware. Ela não entra no índice Full, ranking, campanha, bisect ou telemetria de emuladores. Schemas 1–10 continuam válidos e os IDs/versões anteriores permanecem inalterados. Veja [PHASE10_DEEP_TURNIP_DIAGNOSTICS.md](PHASE10_DEEP_TURNIP_DIAGNOSTICS.md).
+
+## Schema 12 — Phase 11 Full Qualification v3
+
+Schema 12 is additive. It introduces Full Qualification v3 while preserving schemas 1–11.
+
+Current Full contracts:
+
+```text
+qualification_schema_version = 3
+profile_id = turnip_full_qualification
+profile_version = 3
+qualification_report_version = 3
+qualification_score_version = 3
+diagnostic_bundle_version = 3
+```
+
+A v3 `qualification.json` step state adds:
+
+```json
+{
+  "step_kind": "suite | deep_diagnostics | short_soak",
+  "artifact_relative_path": "deep-diagnostics/.../report.json",
+  "artifact_id": "phase10-...",
+  "result_type": "suite | deep_diagnostics | short_soak"
+}
+```
+
+Legacy `suite_relative_path` and `suite_id` remain unchanged for suite steps and old manifests.
+
+The v3 report adds:
+
+```json
+{
+  "phase11_contract": {},
+  "score": {
+    "qualification_score_version": 3,
+    "performance_index": 0.0,
+    "compatibility_index": 0.0,
+    "performance_weighted_improvement_percent": 0.0,
+    "compatibility_checks_total": 0,
+    "compatibility_checks_passed": 0
+  },
+  "telemetry_attachment": {
+    "optional": true,
+    "automatically_changes_score": false,
+    "status": "not_available | available_not_scored"
+  }
+}
+```
+
+Full v1, v2 and v3 results must never be mixed in one historical ranking.

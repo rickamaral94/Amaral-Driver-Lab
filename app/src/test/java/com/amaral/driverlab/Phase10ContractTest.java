@@ -20,7 +20,7 @@ public final class Phase10ContractTest {
         assertEquals(64, contract.getString("profile_sha256").length());
         assertTrue(contract.getBoolean("historical_series_separate"));
         assertFalse(contract.getBoolean("changes_existing_workload_definitions"));
-        assertEquals(11, WorkloadContract.RESULT_SCHEMA_VERSION);
+        assertEquals(12, WorkloadContract.RESULT_SCHEMA_VERSION);
     }
 
     @Test

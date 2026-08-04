@@ -365,6 +365,9 @@ final class RunCoordinator {
                     ? Phase8Contract.contractJson() : JSONObject.NULL);
             report.put("phase9_contract", Phase9Contract.contractJson());
             report.put("phase10_contract", Phase10Contract.contractJson());
+            report.put("phase11_contract", qualificationContext != null
+                    && qualificationContext.optInt("profile_version", 1) >= 3
+                    ? Phase11Contract.contractJson() : JSONObject.NULL);
             report.put("qualification_context", qualificationContext == null
                     ? JSONObject.NULL : qualificationContext);
             report.put("hardware_identity", HardwareIdentity.fromReport(report));

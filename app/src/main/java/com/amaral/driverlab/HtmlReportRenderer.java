@@ -20,12 +20,15 @@ final class HtmlReportRenderer {
                 .append("h1,h2{margin-bottom:8px}.card{border:1px solid #d6dce3;border-radius:12px;padding:18px;margin:14px 0}")
                 .append("table{border-collapse:collapse;width:100%}th,td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left}")
                 .append(".good{color:#087830}.bad{color:#b42318}.muted{color:#667085}</style></head><body>");
-        html.append("<h1>Amaral Driver Lab</h1><div class=\"muted\">Turnip Full Qualification v1</div>");
+        html.append("<h1>Amaral Driver Lab</h1><div class=\"muted\">Turnip Full Qualification v")
+                .append(report.optInt("profile_version", 1)).append("</div>");
         html.append("<div class=\"card\"><h2>").append(escape(summary == null ? "Resultado" : summary.optString("headline")))
                 .append("</h2><p>").append(escape(summary == null ? "" : summary.optString("detail")))
                 .append("</p><p><b>Driver:</b> ").append(escape(driverLabel(driver))).append("</p>");
         if (score != null) {
-            html.append("<p><b>Índice:</b> ").append(number(score.optDouble("overall_index", Double.NaN)))
+            html.append("<p><b>Performance:</b> ").append(number(score.optDouble("performance_index", Double.NaN)))
+                    .append(" / 100 &nbsp; <b>Compatibilidade:</b> ")
+                    .append(number(score.optDouble("compatibility_index", Double.NaN)))
                     .append(" / 100 &nbsp; <b>Ganho ponderado:</b> ")
                     .append(percent(score.optDouble("weighted_improvement_percent", Double.NaN)))
                     .append(" &nbsp; <b>Confiança:</b> ").append(escape(score.optString("confidence")))
@@ -57,7 +60,7 @@ final class HtmlReportRenderer {
             }
             html.append("</ul>");
         }
-        html.append("</div><p class=\"muted\">").append(escape(Phase7Contract.LIMITATION))
+        html.append("</div><p class=\"muted\">").append(escape(report.optString("limitations", Phase7Contract.LIMITATION)))
                 .append("</p></body></html>");
         return html.toString();
     }

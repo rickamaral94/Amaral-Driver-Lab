@@ -23,7 +23,7 @@ public final class WorkloadContractTest {
 
     @Test
     public void phaseTwoSeriesRemainVersionOneWhileSchemaAdvancesAdditively() {
-        assertEquals(11, WorkloadContract.RESULT_SCHEMA_VERSION);
+        assertEquals(12, WorkloadContract.RESULT_SCHEMA_VERSION);
         assertEquals(5, WorkloadContract.PHASE2_IDS.size());
         for (String workloadId : WorkloadContract.PHASE2_IDS) {
             assertEquals(1, WorkloadContract.versionFor(workloadId));
@@ -97,6 +97,18 @@ public final class WorkloadContractTest {
             assertEquals("p99_gpu_frame_ms", WorkloadContract.primaryMetricFor(workloadId));
             assertTrue(WorkloadContract.lowerIsBetter(workloadId));
         }
+        assertEquals(1, WorkloadContract.RENDER_CORRECTNESS_VERSION);
+        assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
+    }
+
+    @Test
+    public void phaseElevenAddsFullV3WithoutRedefiningEarlierSeries() {
+        assertEquals(3, Phase11Contract.PROFILE_VERSION);
+        assertEquals(3, Phase11Contract.QUALIFICATION_SCHEMA_VERSION);
+        assertEquals(5, Phase11Contract.FULL_SOAK_CYCLES);
+        assertEquals(128, Phase11Contract.RECOMMENDED_MEMORY_MIB);
+        assertEquals(2, Phase8Contract.CURRENT_FULL_PROFILE_VERSION);
+        assertEquals(1, Phase10Contract.PROFILE_VERSION);
         assertEquals(1, WorkloadContract.RENDER_CORRECTNESS_VERSION);
         assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
     }
