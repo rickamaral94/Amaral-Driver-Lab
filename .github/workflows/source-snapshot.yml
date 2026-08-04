@@ -21,6 +21,7 @@ jobs:
           path: |
             .github
             app
+            telemetry-sdk
             docs
             README.md
             build.gradle

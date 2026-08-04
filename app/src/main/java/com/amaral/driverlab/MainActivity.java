@@ -227,8 +227,15 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         phase6Button.setText("CAMPANHAS DE REGRESSÃO · FASE 6");
         phase6Button.setOnClickListener(view ->
                 startActivity(new Intent(this, CampaignActivity.class)));
-        root.addView(phase6Button, margins(0, 0, 0, 20));
+        root.addView(phase6Button, margins(0, 0, 0, 6));
         controls.add(phase6Button);
+
+        Button phase9Button = new Button(this);
+        phase9Button.setText("TELEMETRIA DE EMULADORES · FASE 9");
+        phase9Button.setOnClickListener(view ->
+                startActivity(new Intent(this, TelemetryActivity.class)));
+        root.addView(phase9Button, margins(0, 0, 0, 20));
+        controls.add(phase9Button);
 
         root.addView(text("4. GitHub Issues", 19, true), margins(0, 0, 0, 8));
         ownerInput = textInput("Owner", preferences.getString("github_owner", "rickamaral94"));

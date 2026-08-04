@@ -2,13 +2,13 @@
 
 Cada suíte grava `files/runs/suite-<timestamp>/suite.json`. Cada processo isolado grava um `phase-*.json`; workloads de correção também preservam um `phase-*.png` lossless como evidência visual.
 
-## Versão atual: `schema_version = 9`
+## Versão atual: `schema_version = 10`
 
-A versão 9 é uma evolução **aditiva e compatível** das versões anteriores. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
+A versão 10 é uma evolução **aditiva e compatível** das versões anteriores. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
 
 | Campo | Significado |
 |---|---|
-| `schema_version` | Versão do formato do resultado; atualmente `9` |
+| `schema_version` | Versão do formato do resultado; atualmente `10` |
 | `suite_id` | Identificador local imutável da suíte |
 | `app_version` | Versão do APK que gerou o resultado |
 | `mode` | `system_only`, `candidate_only` ou `ab_system_vs_candidate` |
@@ -459,3 +459,30 @@ A métrica primária é `p99_gpu_frame_ms`, menor é melhor. O veredito estatís
 O perfil `turnip_full_qualification/v2` possui 13 etapas e inclui as três cenas. `turnip_full_qualification/v1` continua válido e importável; seus relatórios e rankings nunca são misturados aos de v2. `render_correctness_offscreen/v1`, os workloads da Fase 2, os traces da Fase 5 e `analysis_version = 1` permanecem inalterados.
 
 Limitação: as cenas são cargas Vulkan próprias, não capturas de jogos. A superfície Android e o swapchain fazem parte do caminho medido, mas CPU de emulador, I/O, compositor do jogo e shaders reais não são reproduzidos. Veja [PHASE8_VISIBLE_VULKAN_SCENES.md](PHASE8_VISIBLE_VULKAN_SCENES.md).
+
+## Fase 9: `schema_version = 10`
+
+A versão 10 não redefine workloads, traces, cenas visuais ou análise estatística. Ela adiciona a novas suítes somente o contrato informativo da telemetria de emuladores:
+
+```json
+{
+  "schema_version": 10,
+  "phase9_contract": {
+    "telemetry_import_version": 1,
+    "telemetry_summary_version": 1,
+    "telemetry_comparison_version": 1,
+    "telemetry_link_version": 1,
+    "game_identity_sha256_only": true,
+    "source_session_immutable": true,
+    "suite_link_sidecar_only": true,
+    "automatic_upload": false,
+    "included_in_full_qualification_score": false
+  }
+}
+```
+
+A sessão externa usa schema próprio (`emulator_telemetry_schema_version = 1`) e não é inserida dentro de `suite.json`. O vínculo opcional é salvo separadamente em `suite-link.json`, protegido pelos hashes canônicos da sessão e da suíte.
+
+Resultados schema 10 continuam comparáveis com schema 1–9 quando hardware, `workload_id`, `workload_version`, `workload_config`, trace/scene e `analysis_version` coincidirem. Full Qualification v1 e v2 permanecem em séries separadas pelas versões de perfil já existentes.
+
+Telemetria real não entra em ranking sintético, bisect, campanha ou score Full. Veja [PHASE9_EMULATOR_TELEMETRY.md](PHASE9_EMULATOR_TELEMETRY.md).

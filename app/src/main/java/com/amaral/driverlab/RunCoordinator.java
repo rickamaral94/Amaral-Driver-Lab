@@ -363,6 +363,7 @@ final class RunCoordinator {
                     && qualificationContext.optInt("profile_version", 1)
                             >= Phase8Contract.CURRENT_FULL_PROFILE_VERSION
                     ? Phase8Contract.contractJson() : JSONObject.NULL);
+            report.put("phase9_contract", Phase9Contract.contractJson());
             report.put("qualification_context", qualificationContext == null
                     ? JSONObject.NULL : qualificationContext);
             report.put("hardware_identity", HardwareIdentity.fromReport(report));
