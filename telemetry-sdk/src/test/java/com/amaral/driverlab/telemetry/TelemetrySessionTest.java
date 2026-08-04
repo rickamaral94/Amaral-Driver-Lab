@@ -12,7 +12,7 @@ public class TelemetrySessionTest {
     private static final String HASH = "a".repeat(64);
 
     @Test
-    public void builderProducesValidVersionedBundle() {
+    public void builderProducesValidVersionedBundle() throws Exception {
         TelemetrySession session = TelemetrySession.builder(
                         "Eden adapter", "1.0", "Eden", "org.eden.emulator", "0.3", HASH, "switch")
                 .sessionId("123e4567-e89b-12d3-a456-426614174000")
