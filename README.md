@@ -103,7 +103,7 @@ O APK executa código nativo do ZIP. Use somente pacotes próprios ou hashes ver
 
 ## Esquema de resultados
 
-A versão atual usa `schema_version = 7`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
+A versão atual usa `schema_version = 8`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
 
 Mudanças na geometria, SPIR-V, ordem dos draws, resolução, formato, cálculo ou regra padrão de comparação exigem uma nova `workload_version`.
 
@@ -133,7 +133,7 @@ Siga [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md). Sem GitHub App config
 
 ## Estado do projeto
 
-As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance. A Fase 6 executa matrizes de drivers × workloads/traces com plano imutável, retomada segura e rankings separados por chave comparável.
+As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance. A Fase 6 executa matrizes de drivers × workloads/traces com plano imutável, retomada segura e rankings separados por chave comparável. A Fase 7 adiciona o Teste Full Recomendado, recomendação geral com gate de compatibilidade e pacote completo de diagnóstico.
 
 
 ## Fase 3: comparação estatística
@@ -179,3 +179,9 @@ Cada braço é executado em um processo novo. A saída binária recebe SHA-256, 
 Abra **CAMPANHAS DE REGRESSÃO · FASE 6** para selecionar até 8 drivers e até 8 workloads/traces. Cada combinação vira uma suíte A/B completa. O agendador rotaciona a posição dos candidatos, aplica cooldown entre jobs e salva um `campaign.json` com plano imutável e SHA-256 canônico.
 
 Uma campanha interrompida pode ser retomada; o job que estava em execução volta para `pending` e é repetido. Ao final, rankings são gerados separadamente para cada hardware/workload/versão/configuração. Não existe vencedor ou score agregado entre workloads diferentes. Veja [docs/PHASE6_AUTOMATED_CAMPAIGNS.md](docs/PHASE6_AUTOMATED_CAMPAIGNS.md).
+
+## Fase 7: Teste Full Recomendado
+
+O botão **TESTE FULL RECOMENDADO · FASE 7** executa o perfil imutável `turnip_full_qualification/v1`: todos os workloads e traces oficiais, correção visual antes e depois da carga, preflight ambiental, pausa/retomada, índice de qualificação, recomendação clara e um `diagnostic-bundle.zip` com relatório HTML, JSONs, resultados brutos, PNGs e hashes.
+
+O índice geral é um resumo versionado para facilitar decisão; as métricas científicas individuais continuam separadas. Falhas de compatibilidade ou validade sempre bloqueiam a recomendação, mesmo quando o candidato é mais rápido em algum teste. Veja [docs/PHASE7_FULL_QUALIFICATION.md](docs/PHASE7_FULL_QUALIFICATION.md).

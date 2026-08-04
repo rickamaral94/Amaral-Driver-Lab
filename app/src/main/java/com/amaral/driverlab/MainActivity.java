@@ -203,6 +203,13 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         root.addView(runButton, margins(0, 4, 0, 8));
         controls.add(runButton);
 
+        Button phase7Button = new Button(this);
+        phase7Button.setText("★ TESTE FULL RECOMENDADO · FASE 7");
+        phase7Button.setOnClickListener(view ->
+                startActivity(new Intent(this, QualificationActivity.class)));
+        root.addView(phase7Button, margins(0, 0, 0, 8));
+        controls.add(phase7Button);
+
         Button phase4Button = new Button(this);
         phase4Button.setText("HISTÓRICO · DIFF · RANKING · BISECT");
         phase4Button.setOnClickListener(view ->

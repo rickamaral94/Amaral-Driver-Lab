@@ -29,6 +29,12 @@ final class JsonCanonicalizer {
         return hex.toString();
     }
 
+    static String sha256WithoutKey(JSONObject value, String key) throws Exception {
+        JSONObject copy = new JSONObject(value.toString());
+        copy.remove(key);
+        return sha256(copy);
+    }
+
     private static String canonicalObject(JSONObject object) {
         List<String> keys = new ArrayList<>();
         Iterator<String> iterator = object.keys();

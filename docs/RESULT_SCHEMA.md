@@ -2,13 +2,13 @@
 
 Cada suíte grava `files/runs/suite-<timestamp>/suite.json`. Cada processo isolado grava um `phase-*.json`; workloads de correção também preservam um `phase-*.png` lossless como evidência visual.
 
-## Versão atual: `schema_version = 7`
+## Versão atual: `schema_version = 8`
 
-A versão 7 é uma evolução **aditiva e compatível** das versões anteriores. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
+A versão 8 é uma evolução **aditiva e compatível** das versões anteriores. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
 
 | Campo | Significado |
 |---|---|
-| `schema_version` | Versão do formato do resultado; atualmente `7` |
+| `schema_version` | Versão do formato do resultado; atualmente `8` |
 | `suite_id` | Identificador local imutável da suíte |
 | `app_version` | Versão do APK que gerou o resultado |
 | `mode` | `system_only`, `candidate_only` ou `ab_system_vs_candidate` |
@@ -380,3 +380,34 @@ Execuções manuais gravam esses campos como `null`. O `campaign.json` possui sc
 Resultados schema 7 continuam comparáveis com schema 1–6 quando hardware, workload, versão, configuração e `analysis_version` forem idênticos. A campanha não cria score composto entre workloads.
 
 Veja [PHASE6_AUTOMATED_CAMPAIGNS.md](PHASE6_AUTOMATED_CAMPAIGNS.md).
+
+## Fase 7: `schema_version = 8`
+
+A versão 8 adiciona contexto opcional de Full Qualification sem redefinir workloads ou métricas:
+
+```json
+{
+  "schema_version": 8,
+  "phase7_contract": {
+    "qualification_schema_version": 1,
+    "qualification_profile_id": "turnip_full_qualification",
+    "qualification_profile_version": 1,
+    "qualification_report_version": 1,
+    "qualification_score_version": 1,
+    "diagnostic_bundle_version": 1
+  },
+  "qualification_context": {
+    "qualification_id": "qualification-1700000000000",
+    "profile_sha256": "<64 hex>",
+    "step_id": "stable_scene",
+    "step_ordinal": 6,
+    "step_count": 10,
+    "score_weight": 20,
+    "compatibility_gate": false
+  }
+}
+```
+
+Execuções manuais e campanhas da Fase 6 gravam esses campos como `null`. O arquivo `qualification.json` possui schema próprio e referencia as suítes individuais. O `report.json` contém o gate de compatibilidade, o índice geral, a recomendação e o ranking local por mesmo hardware e mesmo `profile_sha256`.
+
+O índice Full não substitui as métricas originais e não pode ser comparado entre versões diferentes do perfil. Veja [PHASE7_FULL_QUALIFICATION.md](PHASE7_FULL_QUALIFICATION.md).
