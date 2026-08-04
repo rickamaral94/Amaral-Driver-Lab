@@ -256,7 +256,7 @@ final class QualificationCoordinator {
                     QualificationHistory.leaderboard(activity.getFilesDir(), report));
             ResultFiles.writeAtomic(reportFile, report.toString(2));
             ResultFiles.writeAtomic(new File(directory, "summary.html"),
-                    HtmlReportRenderer.render(report));
+                    LocalizedReportRenderer.render(activity, report));
             JSONObject bundle = DiagnosticBundle.create(
                     activity.getFilesDir(), qualificationFile, manifest, report);
             QualificationStore.finish(manifest, finalEnvironment, comparison, report, bundle);

@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class TelemetryActivity extends Activity {
+public final class TelemetryActivity extends LocalizedActivity {
     private static final int REQUEST_IMPORT_SESSION = 9001;
     private static final int REQUEST_EXPORT_SESSION = 9002;
 
@@ -111,19 +111,19 @@ public final class TelemetryActivity extends Activity {
         List<String> sessionLabels = new ArrayList<>();
         for (TelemetrySessionRecord record : sessions) sessionLabels.add(record.displayLabel());
         if (sessionLabels.isEmpty()) sessionLabels.add("Nenhuma sessão importada");
-        ArrayAdapter<String> sessionAdapter = new ArrayAdapter<>(this,
+        ArrayAdapter<String> sessionAdapter = new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, sessionLabels);
         sessionSpinner.setAdapter(sessionAdapter);
-        leftSpinner.setAdapter(new ArrayAdapter<>(this,
+        leftSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, sessionLabels));
-        rightSpinner.setAdapter(new ArrayAdapter<>(this,
+        rightSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, sessionLabels));
         if (sessions.size() > 1) rightSpinner.setSelection(1);
 
         List<String> suiteLabels = new ArrayList<>();
         for (SuiteRecord suite : suites) suiteLabels.add(suite.displayLabel());
         if (suiteLabels.isEmpty()) suiteLabels.add("Nenhuma suíte local disponível");
-        suiteSpinner.setAdapter(new ArrayAdapter<>(this,
+        suiteSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, suiteLabels));
         status.setText(sessions.size() + " sessão(ões) · " + suites.size()
                 + " suíte(s) disponíveis · nenhum envio automático");

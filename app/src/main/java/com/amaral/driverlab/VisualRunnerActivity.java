@@ -41,7 +41,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public final class VisualRunnerActivity extends Activity implements SurfaceHolder.Callback {
+public final class VisualRunnerActivity extends LocalizedActivity implements SurfaceHolder.Callback {
     private static final int MAX_RAW_BYTES = 32 * 1024 * 1024;
     private static final int[] CHECKPOINT_FRAMES = {30, 90, 150};
 

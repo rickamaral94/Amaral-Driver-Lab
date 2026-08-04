@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Amaral Driver Lab</string>
+    <string name="language_system">システム言語を使用</string>
+    <string name="language_portuguese_brazil">Português do Brasil</string>
+    <string name="language_english">English</string>
+    <string name="language_spanish">Español</string>
+    <string name="language_french">Français</string>
+    <string name="language_german">Deutsch</string>
+    <string name="language_italian">Italiano</string>
+    <string name="language_japanese">日本語</string>
+    <string name="language_chinese_simplified">简体中文</string>
+    <string name="language_selector_title">言語</string>
+    <string name="language_selector_content_description">アプリの言語を変更</string>
+    <string name="action_cancel">キャンセル</string>
+    <string name="report_title">Amaral Driver Lab・Full Qualification</string>
+    <string name="report_result">結果</string>
+    <string name="report_driver">ドライバー</string>
+    <string name="report_performance">パフォーマンス</string>
+    <string name="report_compatibility">互換性</string>
+    <string name="report_weighted_gain">加重改善</string>
+    <string name="report_confidence">信頼度</string>
+    <string name="report_results_by_area">領域別結果</string>
+    <string name="report_area">領域</string>
+    <string name="report_status">ステータス</string>
+    <string name="report_gain">改善</string>
+    <string name="report_weight">重み</string>
+    <string name="report_compatibility_gate">互換性ゲート</string>
+    <string name="report_approved">合格。</string>
+    <string name="report_unavailable">利用不可</string>
+    <string name="report_unknown_driver">不明</string>
+    <string name="report_candidate_driver">候補</string>
+    <string name="phase12_label">フェーズ12・完全な多言語化</string>
+    <string-array name="legacy_ui_translation">
+        <item>Turnip/stock・正確性を優先・クリーンなプロセス・再現可能な証拠</item>
+        <item>1. ドライバー</item>
+        <item>ADRENOTOOLS ZIPをインポート</item>
+        <item>ドライバーがインポートされていません。</item>
+        <item>ドライバー未インポート</item>
+        <item>2. ワークロード</item>
+        <item>オフスクリーン正確性 v1・高速</item>
+        <item>可視シーン：ジオメトリと深度 v1</item>
+        <item>可視シーン：プロシージャル素材 v1</item>
+        <item>可視シーン：ポストプロセス v1</item>
+        <item>Vulkanトレース再生 v1</item>
+        <item>シェーダーコンパイル v1</item>
+        <item>レンダーパス / タイリング v1</item>
+        <item>算術コンピュート v1</item>
+        <item>安定フレームタイム v1</item>
+        <item>熱持続性能 v1</item>
+        <item>fill/copy転送 v1・レガシー</item>
+        <item>RGBA許容値</item>
+        <item>最大相違ブロック数</item>
+        <item>3. プロトコル</item>
+        <item>A/B・システム × 候補</item>
+        <item>候補のみ</item>
+        <item>システムのみ</item>
+        <item>ウォームアップ（秒）</item>
+        <item>測定（秒）</item>
+        <item>ラウンド</item>
+        <item>▶ テスト開始</item>
+        <item>★ 推奨フルテスト・フェーズ11 / プロファイルv3</item>
+        <item>履歴・DIFF・ランキング・BISECT</item>
+        <item>回帰キャンペーン・フェーズ6</item>
+        <item>エミュレーターテレメトリ・フェーズ9</item>
+        <item>Turnip詳細診断・フェーズ10</item>
+        <item>4. GitHub Issue</item>
+        <item>リポジトリ</item>
+        <item>完了時にIssueを自動作成</item>
+        <item>最新Issueを送信 / 開く</item>
+        <item>最新JSONをエクスポート</item>
+        <item>ステータス</item>
+        <item>準備完了。</item>
+        <item>ネイティブコードをインポート</item>
+        <item>キャンセル</item>
+        <item>ZIPを選択</item>
+        <item>meta.json、SHA-256、ライブラリを検証中…</item>
+        <item>インポート済み：</item>
+        <item>インポート拒否：</item>
+        <item>スイート完了</item>
+        <item>GitHub接続済み</item>
+        <item>維持</item>
+        <item>切断</item>
+        <item>GitHub Appなしのビルド</item>
+        <item>GitHubを承認</item>
+        <item>閉じる</item>
+        <item>GitHubを開く</item>
+        <item>GitHubへの接続に成功しました。</item>
+        <item>送信できる結果はまだありません。</item>
+        <item>GitHub Issueを作成中…</item>
+        <item>Issueを作成しました</item>
+        <item>エクスポートするJSONはまだありません。</item>
+        <item>JSONをエクスポートしました。</item>
+        <item>GITHUBに接続</item>
+        <item>GITHUB接続済み</item>
+        <item>推奨フルテスト・フェーズ11</item>
+        <item>候補ドライバー</item>
+        <item>▶ 推奨フルテスト開始</item>
+        <item>未完了のフルテストを再開</item>
+        <item>現在のステップ後に一時停止</item>
+        <item>フルログをエクスポート (.ZIP)</item>
+        <item>結果を更新</item>
+        <item>メイン画面でドライバーをインポートしてください</item>
+        <item>推奨外の条件</item>
+        <item>それでも実行</item>
+        <item>未完了のフルテストはありません。</item>
+        <item>実行中のフルテストはありません。</item>
+        <item>結果</item>
+        <item>フルパッケージはまだ利用できません。</item>
+        <item>フルログをエクスポートしました。</item>
+        <item>フェーズ6・回帰キャンペーン</item>
+        <item>1. 候補ドライバー</item>
+        <item>2. ワークロードとトレース</item>
+        <item>3. A/Bプロトコル</item>
+        <item>キャンペーンを作成して開始</item>
+        <item>未完了キャンペーンを再開</item>
+        <item>現在のジョブ後に一時停止</item>
+        <item>CAMPAIGN.JSONをエクスポート</item>
+        <item>マニフェストを更新</item>
+        <item>キャンペーンが読み込まれていません。</item>
+        <item>フェーズ4・履歴と回帰</item>
+        <item>SUITE.JSONをインポート</item>
+        <item>フィルター</item>
+        <item>最新</item>
+        <item>最大改善</item>
+        <item>ドライバー名</item>
+        <item>選択項目を比較</item>
+        <item>グループランキング</item>
+        <item>シーケンスBISECT</item>
+        <item>匿名エンベロープをエクスポート</item>
+        <item>履歴を読み込み中…</item>
+        <item>すべてのワークロード</item>
+        <item>分析完了。</item>
+        <item>フェーズ9・エミュレーターテレメトリ</item>
+        <item>SESSION.JSONをインポート</item>
+        <item>SDK v1契約を表示</item>
+        <item>選択されたセッション</item>
+        <item>セッション + 要約 + リンクをエクスポート</item>
+        <item>選択したスイートにリンク</item>
+        <item>記述的A/B比較</item>
+        <item>システム × 候補を比較</item>
+        <item>読み込み中…</item>
+        <item>セッション未インポート</item>
+        <item>Turnip詳細診断・フェーズ10</item>
+        <item>フォーマット行列、シェーダー/キャッシュ、メモリ、同期、A/B Soak Test。</item>
+        <item>Soakサイクル</item>
+        <item>メモリ上限（MiB）</item>
+        <item>▶ A/B詳細診断</item>
+        <item>♻ A/B SOAK TEST</item>
+        <item>完全パッケージをエクスポート (.ZIP)</item>
+        <item>フェーズ10契約を表示</item>
+        <item>有効なTurnipドライバーをインポートして選択してください。</item>
+        <item>フェーズ10完了。</item>
+        <item>パッケージをエクスポートしました。</item>
+        <item>保存先を利用できません</item>
+        <item>エクスポート失敗：</item>
+        <item>不明な障害</item>
+        <item>ライブラリ：</item>
+        <item>
+SHA-256：</item>
+        <item>APKはこのZIP内の.soライブラリを実行します。次のドライバーのみインポートしてください：</item>
+        <item>ウォームアップ</item>
+        <item>測定</item>
+        <item>最大相違ブロック数</item>
+        <item>・正確性 合格</item>
+        <item>・正確性 不合格</item>
+        <item>・実行失敗</item>
+        <item>・A/B参照なし</item>
+        <item>・ピクセル %.4f%%</item>
+        <item>・相違ブロック </item>
+        <item>
+拡張：+</item>
+        <item>・障害イベント </item>
+        <item>・チェックポイント 合格</item>
+        <item>・視覚的相違</item>
+        <item>・最小ピクセル %.4f%%</item>
+        <item>・不一致 </item>
+        <item>・P99中央値改善 %+.2f%%</item>
+        <item>・再現可能な出力</item>
+        <item>・出力相違</item>
+        <item>・ペア </item>
+        <item>・中央値改善 %+.2f%%</item>
+        <item>・95%%信頼区間 [%+.2f, %+.2f]</item>
+        <item>・候補 %+.2f%%</item>
+        <item>トークンはAndroid Keystoreで保護されています。</item>
+        <item>ビルドでGITHUB_CLIENT_IDを設定してください。それまではIssueボタンが</item>
+        <item>認証情報を保存せずブラウザーで下書きを開きます。</item>
+        <item>GitHubアクセスコードを要求中…</item>
+        <item>GitHubコード</item>
+        <item>コードをコピーしました：</item>
+        <item>
+
+権限は結果リポジトリに限定してください：</item>
+        <item>および Issues: write。</item>
+        <item>コードの承認待ち：</item>
+        <item>GitHub：</item>
+        <item>下書きを開けませんでした：</item>
+        <item>Issue作成：</item>
+        <item>結果は保存されましたが送信に失敗しました：</item>
+        <item>エクスポート失敗：</item>
+        <item> が無効</item>
+        <item> は次の範囲内である必要があります：</item>
+        <item> と </item>
+        <item>可視シーン、従来の全テスト、詳細診断、短時間Soak、完全なバンドルを含むFull v3を実行します。</item>
+        <item>不変プロファイル：</item>
+        <item> オーケストレーションブロック・</item>
+        <item> 自動テスト・</item>
+        <item>任意の実機証拠1件。
+詳細診断：128 MiB・短時間Soak：5サイクル。
+
+</item>
+        <item>先に有効なTurnipドライバーをインポートしてください。</item>
+        <item>診断目的で実行できますが、</item>
+        <item>ランキング対象外になります。
+
+</item>
+        <item>事前チェック失敗：</item>
+        <item>フルテスト作成失敗：</item>
+        <item>qualification.json読み取り失敗：</item>
+        <item>
+ステップ：</item>
+        <item> 完了・</item>
+        <item> 失敗・</item>
+        <item> 保留
+プロファイルSHA-256：</item>
+        <item>
+
+パフォーマンス指数：</item>
+        <item> / 100
+互換性指数：</item>
+        <item> / 100
+加重改善：</item>
+        <item>
+信頼度：</item>
+        <item>利用不可</item>
+        <item>
+勝者：</item>
+        <item>
+
+ブロッカー：</item>
+        <item>
+
+ローカルランキング：#</item>
+        <item> / </item>
+        <item>更新しましたがプレビューに失敗：</item>
+        <item>
+フルテスト完了。完全ログをエクスポートできます。</item>
+        <item>テスト完了：</item>
+        <item>クールダウン（秒）</item>
+        <item>先にメイン画面でドライバーをインポートしてください。</item>
+        <item>
+SHA-256 </item>
+        <item>クールダウン</item>
+        <item>1～</item>
+        <item> 個のドライバー</item>
+        <item> ワークロード/トレース</item>
+        <item>未完了キャンペーンはありません。</item>
+        <item>実行中のキャンペーンはありません。</item>
+        <item>campaign.json読み取り失敗：</item>
+        <item>ジョブ：</item>
+        <item> 失敗・</item>
+        <item> 実行中・</item>
+        <item> 保留・合計 </item>
+        <item>
+プランSHA-256：</item>
+        <item>campaign.jsonはありません。</item>
+        <item>campaign.jsonをエクスポートしました。</item>
+        <item>キャンペーンを更新しましたがプレビュー失敗：</item>
+        <item>
+キャンペーン完了。ランキングは比較可能グループごとに分離されます。</item>
+        <item>キャンペーン完了：</item>
+        <item>有効性がブロックされたスイートを含める</item>
+        <item>並列比較</item>
+        <item>すべての端末 / SoC / GPU</item>
+        <item>フィルターに一致するスイートはありません</item>
+        <item> スイートを索引化・</item>
+        <item> 表示</item>
+        <item>Diff利用不可：</item>
+        <item>ランキング利用不可：</item>
+        <item>フィルター済みシーケンスなし</item>
+        <item>Bisect利用不可：</item>
+        <item>整合性署名失敗</item>
+        <item>公開データセットをエクスポート</item>
+        <item>エンベロープは端末モデル、フィンガープリント、ローカルパスを削除します。</item>
+        <item>SoC、GPU、ワークロード、設定、ZIPハッシュは保持され、</item>
+        <item>相関可能です。自動送信は行われません。</item>
+        <item>エクスポート</item>
+        <item>エンベロープ拒否：</item>
+        <item>ファイル利用不可</item>
+        <item>スイートをインポート：</item>
+        <item>公開エンベロープをエクスポートし署名を検証しました。</item>
+        <item>有効なスイートを選択</item>
+        <item>・ブロック済み</item>
+        <item> スイート</item>
+        <item>suite.jsonが2 MiBを超えています</item>
+        <item>ローカルスイートへの不変リンク</item>
+        <item>ローカルスイートなし</item>
+        <item> セッション・</item>
+        <item> スイート利用可能・自動アップロードなし</item>
+        <item>プライバシー、バージョン、制限、SHA-256を検証中…</item>
+        <item>セッションをインポート：</item>
+        <item>SDKとローカルインポートの公開契約。</item>
+        <item>契約利用不可：</item>
+        <item>SDK v1が生成したsession.jsonをインポートしてください。</item>
+        <item>履歴互換の記述的比較。</item>
+        <item>比較利用不可：</item>
+        <item>リンク拒否：</item>
+        <item>エクスポート利用不可：</item>
+        <item>エクスポート完了。アップロードは行われていません。</item>
+        <item>エクスポート失敗：</item>
+        <item>ローカルスイートなし</item>
+        <item>
+モード：</item>
+        <item>
+プロファイル：</item>
+        <item>
+
+判定：</item>
+        <item>
+比較可能：</item>
+        <item>
+ブロッカー：</item>
+        <item>
+警告：</item>
+        <item>
+
+フォーマット回帰：</item>
+        <item>
+フォーマット追加：</item>
+        <item>
+コールドパイプライン：%s%%
+ウォームパイプライン：%s%%</item>
+        <item>フェーズ10パッケージはありません。</item>
+    </string-array>
+</resources>

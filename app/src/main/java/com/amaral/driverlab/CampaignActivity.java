@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-public final class CampaignActivity extends Activity implements CampaignCoordinator.Listener {
+public final class CampaignActivity extends LocalizedActivity implements CampaignCoordinator.Listener {
     private static final int REQUEST_EXPORT_CAMPAIGN = 6001;
 
     private static final class WorkloadOption {
