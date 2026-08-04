@@ -181,6 +181,10 @@ Novos:
 - testes JVM e CI Android/nativa aprovados;
 - APK separado, SHA-256 e checklist físico do Odin 2 Portal.
 
+## Validação automatizada
+
+A CI deve executar sobre o commit final da branch, sem arquivos auxiliares de implantação, e validar recursos multilíngues, contratos JVM, compilação Java, toolchain nativa Vulkan e geração do APK arm64.
+
 ## Comparabilidade
 
 A Fase 13 não cria uma nova série de resultados. `schema_version`, perfis Full, IDs de workload, hashes, métricas, gates, pesos e enums técnicos permanecem os mesmos da Fase 12. Alterações de apresentação não entram como chave de comparação.
