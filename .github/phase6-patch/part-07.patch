@@ -1,0 +1,336 @@
+diff --git a/app/src/test/java/com/amaral/driverlab/CampaignStoreTest.java b/app/src/test/java/com/amaral/driverlab/CampaignStoreTest.java
+new file mode 100644
+index 0000000..b989cf9
+--- /dev/null
++++ b/app/src/test/java/com/amaral/driverlab/CampaignStoreTest.java
+@@ -0,0 +1,73 @@
++package com.amaral.driverlab;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++import org.junit.Rule;
++import org.junit.Test;
++import org.junit.rules.TemporaryFolder;
++
++import java.io.File;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++
++public final class CampaignStoreTest {
++    @Rule public final TemporaryFolder temporary = new TemporaryFolder();
++
++    @Test
++    public void interruptedRunningJobReturnsToPendingAndIsNeverApproved() throws Exception {
++        File filesDir = temporary.newFolder("files");
++        JSONObject campaign = campaign("campaign-1700000000100", Phase4TestData.sha('a'));
++        File file = CampaignStore.create(filesDir, campaign);
++        CampaignStore.markCampaignRunning(campaign);
++        CampaignStore.markRunning(campaign, "job-001");
++        CampaignStore.save(file, campaign);
++
++        JSONObject reloaded = CampaignStore.load(file);
++        assertEquals(1, CampaignStore.recoverInterrupted(reloaded));
++        JSONObject state = CampaignStore.stateFor(reloaded, "job-001");
++        assertEquals("pending", state.getString("status"));
++        assertEquals(1, state.getInt("attempt_count"));
++        assertTrue(state.isNull("verdict"));
++        assertEquals(1, reloaded.getJSONObject("execution").getInt("recovery_count"));
++    }
++
++    @Test
++    public void completedJobIsNotReopenedByRecovery() throws Exception {
++        File filesDir = temporary.newFolder("files-complete");
++        String sha = Phase4TestData.sha('a');
++        JSONObject campaign = campaign("campaign-1700000000101", sha);
++        File campaignFile = CampaignStore.create(filesDir, campaign);
++        CampaignStore.markCampaignRunning(campaign);
++        CampaignStore.markRunning(campaign, "job-001");
++
++        File suiteFile = new File(filesDir, "runs/suite-a/suite.json");
++        JSONObject report = Phase4TestData.report("suite-a", sha, "A", 4.0,
++                "candidate_better", 1700000000200L);
++        ResultFiles.writeAtomic(suiteFile, report.toString(2));
++        CampaignStore.markCompleted(filesDir, campaign, "job-001", suiteFile, report);
++        CampaignStore.save(campaignFile, campaign);
++
++        assertEquals(0, CampaignStore.recoverInterrupted(campaign));
++        assertEquals("completed", CampaignStore.stateFor(campaign, "job-001")
++                .getString("status"));
++    }
++
++    private static JSONObject campaign(String id, String sha) throws Exception {
++        JSONArray drivers = new JSONArray().put(new JSONObject()
++                .put("candidate_sha256", sha)
++                .put("candidate_label", "Driver A")
++                .put("library_name", "libvulkan_freedreno.so"));
++        JSONArray workloads = new JSONArray().put(new CampaignWorkload(
++                WorkloadContract.COMPUTE_ARITHMETIC_ID, "").toJson());
++        JSONObject protocol = new JSONObject()
++                .put("mode", "ab_system_vs_candidate")
++                .put("rounds", 5)
++                .put("warmup_seconds", 3)
++                .put("measure_seconds", 10)
++                .put("cooldown_seconds", 0)
++                .put("pixel_tolerance", 2)
++                .put("maximum_divergent_blocks", 0);
++        return CampaignPlan.create(id, 1700000000000L, drivers, workloads, protocol);
++    }
++}
+diff --git a/app/src/test/java/com/amaral/driverlab/CampaignSummaryTest.java b/app/src/test/java/com/amaral/driverlab/CampaignSummaryTest.java
+new file mode 100644
+index 0000000..6c1205b
+--- /dev/null
++++ b/app/src/test/java/com/amaral/driverlab/CampaignSummaryTest.java
+@@ -0,0 +1,76 @@
++package com.amaral.driverlab;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++import org.junit.Rule;
++import org.junit.Test;
++import org.junit.rules.TemporaryFolder;
++
++import java.io.File;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++public final class CampaignSummaryTest {
++    @Rule public final TemporaryFolder temporary = new TemporaryFolder();
++
++    @Test
++    public void summaryRanksOnlyInsideComparableWorkloadGroup() throws Exception {
++        File filesDir = temporary.newFolder("files");
++        String shaA = Phase4TestData.sha('a');
++        String shaB = Phase4TestData.sha('b');
++        JSONObject campaign = CampaignPlan.create("campaign-1700000000300",
++                1700000000300L,
++                new JSONArray()
++                        .put(driver(shaA, "A"))
++                        .put(driver(shaB, "B")),
++                new JSONArray().put(new CampaignWorkload(
++                        WorkloadContract.COMPUTE_ARITHMETIC_ID, "").toJson()),
++                protocol());
++        CampaignStore.markCampaignRunning(campaign);
++
++        complete(filesDir, campaign, "job-001", shaA, "A", 2.0, "suite-a");
++        complete(filesDir, campaign, "job-002", shaB, "B", 7.0, "suite-b");
++        JSONObject summary = CampaignSummary.build(filesDir, campaign);
++
++        assertEquals(2, summary.getInt("completed_jobs"));
++        assertFalse(summary.getBoolean("cross_workload_score_available"));
++        assertTrue(summary.isNull("cross_workload_winner"));
++        JSONArray groups = summary.getJSONArray("groups");
++        assertEquals(1, groups.length());
++        JSONArray entries = groups.getJSONObject(0).getJSONObject("ranking")
++                .getJSONArray("entries");
++        assertEquals(2, entries.length());
++        assertEquals(shaB, entries.getJSONObject(0).getString("candidate_sha256"));
++    }
++
++    private static void complete(File filesDir, JSONObject campaign, String jobId,
++                                 String sha, String label, double score, String suiteId)
++            throws Exception {
++        CampaignStore.markRunning(campaign, jobId);
++        File suiteFile = new File(filesDir, "runs/" + suiteId + "/suite.json");
++        JSONObject report = Phase4TestData.report(suiteId, sha, label, score,
++                "candidate_better", 1700000000400L + (long) score);
++        ResultFiles.writeAtomic(suiteFile, report.toString(2));
++        CampaignStore.markCompleted(filesDir, campaign, jobId, suiteFile, report);
++    }
++
++    private static JSONObject driver(String sha, String label) throws Exception {
++        return new JSONObject()
++                .put("candidate_sha256", sha)
++                .put("candidate_label", label)
++                .put("library_name", "libvulkan_freedreno.so");
++    }
++
++    private static JSONObject protocol() throws Exception {
++        return new JSONObject()
++                .put("mode", "ab_system_vs_candidate")
++                .put("rounds", 5)
++                .put("warmup_seconds", 3)
++                .put("measure_seconds", 10)
++                .put("cooldown_seconds", 0)
++                .put("pixel_tolerance", 2)
++                .put("maximum_divergent_blocks", 0);
++    }
++}
+diff --git a/app/src/test/java/com/amaral/driverlab/Phase4TestData.java b/app/src/test/java/com/amaral/driverlab/Phase4TestData.java
+index 8ea4710..e8d86ae 100644
+--- a/app/src/test/java/com/amaral/driverlab/Phase4TestData.java
++++ b/app/src/test/java/com/amaral/driverlab/Phase4TestData.java
+@@ -9,9 +9,9 @@ final class Phase4TestData {
+     static JSONObject report(String suiteId, String sha, String name, double score,
+                              String classification, long finishedAtMs) throws Exception {
+         JSONObject report = new JSONObject();
+-        report.put("schema_version", 5);
++        report.put("schema_version", 7);
+         report.put("suite_id", suiteId);
+-        report.put("app_version", "0.4.0-alpha1");
++        report.put("app_version", "0.6.0-alpha1");
+         report.put("finished_at_ms", finishedAtMs);
+         report.put("mode", "ab_system_vs_candidate");
+         report.put("workload_id", WorkloadContract.COMPUTE_ARITHMETIC_ID);
+diff --git a/app/src/test/java/com/amaral/driverlab/WorkloadContractTest.java b/app/src/test/java/com/amaral/driverlab/WorkloadContractTest.java
+index bd5a4e3..74b300b 100644
+--- a/app/src/test/java/com/amaral/driverlab/WorkloadContractTest.java
++++ b/app/src/test/java/com/amaral/driverlab/WorkloadContractTest.java
+@@ -23,7 +23,7 @@ public final class WorkloadContractTest {
+ 
+     @Test
+     public void phaseTwoSeriesRemainVersionOneWhileSchemaAdvancesAdditively() {
+-        assertEquals(6, WorkloadContract.RESULT_SCHEMA_VERSION);
++        assertEquals(7, WorkloadContract.RESULT_SCHEMA_VERSION);
+         assertEquals(5, WorkloadContract.PHASE2_IDS.size());
+         for (String workloadId : WorkloadContract.PHASE2_IDS) {
+             assertEquals(1, WorkloadContract.versionFor(workloadId));
+@@ -64,4 +64,14 @@ public final class WorkloadContractTest {
+         assertEquals(1, WorkloadContract.COMPUTE_ARITHMETIC_VERSION);
+         assertEquals(1, WorkloadContract.STABLE_SCENE_VERSION);
+     }
++    @Test
++    public void phaseSixCampaignVersionsDoNotRedefineWorkloads() {
++        assertEquals(1, Phase6Contract.CAMPAIGN_SCHEMA_VERSION);
++        assertEquals(1, Phase6Contract.SCHEDULER_VERSION);
++        assertEquals(1, Phase6Contract.SUMMARY_VERSION);
++        assertEquals("rotating_serpentine_v1", Phase6Contract.ORDER_POLICY);
++        assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
++        assertEquals(1, WorkloadContract.COMPUTE_ARITHMETIC_VERSION);
++    }
++
+ }
+diff --git a/docs/PHASE6_AUTOMATED_CAMPAIGNS.md b/docs/PHASE6_AUTOMATED_CAMPAIGNS.md
+new file mode 100644
+index 0000000..3f220db
+--- /dev/null
++++ b/docs/PHASE6_AUTOMATED_CAMPAIGNS.md
+@@ -0,0 +1,125 @@
++# Fase 6 · Campanhas automatizadas de regressão
++
++A Fase 6 organiza várias suítes A/B existentes em uma campanha auditável. Ela não cria um novo workload e não altera métricas, shaders, traces ou regras estatísticas das Fases 1–5.
++
++## Contratos
++
++- `schema_version = 7` para suítes executadas dentro de campanha;
++- `campaign_schema_version = 1`;
++- `campaign_scheduler_version = 1`;
++- `campaign_summary_version = 1`;
++- política de ordem `rotating_serpentine_v1`;
++- máximo de 8 drivers, 8 workloads/traces e 64 jobs por campanha.
++
++Cada job é uma suíte `ab_system_vs_candidate` completa. A ordem AB/BA dentro da suíte continua sendo controlada pelo `RunCoordinator`; a Fase 6 controla somente a ordem entre candidatos e workloads.
++
++## Plano imutável
++
++Cada campanha fica em:
++
++```text
++files/campaigns/campaign-<timestamp>/campaign.json
++```
++
++O arquivo contém um bloco `plan` imutável e `plan_sha256`, calculado com a serialização JSON canônica já usada no projeto. O plano registra:
++
++- drivers e SHA-256 dos ZIPs;
++- workloads, versões e trace IDs;
++- rodadas, warm-up, medição, cooldown e tolerâncias;
++- ordem completa dos jobs;
++- posição térmica de cada candidato em cada grupo.
++
++Alterar qualquer item do plano invalida o hash e impede a retomada.
++
++## Ordem termicamente balanceada
++
++`rotating_serpentine_v1` usa uma rotação cíclica dos drivers para cada workload. Em um ciclo com quantidade de workloads igual à quantidade de drivers, cada candidato ocupa cada posição térmica uma vez. Ciclos seguintes invertem a direção da rotação.
++
++Isso reduz viés de ordem, mas não torna temperatura, bateria ou frequência constantes. O cooldown configurável ocorre entre suítes completas, não entre braços A/B da mesma suíte.
++
++## Retomada após interrupção
++
++O estado mutável fica em `execution.jobs[]`:
++
++- `pending`;
++- `running`;
++- `completed`;
++- `failed`;
++- `skipped`.
++
++Ao reabrir uma campanha, qualquer job deixado como `running` volta para `pending`. Seu `attempt_count` permanece registrado e `recovery_count` é incrementado. Um job interrompido nunca é convertido em aprovação ou resultado numérico.
++
++## Vínculo com suite.json
++
++Suítes iniciadas pela Fase 6 recebem campos aditivos:
++
++```json
++{
++  "schema_version": 7,
++  "phase6_contract": {
++    "campaign_schema_version": 1,
++    "campaign_scheduler_version": 1,
++    "campaign_summary_version": 1
++  },
++  "campaign_context": {
++    "campaign_id": "campaign-1700000000000",
++    "job_id": "job-001",
++    "job_ordinal": 1,
++    "job_count": 12,
++    "scheduler_version": 1,
++    "order_policy": "rotating_serpentine_v1",
++    "thermal_position": 1,
++    "plan_sha256": "<64 hex>"
++  }
++}
++```
++
++Suítes manuais continuam válidas e gravam `phase6_contract` e `campaign_context` como `null`.
++
++## Resumo e rankings
++
++Ao terminar, `campaign.summary` separa resultados pela chave histórica já definida na Fase 4:
++
++- hardware;
++- `workload_id` e `workload_version`;
++- `analysis_version`;
++- hash canônico de `workload_config`.
++
++Traces diferentes ficam em grupos diferentes porque sua definição faz parte de `workload_config`. Cada grupo pode gerar seu próprio ranking. A campanha grava explicitamente:
++
++```json
++{
++  "cross_workload_score_available": false,
++  "cross_workload_winner": null
++}
++```
++
++Não existe média de compute, frametime, compilação, correção e trace replay. Unidades e objetivos incompatíveis nunca são transformados em uma nota única.
++
++## Falhas bloqueantes
++
++- falha ao carregar um ZIP;
++- crash, timeout ou erro Vulkan;
++- render mismatch;
++- trace mismatch ou não determinismo;
++- suite concluída sem arquivo válido;
++- plano ou hash inválido.
++
++Jobs falhos permanecem no manifesto e não recebem valor artificial. Suítes com validade bloqueante aparecem no grupo, mas são excluídas do ranking pela mesma política da Fase 4.
++
++## Comparabilidade histórica
++
++Não há quebra nas séries anteriores. Permanecem inalterados:
++
++- `vulkan_transfer_stress/v1`;
++- `render_correctness_offscreen/v1`;
++- os cinco workloads da Fase 2, todos v1;
++- `analysis_version = 1`;
++- catálogo, diff, ranking, bisect e envelope público da Fase 4;
++- `vulkan_command_trace_replay/v1` e os dois traces v1.
++
++O incremento para `schema_version = 7` apenas adiciona contexto de campanha. Uma suíte schema 7 pode ser comparada com schema 1–6 quando a chave histórica completa for idêntica.
++
++## Limitações
++
++Campanhas ainda executam cargas sintéticas locais. A rotação reduz, mas não elimina, aquecimento, variação de bateria, processos em segundo plano e mudanças de frequência. Retomar uma campanha em outro estado térmico pode ampliar a incerteza. Nenhum ranking representa FPS ou garante compatibilidade em jogos e emuladores.
