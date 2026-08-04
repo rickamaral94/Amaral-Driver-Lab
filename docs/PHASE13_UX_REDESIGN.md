@@ -188,3 +188,11 @@ A CI deve executar sobre o commit final da branch, sem arquivos auxiliares de im
 ## Comparabilidade
 
 A Fase 13 não cria uma nova série de resultados. `schema_version`, perfis Full, IDs de workload, hashes, métricas, gates, pesos e enums técnicos permanecem os mesmos da Fase 12. Alterações de apresentação não entram como chave de comparação.
+
+## Recommended Turnip Validation v1
+
+A partir do alpha3, a primeira tela começa pela importação e seleção dos drivers e usa um perfil curto de oito etapas para a decisão diária entre Turnips: correção offscreen antes e depois da carga, três cenas visuais, compilação de shaders, frametime da cena estável e um trace misto de gráficos, compute e barreiras.
+
+Renderpass sintético isolado, compute aritmético, transferência, trace compute isolado, thermal sustain de 30 segundos, diagnóstico profundo e soak de cinco ciclos permanecem disponíveis no **Full Qualification v3 estendido**, dentro das ferramentas avançadas.
+
+O novo perfil usa `profile_version = 4` e SHA próprio. Rankings também exigem o mesmo modo de comparação e, em Turnip × Turnip, o mesmo SHA-256 de referência, evitando misturar resultados incompatíveis.

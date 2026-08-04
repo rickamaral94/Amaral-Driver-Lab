@@ -36,6 +36,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".QualificationLogActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".QualificationActivity"
             android:exported="false" />
 

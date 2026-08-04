@@ -241,3 +241,12 @@ A tela inicial agora prioriza o **Full Qualification v3**, separa Comparações,
 A identidade visual usa tokens derivados do logo Amaral, estados acessíveis com cor + ícone + texto, ajuda contextual em três níveis e suporte aos oito idiomas da Fase 12. A mudança é exclusivamente de apresentação: workloads, scores, gates, hashes, IDs técnicos e séries históricas permanecem inalterados.
 
 Veja [docs/PHASE13_UX_REDESIGN.md](docs/PHASE13_UX_REDESIGN.md), [docs/BRAND_GUIDELINES.md](docs/BRAND_GUIDELINES.md), [docs/HELP_CONTENT_GUIDE.md](docs/HELP_CONTENT_GUIDE.md) e [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md).
+
+### Fase 13 alpha2 — fluxo direto de comparação
+
+O card principal permite selecionar **Sistema × Turnip** ou **Turnip × Turnip**, escolher candidato e referência, importar o ZIP e iniciar o Full v3 diretamente. Ao finalizar, o aplicativo abre o log completo com exportação do diagnóstico e criação de issue no projeto, mantendo a área técnica opcional.
+
+
+### Refinamento do teste recomendado (alpha3)
+
+A home agora começa pela importação e seleção do candidato, da referência e do modo Sistema × Turnip ou Turnip × Turnip. O teste recomendado usa o perfil **Turnip Recommended Validation v1** de oito etapas, focado em correção visual, compatibilidade, shaders, frametime e sincronização. O Full Qualification v3 longo permanece em Ferramentas avançadas.

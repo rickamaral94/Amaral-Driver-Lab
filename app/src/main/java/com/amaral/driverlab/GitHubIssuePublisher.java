@@ -29,6 +29,139 @@ final class GitHubIssuePublisher {
         payload.put("title", issueTitle(report));
         payload.put("body", issueBody(report, true));
 
+        return postIssue(token, owner, repository, payload);
+    }
+
+    static void openDraft(Activity activity, String owner, String repository,
+                          JSONObject report) throws Exception {
+        validateRepository(owner, repository);
+        String body = issueBody(report, false);
+        if (body.length() > 1800) body = body.substring(0, 1800) + "\n\n_Result JSON salvo no aparelho._";
+        Uri uri = Uri.parse("https://github.com/" + owner + "/" + repository + "/issues/new")
+                .buildUpon()
+                .appendQueryParameter("title", issueTitle(report))
+                .appendQueryParameter("body", body)
+                .build();
+        activity.startActivity(new Intent(Intent.ACTION_VIEW, uri));
+    }
+
+
+    static String publishQualification(String token, String owner, String repository,
+                                       JSONObject manifest) throws Exception {
+        validateRepository(owner, repository);
+        JSONObject payload = new JSONObject()
+                .put("title", qualificationIssueTitle(manifest))
+                .put("body", qualificationIssueBody(manifest, true));
+        return postIssue(token, owner, repository, payload);
+    }
+
+    static void openQualificationDraft(Activity activity, String owner, String repository,
+                                       JSONObject manifest) throws Exception {
+        validateRepository(owner, repository);
+        String body = qualificationIssueBody(manifest, false);
+        if (body.length() > 5500) {
+            body = body.substring(0, 5500)
+                    + "\n\n_Log completo disponível no Amaral Driver Lab._";
+        }
+        Uri uri = Uri.parse("https://github.com/" + owner + "/" + repository + "/issues/new")
+                .buildUpon()
+                .appendQueryParameter("title", qualificationIssueTitle(manifest))
+                .appendQueryParameter("body", body)
+                .build();
+        activity.startActivity(new Intent(Intent.ACTION_VIEW, uri));
+    }
+
+    static String qualificationIssueTitle(JSONObject manifest) {
+        JSONObject report = manifest.optJSONObject("report");
+        JSONObject hardware = report == null ? null : report.optJSONObject("hardware_identity");
+        JSONObject driver = manifest.optJSONObject("driver");
+        String model = hardware == null ? Build.MODEL : hardware.optString("model", Build.MODEL);
+        String state = manifest.optJSONObject("execution") == null ? "unknown"
+                : manifest.optJSONObject("execution").optString("state", "unknown");
+        String title = "[Full v3] " + model + " · " + driverLabel(driver) + " · " + state;
+        return title.length() > 240 ? title.substring(0, 240) : title;
+    }
+
+    static String qualificationIssueBody(JSONObject manifest, boolean includeJson) {
+        JSONObject report = manifest.optJSONObject("report");
+        JSONObject score = report == null ? null : report.optJSONObject("score");
+        JSONObject human = report == null ? null : report.optJSONObject("human_summary");
+        JSONObject hardware = report == null ? null : report.optJSONObject("hardware_identity");
+        JSONObject candidate = manifest.optJSONObject("driver");
+        JSONObject reference = manifest.optJSONObject("reference_driver");
+        String mode = manifest.optString("comparison_mode", "system_vs_turnip");
+        String referenceLabel = "turnip_vs_turnip".equals(mode)
+                ? driverLabel(reference) : "Driver do sistema Android";
+        StringBuilder body = new StringBuilder();
+        body.append("## Full Qualification v3 — Amaral Driver Lab\n\n");
+        if (human != null) {
+            body.append("**").append(human.optString("headline", "Resultado")).append("**\n\n")
+                    .append(human.optString("detail", "")).append("\n\n");
+        }
+        body.append("| Campo | Valor |\n|---|---|\n")
+                .append("| Qualification | `").append(table(manifest.optString("qualification_id"))).append("` |\n")
+                .append("| Aparelho | ").append(table(hardware == null ? Build.MODEL
+                        : hardware.optString("manufacturer") + " " + hardware.optString("model"))).append(" |\n")
+                .append("| Comparação | ").append(table(referenceLabel)).append(" × ")
+                .append(table(driverLabel(candidate))).append(" |\n")
+                .append("| Modo | `").append(table(mode)).append("` |\n")
+                .append("| Candidato SHA-256 | `").append(candidate == null ? "—"
+                        : table(candidate.optString("sha256"))).append("` |\n")
+                .append("| Referência SHA-256 | `").append(reference == null ? "system"
+                        : table(reference.optString("sha256"))).append("` |\n")
+                .append("| Estado | `").append(table(manifest.optJSONObject("execution") == null
+                        ? "unknown" : manifest.optJSONObject("execution").optString("state"))).append("` |\n")
+                .append("| Etapas concluídas/falhas | ")
+                .append(QualificationStore.countStatus(manifest, "completed")).append(" / ")
+                .append(QualificationStore.countStatus(manifest, "failed")).append(" |\n");
+        if (score != null) {
+            body.append("| Índice geral | ").append(score.opt("overall_index")).append(" / 100 |\n")
+                    .append("| Performance | ").append(score.opt("performance_index")).append(" / 100 |\n")
+                    .append("| Compatibilidade | ").append(score.opt("compatibility_index")).append(" / 100 |\n")
+                    .append("| Ganho ponderado | ").append(score.opt("weighted_improvement_percent")).append("% |\n")
+                    .append("| Confiança | ").append(table(score.optString("confidence", "—"))).append(" |\n");
+            JSONArray reasons = score.optJSONArray("gate_reasons");
+            if (reasons != null && reasons.length() > 0) {
+                body.append("\n### Bloqueios e ressalvas\n\n");
+                for (int index = 0; index < reasons.length(); index++) {
+                    body.append("- ").append(reasons.optString(index)).append("\n");
+                }
+            }
+        }
+        JSONArray steps = manifest.optJSONObject("execution") == null ? null
+                : manifest.optJSONObject("execution").optJSONArray("steps");
+        if (steps != null) {
+            body.append("\n### Etapas com falha\n\n");
+            boolean any = false;
+            for (int index = 0; index < steps.length(); index++) {
+                JSONObject step = steps.optJSONObject(index);
+                if (step == null || !"failed".equals(step.optString("status"))) continue;
+                any = true;
+                JSONObject failure = step.optJSONObject("failure");
+                body.append("- `").append(step.optString("step_id")).append("`: ")
+                        .append(failure == null ? "falha sem detalhe"
+                                : failure.optString("message", "falha sem detalhe")).append("\n");
+            }
+            if (!any) body.append("- Nenhuma.\n");
+        }
+        if (includeJson) {
+            String encoded;
+            try { encoded = manifest.toString(2); }
+            catch (Exception ignored) { encoded = manifest.toString(); }
+            boolean truncated = encoded.length() > 45_000;
+            if (truncated) encoded = encoded.substring(0, 45_000);
+            body.append("\n<details><summary>qualification.json")
+                    .append(truncated ? " (parcial)" : "")
+                    .append("</summary>\n\n```json\n")
+                    .append(encoded).append("\n```\n</details>\n");
+        }
+        body.append("\n_Gerado por Amaral Driver Lab ")
+                .append(BuildConfig.VERSION_NAME).append("._");
+        return body.toString();
+    }
+
+    private static String postIssue(String token, String owner, String repository,
+                                    JSONObject payload) throws Exception {
         URL endpoint = new URL("https://api.github.com/repos/" + owner + "/"
                 + repository + "/issues");
         HttpURLConnection connection = (HttpURLConnection) endpoint.openConnection();
@@ -55,17 +188,12 @@ final class GitHubIssuePublisher {
         return new JSONObject(response).getString("html_url");
     }
 
-    static void openDraft(Activity activity, String owner, String repository,
-                          JSONObject report) throws Exception {
-        validateRepository(owner, repository);
-        String body = issueBody(report, false);
-        if (body.length() > 1800) body = body.substring(0, 1800) + "\n\n_Result JSON salvo no aparelho._";
-        Uri uri = Uri.parse("https://github.com/" + owner + "/" + repository + "/issues/new")
-                .buildUpon()
-                .appendQueryParameter("title", issueTitle(report))
-                .appendQueryParameter("body", body)
-                .build();
-        activity.startActivity(new Intent(Intent.ACTION_VIEW, uri));
+    private static String driverLabel(JSONObject driver) {
+        if (driver == null) return "—";
+        String name = driver.optString("name", "Turnip");
+        String version = driver.optString("packageVersion",
+                driver.optString("driverVersion", ""));
+        return version.isEmpty() ? name : name + " · " + version;
     }
 
     static String issueTitle(JSONObject report) {

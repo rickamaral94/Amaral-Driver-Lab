@@ -27,14 +27,17 @@ final class DeepDiagnosticsCoordinator {
     private static final class Phase {
         final boolean custom;
         final String label;
-        Phase(boolean custom) {
+        final DriverPackage driver;
+        Phase(boolean custom, DriverPackage driver) {
             this.custom = custom;
             this.label = custom ? "candidate" : "system";
+            this.driver = driver;
         }
     }
 
     private final Activity activity;
     private final DriverPackage candidate;
+    private final DriverPackage reference;
     private final String mode;
     private final int cycles;
     private final int memoryMiB;
@@ -52,8 +55,15 @@ final class DeepDiagnosticsCoordinator {
 
     DeepDiagnosticsCoordinator(Activity activity, DriverPackage candidate, String mode,
                                int cycles, int memoryMiB, Listener listener) {
+        this(activity, candidate, null, mode, cycles, memoryMiB, listener);
+    }
+
+    DeepDiagnosticsCoordinator(Activity activity, DriverPackage candidate,
+                               DriverPackage reference, String mode,
+                               int cycles, int memoryMiB, Listener listener) {
         this.activity = activity;
         this.candidate = candidate;
+        this.reference = reference;
         this.mode = "soak".equals(mode) ? "soak" : "full";
         this.cycles = Math.max(Phase10Contract.MIN_SOAK_CYCLES,
                 Math.min(cycles, Phase10Contract.MAX_SOAK_CYCLES));
@@ -67,14 +77,20 @@ final class DeepDiagnosticsCoordinator {
             if (candidate == null || !candidate.isUsable()) {
                 throw new IllegalStateException("Selecione um driver Turnip válido");
             }
+            if (reference != null && !reference.isUsable()) {
+                throw new IllegalStateException("Driver de referência inválido");
+            }
+            if (reference != null && candidate.sha256.equalsIgnoreCase(reference.sha256)) {
+                throw new IllegalStateException("Candidato e referência devem ser diferentes");
+            }
             startedAt = System.currentTimeMillis();
             directory = new File(new File(activity.getFilesDir(), "deep-diagnostics"),
                     "report-" + startedAt);
             if (!directory.mkdirs()) {
                 throw new IllegalStateException("Não foi possível criar a pasta da Fase 10");
             }
-            phases.add(new Phase(false));
-            phases.add(new Phase(true));
+            phases.add(new Phase(false, reference));
+            phases.add(new Phase(true, candidate));
             active = true;
             launchNext();
         } catch (Throwable error) {
@@ -95,7 +111,7 @@ final class DeepDiagnosticsCoordinator {
                 "phase-%02d-%s.json", phaseIndex + 1, phase.label));
         listener.onStatus(("soak".equals(mode) ? "Soak Test" : "Diagnóstico profundo")
                 + " · " + (phaseIndex + 1) + "/" + phases.size() + " · "
-                + (phase.custom ? candidate.displayName() : "driver do sistema"));
+                + (phase.driver == null ? "driver do sistema" : phase.driver.displayName()));
         Intent intent = new Intent(activity, DeepDiagnosticsRunnerActivity.class);
         intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_RESULT_PATH,
                 currentResult.getAbsolutePath());
@@ -103,14 +119,16 @@ final class DeepDiagnosticsCoordinator {
         intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_MODE, mode);
         intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_CYCLES, cycles);
         intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_MEMORY_MIB, memoryMiB);
-        if (phase.custom) {
+        intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE,
+                phase.custom ? "custom" : "system");
+        if (phase.driver != null) {
             intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_DIR,
-                    candidate.directory.getAbsolutePath());
+                    phase.driver.directory.getAbsolutePath());
             intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_NAME,
-                    candidate.libraryName);
+                    phase.driver.libraryName);
             intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_META,
-                    candidate.metadata.toString());
-            intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_SHA, candidate.sha256);
+                    phase.driver.metadata.toString());
+            intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_SHA, phase.driver.sha256);
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
         activity.startActivity(intent);
@@ -151,7 +169,8 @@ final class DeepDiagnosticsCoordinator {
                     .put("phase11_contract", Phase11Contract.contractJson())
                 .put("phase", phase.label)
                 .put("driver_mode", phase.custom ? "custom" : "system")
-                .put("driver_sha256", phase.custom ? candidate.sha256 : JSONObject.NULL)
+                .put("driver_sha256", phase.driver == null
+                        ? JSONObject.NULL : phase.driver.sha256)
                 .put("success", false)
                 .put("failure_type", type)
                 .put("failure_stage", stage)
@@ -181,6 +200,10 @@ final class DeepDiagnosticsCoordinator {
                     .put("started_at_ms", startedAt)
                     .put("finished_at_ms", System.currentTimeMillis())
                     .put("candidate_driver", candidate.toJson())
+                    .put("reference_driver", reference == null
+                            ? JSONObject.NULL : reference.toJson())
+                    .put("comparison_mode", reference == null
+                            ? "system_vs_turnip" : "turnip_vs_turnip")
                     .put("phases", results)
                     .put("comparison", comparison)
                     .put("historical_comparability", new JSONObject()

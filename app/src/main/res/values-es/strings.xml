@@ -47,9 +47,9 @@
     <string name="phase13_result_in_progress">Hay una calificación en curso.</string>
     <string name="phase13_recommended_section">Prueba recomendada</string>
     <string name="phase13_status_recommended">Recomendado</string>
-    <string name="phase13_full_title">Full Qualification v3</string>
+    <string name="phase13_full_title">Prueba Turnip recomendada</string>
     <string name="phase13_full_description">La comparación más completa y guiada: corrección visual, rendimiento controlado, diagnóstico profundo y soak corto.</string>
-    <string name="phase13_full_composition">21 etapas · 5 ciclos de fiabilidad · presión de memoria de 128 MiB · telemetría real opcional</string>
+    <string name="phase13_full_composition">8 etapas enfocadas · corrección visual · shaders · frametime · trace mixto de sincronización</string>
     <string name="phase13_start_full">Iniciar prueba Full</string>
     <string name="phase13_comparisons">Comparaciones</string>
     <string name="phase13_system_vs_turnip">System × Turnip</string>
@@ -95,7 +95,7 @@
     <string name="phase13_system_driver_detail">Se usa como referencia original en el mismo dispositivo y condiciones térmicas.</string>
     <string name="phase13_candidate_driver">Candidato Turnip</string>
     <string name="phase13_no_driver_imported">Ningún controlador importado</string>
-    <string name="phase13_import_driver_instruction">Importa un ZIP AdrenoTools válido en el área técnica antes de continuar.</string>
+    <string name="phase13_import_driver_instruction">Importa un ZIP AdrenoTools válido directamente en la pantalla inicial.</string>
     <string name="phase13_driver_details_format">SHA-256: %1$s\nImportado: %2$s\nCompatibilidad conocida: %3$s</string>
     <string name="phase13_compatibility_available">disponible para esta versión de Android</string>
     <string name="phase13_compatibility_warning">requiere una API de Android más reciente</string>
@@ -160,6 +160,47 @@
     <string name="help_thermal_what">Mide el comportamiento del rendimiento y la temperatura bajo carga sostenida.</string>
     <string name="help_thermal_why">Los picos cortos pueden ocultar throttling y sesiones largas inestables.</string>
     <string name="help_thermal_how">Prefiere rendimiento estable con aumento térmico controlado en las mismas condiciones de refrigeración.</string>
+    <string name="phase13_quick_test_description">Importa o selecciona los drivers aquí y ejecuta la comparación corta recomendada sin abrir el área técnica.</string>
+    <string name="phase13_compare_against">Comparar con</string>
+    <string name="phase13_comparison_system_turnip">Controlador del sistema Android × Turnip candidato</string>
+    <string name="phase13_comparison_turnip_turnip">Turnip de referencia × Turnip candidato</string>
+    <string name="phase13_candidate_driver_label">Controlador candidato</string>
+    <string name="phase13_reference_driver_label">Controlador de referencia</string>
+    <string name="phase13_import_driver">Importar ZIP Turnip</string>
+    <string name="phase13_start_selected_test">Iniciar prueba Full seleccionada</string>
+    <string name="phase13_importing_driver">Importando y validando el controlador…</string>
+    <string name="phase13_import_success">Importado: %1$s</string>
+    <string name="phase13_import_failed">Error de importación: %1$s</string>
+    <string name="phase13_select_candidate_error">Selecciona o importa un controlador Turnip candidato válido.</string>
+    <string name="phase13_select_reference_error">Selecciona un controlador Turnip de referencia válido.</string>
+    <string name="phase13_same_driver_error">El candidato y la referencia deben ser controladores diferentes.</string>
+    <string name="phase13_open_test_log">Abrir registro de prueba</string>
+    <string name="phase13_comparison_summary_format">%1$s
+contra
+%2$s</string>
+    <string name="phase13_log_title">Registro de prueba</string>
+    <string name="phase13_log_subtitle">Resultado, evidencia técnica y envío a la incidencia del proyecto</string>
+    <string name="phase13_log_raw_title">qualification.json completo</string>
+    <string name="phase13_send_issue">Enviar a incidencia del proyecto</string>
+    <string name="phase13_issue_opened">Se abrió una incidencia prellenada en el navegador.</string>
+    <string name="phase13_issue_created">Incidencia creada: %1$s</string>
+    <string name="phase13_issue_failed">No se pudo preparar la incidencia: %1$s</string>
+    <string name="phase13_copy_log">Copiar registro completo</string>
+    <string name="phase13_log_copied">Registro completo copiado.</string>
+    <string name="phase13_export_log">Exportar ZIP de diagnóstico</string>
+    <string name="phase13_export_success">ZIP de diagnóstico exportado.</string>
+    <string name="phase13_export_failed">Error de exportación: %1$s</string>
+    <string name="phase13_back_home">Volver al inicio</string>
+    <string name="phase13_log_invalid">Este registro no está disponible o no es válido.</string>
+    <string name="phase13_issue_sending">Creando incidencia en Amaral Driver Lab…</string>
+    <string name="phase13_bundle_unavailable">El paquete de diagnóstico aún no está disponible.</string>
+    <string name="phase13_log_metrics_format">Rendimiento: %1$s / 100
+Compatibilidad: %2$s / 100
+Ganancia ponderada: %3$s
+Confianza: %4$s</string>
+    <string name="phase13_log_blockers">Bloqueos y advertencias:</string>
+    <string name="phase13_log_steps_format">Etapas: %1$d completadas · %2$d fallidas · %3$d pendientes</string>
+
     <string-array name="legacy_ui_translation">
         <item>Turnip/stock · corrección primero · proceso limpio · evidencia reproducible</item>
         <item>1. Controlador</item>
@@ -461,4 +502,7 @@ Pipeline cold: %s%%
 Pipeline warm: %s%%</item>
         <item>No hay paquete de Fase 10 disponible.</item>
     </string-array>
+    <string name="phase13_legacy_full_title">Full v3 extendido</string>
+    <string name="phase13_legacy_full_detail">Investigación avanzada larga con pruebas sintéticas, sostenimiento térmico, diagnóstico profundo y soak de cinco ciclos.</string>
+    <string name="phase13_start_legacy_full">INICIAR FULL v3 EXTENDIDO</string>
 </resources>

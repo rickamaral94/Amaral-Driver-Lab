@@ -5,79 +5,30 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-phase13-alpha3:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'agent/phase13-ux-redesign'
+  snapshot:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout PR branch
+      - name: Checkout
         uses: actions/checkout@v4
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          fetch-depth: 0
-
-      - name: Verify, apply and clean alpha3 patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -d .phase13-alpha3
-          cat .phase13-alpha3/part-*.patch > /tmp/phase13-alpha3.patch
-          echo "81bc7bff32d2d269f9ba8f6b5106da499b2d74fcc7119e52dc351eff6e9d1fa5  /tmp/phase13-alpha3.patch" | sha256sum -c -
-          git apply --check \
-            --exclude='app/src/main/java/com/amaral/driverlab/Phase13Contract.java' \
-            --exclude='docs/PHASE13_UX_REDESIGN.md' \
-            /tmp/phase13-alpha3.patch
-          git apply \
-            --exclude='app/src/main/java/com/amaral/driverlab/Phase13Contract.java' \
-            --exclude='docs/PHASE13_UX_REDESIGN.md' \
-            /tmp/phase13-alpha3.patch
-
-          cat > app/src/main/java/com/amaral/driverlab/Phase13Contract.java <<'JAVA'
-          package com.amaral.driverlab;
-
-          /** Phase 13 UX contract plus the short recommended Turnip validation profile. */
-          final class Phase13Contract {
-              static final int UX_SCHEMA_VERSION = 2;
-              static final int RESULT_SCHEMA_VERSION = WorkloadContract.RESULT_SCHEMA_VERSION;
-              static final String BASIC_MODE = "basic";
-              static final String ADVANCED_MODE = "advanced";
-              static final String SYSTEM_VS_TURNIP = "system_vs_turnip";
-              static final String TURNIP_VS_TURNIP = "turnip_vs_turnip";
-              static final boolean HOME_DIRECT_DRIVER_SELECTION = true;
-              static final boolean HOME_DIRECT_DRIVER_IMPORT = true;
-              static final boolean LOG_OPENS_AFTER_HOME_TEST = true;
-              static final int GUIDED_STEP_COUNT = 5;
-              static final boolean TECHNICAL_IDENTIFIERS_STABLE = true;
-              static final boolean RECOMMENDED_PROFILE_CHANGED = true;
-              static final boolean LEGACY_FULL_V3_PRESERVED = true;
-
-              private Phase13Contract() {}
-          }
-          JAVA
-          sed -i 's/^          //' app/src/main/java/com/amaral/driverlab/Phase13Contract.java
-
-          if ! grep -q 'Recommended Turnip Validation v1' docs/PHASE13_UX_REDESIGN.md; then
-            cat >> docs/PHASE13_UX_REDESIGN.md <<'DOC'
-
-          ## Recommended Turnip Validation v1
-
-          A partir do alpha3, a primeira tela começa pela importação e seleção dos drivers e usa um perfil curto de oito etapas para a decisão diária entre Turnips: correção offscreen antes e depois da carga, três cenas visuais, compilação de shaders, frametime da cena estável e um trace misto de gráficos, compute e barreiras.
-
-          Renderpass sintético isolado, compute aritmético, transferência, trace compute isolado, thermal sustain de 30 segundos, diagnóstico profundo e soak de cinco ciclos permanecem disponíveis no **Full Qualification v3 estendido**, dentro das ferramentas avançadas.
-
-          O novo perfil usa `profile_version = 4` e SHA próprio. Rankings também exigem o mesmo modo de comparação e, em Turnip × Turnip, o mesmo SHA-256 de referência, evitando misturar resultados incompatíveis.
-          DOC
-            sed -i '/^          ## Recommended Turnip Validation v1$/,$s/^          //' docs/PHASE13_UX_REDESIGN.md
-          fi
-
-          rm -rf .phase13-alpha3 .github/workflows/apply-phase13-alpha3.yml
-          git show f986c8cd1afa7c93b8121ebaf8efd541187c5103:.github/workflows/source-snapshot.yml > .github/workflows/source-snapshot.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "refine recommended Turnip validation flow"
-          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+          name: amaral-driver-lab-phase2-source
+          path: |
+            .github
+            app
+            telemetry-sdk
+            docs
+            README.md
+            build.gradle
+            settings.gradle
+            gradle.properties
+            gradlew
+            gradlew.bat
+            gradle
+          if-no-files-found: error
+          retention-days: 3

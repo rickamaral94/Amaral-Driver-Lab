@@ -47,9 +47,9 @@
     <string name="phase13_result_in_progress">Uma qualificação ainda está em andamento.</string>
     <string name="phase13_recommended_section">Teste recomendado</string>
     <string name="phase13_status_recommended">Recomendado</string>
-    <string name="phase13_full_title">Full Qualification v3</string>
+    <string name="phase13_full_title">Teste Turnip recomendado</string>
     <string name="phase13_full_description">A comparação mais completa e guiada: correção visual, performance controlada, diagnóstico profundo e soak curto.</string>
-    <string name="phase13_full_composition">21 etapas · 5 ciclos de confiabilidade · pressão de memória de 128 MiB · telemetria real opcional</string>
+    <string name="phase13_full_composition">8 etapas focadas · correção visual · shaders · frametime · trace misto de sincronização</string>
     <string name="phase13_start_full">Iniciar Teste Full</string>
     <string name="phase13_comparisons">Comparações</string>
     <string name="phase13_system_vs_turnip">Sistema × Turnip</string>
@@ -95,7 +95,7 @@
     <string name="phase13_system_driver_detail">Usado como referência original no mesmo aparelho e nas mesmas condições térmicas.</string>
     <string name="phase13_candidate_driver">Candidato Turnip</string>
     <string name="phase13_no_driver_imported">Nenhum driver importado</string>
-    <string name="phase13_import_driver_instruction">Importe um ZIP AdrenoTools válido na área técnica antes de continuar.</string>
+    <string name="phase13_import_driver_instruction">Importe um ZIP AdrenoTools válido diretamente na tela inicial.</string>
     <string name="phase13_driver_details_format">SHA-256: %1$s\nImportado em: %2$s\nCompatibilidade conhecida: %3$s</string>
     <string name="phase13_compatibility_available">disponível para esta versão do Android</string>
     <string name="phase13_compatibility_warning">exige uma API Android mais recente</string>
@@ -160,6 +160,47 @@
     <string name="help_thermal_what">Mede como a performance e a temperatura se comportam em carga prolongada.</string>
     <string name="help_thermal_why">Picos curtos podem esconder throttling e sessões longas instáveis.</string>
     <string name="help_thermal_how">Prefira performance estável com aumento de temperatura controlado sob as mesmas condições de refrigeração.</string>
+    <string name="phase13_quick_test_description">Importe ou selecione os drivers aqui e execute a comparação curta recomendada sem abrir a área técnica.</string>
+    <string name="phase13_compare_against">Comparar com</string>
+    <string name="phase13_comparison_system_turnip">Driver do sistema Android × Turnip candidato</string>
+    <string name="phase13_comparison_turnip_turnip">Turnip de referência × Turnip candidato</string>
+    <string name="phase13_candidate_driver_label">Driver candidato</string>
+    <string name="phase13_reference_driver_label">Driver de referência</string>
+    <string name="phase13_import_driver">Importar ZIP Turnip</string>
+    <string name="phase13_start_selected_test">Iniciar teste Full selecionado</string>
+    <string name="phase13_importing_driver">Importando e validando o driver…</string>
+    <string name="phase13_import_success">Importado: %1$s</string>
+    <string name="phase13_import_failed">Falha na importação: %1$s</string>
+    <string name="phase13_select_candidate_error">Selecione ou importe um driver Turnip candidato válido.</string>
+    <string name="phase13_select_reference_error">Selecione um driver Turnip de referência válido.</string>
+    <string name="phase13_same_driver_error">O candidato e a referência devem ser drivers diferentes.</string>
+    <string name="phase13_open_test_log">Abrir log do teste</string>
+    <string name="phase13_comparison_summary_format">%1$s
+contra
+%2$s</string>
+    <string name="phase13_log_title">Log do teste</string>
+    <string name="phase13_log_subtitle">Resultado, evidências técnicas e envio para a issue do projeto</string>
+    <string name="phase13_log_raw_title">qualification.json completo</string>
+    <string name="phase13_send_issue">Enviar para a issue do projeto</string>
+    <string name="phase13_issue_opened">Uma issue preenchida do projeto foi aberta no navegador.</string>
+    <string name="phase13_issue_created">Issue criada: %1$s</string>
+    <string name="phase13_issue_failed">Não foi possível preparar a issue: %1$s</string>
+    <string name="phase13_copy_log">Copiar log completo</string>
+    <string name="phase13_log_copied">Log completo copiado.</string>
+    <string name="phase13_export_log">Exportar ZIP de diagnóstico</string>
+    <string name="phase13_export_success">ZIP de diagnóstico exportado.</string>
+    <string name="phase13_export_failed">Falha na exportação: %1$s</string>
+    <string name="phase13_back_home">Voltar ao início</string>
+    <string name="phase13_log_invalid">Este log de teste está indisponível ou inválido.</string>
+    <string name="phase13_issue_sending">Criando issue no projeto Amaral Driver Lab…</string>
+    <string name="phase13_bundle_unavailable">O pacote de diagnóstico ainda não está disponível.</string>
+    <string name="phase13_log_metrics_format">Performance: %1$s / 100
+Compatibilidade: %2$s / 100
+Ganho ponderado: %3$s
+Confiança: %4$s</string>
+    <string name="phase13_log_blockers">Bloqueios e ressalvas:</string>
+    <string name="phase13_log_steps_format">Etapas: %1$d concluídas · %2$d falhas · %3$d pendentes</string>
+
     <string-array name="legacy_ui_translation">
         <item>Turnip/stock · correção primeiro · processo limpo · evidência reproduzível</item>
         <item>1. Driver</item>
@@ -461,4 +502,7 @@ Pipeline cold: %s%%
 Pipeline warm: %s%%</item>
         <item>Nenhum pacote da Fase 10 disponível.</item>
     </string-array>
+    <string name="phase13_legacy_full_title">Full v3 estendido</string>
+    <string name="phase13_legacy_full_detail">Investigação avançada longa com testes sintéticos, sustentação térmica, diagnóstico profundo e soak de cinco ciclos.</string>
+    <string name="phase13_start_legacy_full">INICIAR FULL v3 ESTENDIDO</string>
 </resources>

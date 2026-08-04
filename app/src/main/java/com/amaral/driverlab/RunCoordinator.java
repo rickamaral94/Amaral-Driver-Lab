@@ -35,17 +35,20 @@ final class RunCoordinator {
         final boolean custom;
         final int round;
         final String label;
+        final DriverPackage driver;
 
-        Phase(boolean custom, int round) {
+        Phase(boolean custom, int round, DriverPackage driver) {
             this.custom = custom;
             this.round = round;
             this.label = custom ? "candidate" : "system";
+            this.driver = driver;
         }
     }
 
     private final Activity activity;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final DriverPackage candidate;
+    private final DriverPackage reference;
     private final int mode;
     private final int rounds;
     private final int warmupSeconds;
@@ -70,7 +73,7 @@ final class RunCoordinator {
     RunCoordinator(Activity activity, DriverPackage candidate, int mode, int rounds,
                    int warmupSeconds, int measureSeconds, String workloadId, String traceId,
                    int pixelTolerance, int maximumDivergentBlocks, Listener listener) {
-        this(activity, candidate, mode, rounds, warmupSeconds, measureSeconds, workloadId,
+        this(activity, candidate, null, mode, rounds, warmupSeconds, measureSeconds, workloadId,
                 traceId, pixelTolerance, maximumDivergentBlocks, null, null, listener);
     }
 
@@ -78,7 +81,7 @@ final class RunCoordinator {
                    int warmupSeconds, int measureSeconds, String workloadId, String traceId,
                    int pixelTolerance, int maximumDivergentBlocks, JSONObject campaignContext,
                    Listener listener) {
-        this(activity, candidate, mode, rounds, warmupSeconds, measureSeconds, workloadId,
+        this(activity, candidate, null, mode, rounds, warmupSeconds, measureSeconds, workloadId,
                 traceId, pixelTolerance, maximumDivergentBlocks, campaignContext, null, listener);
     }
 
@@ -86,8 +89,19 @@ final class RunCoordinator {
                    int warmupSeconds, int measureSeconds, String workloadId, String traceId,
                    int pixelTolerance, int maximumDivergentBlocks, JSONObject campaignContext,
                    JSONObject qualificationContext, Listener listener) {
+        this(activity, candidate, null, mode, rounds, warmupSeconds, measureSeconds, workloadId,
+                traceId, pixelTolerance, maximumDivergentBlocks, campaignContext,
+                qualificationContext, listener);
+    }
+
+    RunCoordinator(Activity activity, DriverPackage candidate, DriverPackage reference, int mode,
+                   int rounds, int warmupSeconds, int measureSeconds, String workloadId,
+                   String traceId, int pixelTolerance, int maximumDivergentBlocks,
+                   JSONObject campaignContext, JSONObject qualificationContext,
+                   Listener listener) {
         this.activity = activity;
         this.candidate = candidate;
+        this.reference = reference;
         this.mode = mode;
         this.rounds = Math.max(1, Math.min(rounds, 10));
         this.warmupSeconds = Math.max(0, Math.min(warmupSeconds, 30));
@@ -121,6 +135,13 @@ final class RunCoordinator {
                     && (candidate == null || !candidate.isUsable())) {
                 throw new IllegalStateException("Importe um driver válido para este modo");
             }
+            if (reference != null && !reference.isUsable()) {
+                throw new IllegalStateException("Driver de referência inválido");
+            }
+            if (reference != null && candidate != null
+                    && reference.sha256.equalsIgnoreCase(candidate.sha256)) {
+                throw new IllegalStateException("Candidato e referência devem ser diferentes");
+            }
             suiteStartedAt = System.currentTimeMillis();
             suiteDirectory = new File(new File(activity.getFilesDir(), "runs"),
                     "suite-" + suiteStartedAt);
@@ -136,18 +157,26 @@ final class RunCoordinator {
 
     private void buildPlan() {
         if (mode == MODE_SYSTEM) {
-            for (int round = 1; round <= rounds; ++round) phases.add(new Phase(false, round));
+            for (int round = 1; round <= rounds; ++round) {
+                phases.add(new Phase(false, round, reference));
+            }
             return;
         }
         if (mode == MODE_CUSTOM) {
-            for (int round = 1; round <= rounds; ++round) phases.add(new Phase(true, round));
+            for (int round = 1; round <= rounds; ++round) {
+                phases.add(new Phase(true, round, candidate));
+            }
             return;
         }
         for (int round = 1; round <= rounds; ++round) {
             // Alternating AB/BA reduces bias from temperature drift and run order.
             boolean candidateFirst = round % 2 == 0;
-            phases.add(new Phase(candidateFirst, round));
-            phases.add(new Phase(!candidateFirst, round));
+            phases.add(candidateFirst
+                    ? new Phase(true, round, candidate)
+                    : new Phase(false, round, reference));
+            phases.add(candidateFirst
+                    ? new Phase(false, round, reference)
+                    : new Phase(true, round, candidate));
         }
     }
 
@@ -163,7 +192,7 @@ final class RunCoordinator {
         String workloadLabel = WorkloadContract.labelFor(workloadId);
         listener.onStatus("Executando " + (phaseIndex + 1) + "/" + phases.size()
                 + " · " + workloadLabel + " · rodada " + phase.round + " · "
-                + (phase.custom ? candidate.displayName() : "driver do sistema"));
+                + (phase.driver == null ? "driver do sistema" : phase.driver.displayName()));
 
         Intent intent = new Intent(activity, VisualSceneContract.isVisualScene(workloadId)
                 ? VisualRunnerActivity.class : RunnerActivity.class);
@@ -178,11 +207,14 @@ final class RunCoordinator {
                 WorkloadContract.versionFor(workloadId));
         intent.putExtra(RunnerActivity.EXTRA_PIXEL_TOLERANCE, pixelTolerance);
         intent.putExtra(RunnerActivity.EXTRA_MAX_DIVERGENT_BLOCKS, maximumDivergentBlocks);
-        if (phase.custom) {
-            intent.putExtra(RunnerActivity.EXTRA_DRIVER_DIR, candidate.directory.getAbsolutePath());
-            intent.putExtra(RunnerActivity.EXTRA_DRIVER_NAME, candidate.libraryName);
-            intent.putExtra(RunnerActivity.EXTRA_DRIVER_META, candidate.metadata.toString());
-            intent.putExtra(RunnerActivity.EXTRA_DRIVER_SHA, candidate.sha256);
+        intent.putExtra(RunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE,
+                phase.custom ? "custom" : "system");
+        if (phase.driver != null) {
+            intent.putExtra(RunnerActivity.EXTRA_DRIVER_DIR,
+                    phase.driver.directory.getAbsolutePath());
+            intent.putExtra(RunnerActivity.EXTRA_DRIVER_NAME, phase.driver.libraryName);
+            intent.putExtra(RunnerActivity.EXTRA_DRIVER_META, phase.driver.metadata.toString());
+            intent.putExtra(RunnerActivity.EXTRA_DRIVER_SHA, phase.driver.sha256);
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
         phaseLaunchedElapsed = SystemClock.elapsedRealtime();
@@ -242,6 +274,8 @@ final class RunCoordinator {
         failure.put("success", false);
         failure.put("phase", phase.label);
         failure.put("driver_mode", phase.custom ? "custom" : "system");
+        failure.put("driver_sha256", phase.driver == null
+                ? JSONObject.NULL : phase.driver.sha256);
         failure.put("round", phase.round);
         failure.put("workload_id", workloadId);
         failure.put("workload_version", WorkloadContract.versionFor(workloadId));
@@ -288,6 +322,9 @@ final class RunCoordinator {
             }
             report.put("host_device", DeviceSnapshot.capture(activity));
             report.put("candidate", candidate == null ? JSONObject.NULL : candidate.toJson());
+            report.put("reference", reference == null ? JSONObject.NULL : reference.toJson());
+            report.put("comparison_mode", reference == null
+                    ? "system_vs_turnip" : "turnip_vs_turnip");
             report.put("phases", phaseResults);
 
             JSONArray failureCatalog = FailureCatalog.fromPhases(phaseResults);
@@ -836,6 +873,7 @@ final class RunCoordinator {
     private String modeName() {
         if (mode == MODE_SYSTEM) return "system_only";
         if (mode == MODE_CUSTOM) return "candidate_only";
-        return "ab_system_vs_candidate";
+        return reference == null ? "ab_system_vs_candidate"
+                : "ab_reference_turnip_vs_candidate_turnip";
     }
 }

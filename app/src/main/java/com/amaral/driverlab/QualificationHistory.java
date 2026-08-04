@@ -15,6 +15,10 @@ final class QualificationHistory {
         String profileSha = reference.optString("profile_sha256");
         String hardwareKey = reference.optJSONObject("hardware_identity") == null ? "unknown"
                 : reference.optJSONObject("hardware_identity").optString("device_key", "unknown");
+        String comparisonMode = reference.optString("comparison_mode", "system_vs_turnip");
+        JSONObject referenceDriver = reference.optJSONObject("reference_driver");
+        String referenceDriverSha = referenceDriver == null ? "system"
+                : referenceDriver.optString("sha256", "unknown");
         File root = new File(filesDir, "qualifications");
         File[] directories = root.listFiles(File::isDirectory);
         List<JSONObject> entries = new ArrayList<>();
@@ -28,6 +32,12 @@ final class QualificationHistory {
                     JSONObject hardware = report.optJSONObject("hardware_identity");
                     if (hardware == null || !hardwareKey.equals(
                             hardware.optString("device_key", "unknown"))) continue;
+                    if (!comparisonMode.equals(report.optString(
+                            "comparison_mode", "system_vs_turnip"))) continue;
+                    JSONObject reportReference = report.optJSONObject("reference_driver");
+                    String reportReferenceSha = reportReference == null ? "system"
+                            : reportReference.optString("sha256", "unknown");
+                    if (!referenceDriverSha.equals(reportReferenceSha)) continue;
                     JSONObject score = report.optJSONObject("score");
                     if (score == null || !score.optBoolean("eligible_for_recommendation", false)) {
                         continue;
@@ -67,10 +77,12 @@ final class QualificationHistory {
                                 "qualification_score_version", Phase7Contract.SCORE_VERSION))
                 .put("profile_sha256", profileSha)
                 .put("hardware_key", hardwareKey)
+                .put("comparison_mode", comparisonMode)
+                .put("reference_driver_sha256", referenceDriverSha)
                 .put("eligible_entry_count", entries.size())
                 .put("current_rank", referenceRank == 0 ? JSONObject.NULL : referenceRank)
                 .put("entries", encoded)
-                .put("limitations", "Compara somente Full Qualification com mesmo perfil e hardware.");
+                .put("limitations", "Compara somente Full Qualification com mesmo perfil, hardware, modo de comparação e driver de referência.");
     }
 
     private static String driverLabel(JSONObject driver) {

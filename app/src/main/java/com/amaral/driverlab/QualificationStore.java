@@ -11,13 +11,36 @@ final class QualificationStore {
     private QualificationStore() {}
 
     static File create(File filesDir, DriverPackage driver, JSONObject preflight) throws Exception {
+        return create(filesDir, driver, null, "system_vs_turnip",
+                QualificationProfile.currentVersion(), preflight);
+    }
+
+    static File create(File filesDir, DriverPackage driver, DriverPackage referenceDriver,
+                       String comparisonMode, JSONObject preflight) throws Exception {
+        return create(filesDir, driver, referenceDriver, comparisonMode,
+                QualificationProfile.currentVersion(), preflight);
+    }
+
+    static File create(File filesDir, DriverPackage driver, DriverPackage referenceDriver,
+                       String comparisonMode, int profileVersion, JSONObject preflight)
+            throws Exception {
+        String normalizedMode = "turnip_vs_turnip".equals(comparisonMode)
+                ? "turnip_vs_turnip" : "system_vs_turnip";
+        if ("turnip_vs_turnip".equals(normalizedMode)) {
+            if (referenceDriver == null || !referenceDriver.isUsable()) {
+                throw new IllegalArgumentException("Driver de referência inválido");
+            }
+            if (driver.sha256.equalsIgnoreCase(referenceDriver.sha256)) {
+                throw new IllegalArgumentException("Candidato e referência devem ser diferentes");
+            }
+        }
         long now = System.currentTimeMillis();
         String id = "qualification-" + now;
         File directory = new File(new File(filesDir, "qualifications"), id);
         if (!directory.mkdirs()) throw new IllegalStateException("Não foi possível criar " + id);
-        JSONObject profile = QualificationProfile.definition();
+        JSONObject profile = QualificationProfile.definitionForVersion(profileVersion);
         JSONArray states = new JSONArray();
-        for (QualificationProfile.Step step : QualificationProfile.steps()) {
+        for (QualificationProfile.Step step : QualificationProfile.stepsForVersion(profileVersion)) {
             states.put(new JSONObject()
                     .put("step_id", step.stepId)
                     .put("step_kind", step.kind)
@@ -42,9 +65,14 @@ final class QualificationStore {
                 .put("phase9_contract", Phase9Contract.contractJson())
                 .put("phase10_contract", Phase10Contract.contractJson())
                 .put("phase11_contract", Phase11Contract.contractJson())
+                .put("phase13_validation_contract", profileVersion >= 4
+                        ? Phase13ValidationContract.contractJson() : JSONObject.NULL)
                 .put("profile", profile)
                 .put("profile_sha256", profile.getString("profile_sha256"))
                 .put("driver", driver.toJson())
+                .put("comparison_mode", normalizedMode)
+                .put("reference_driver", referenceDriver == null
+                        ? JSONObject.NULL : referenceDriver.toJson())
                 .put("preflight", preflight)
                 .put("final_environment", JSONObject.NULL)
                 .put("environment_comparison", JSONObject.NULL)
@@ -57,7 +85,9 @@ final class QualificationStore {
                         .put("steps", states))
                 .put("report", JSONObject.NULL)
                 .put("diagnostic_bundle", JSONObject.NULL)
-                .put("limitations", profile.optInt("profile_version", 1) >= 3
+                .put("limitations", profile.optInt("profile_version", 1) >= 4
+                        ? Phase13ValidationContract.LIMITATION
+                        : profile.optInt("profile_version", 1) >= 3
                         ? Phase11Contract.LIMITATION
                         : profile.optInt("profile_version", 1) >= 2
                         ? Phase8Contract.LIMITATION : Phase7Contract.LIMITATION);
@@ -96,6 +126,16 @@ final class QualificationStore {
                     manifest.optString("profile_sha256"))) return false;
             JSONObject driver = manifest.optJSONObject("driver");
             if (driver == null || driver.optString("sha256", "").length() != 64) return false;
+            String comparisonMode = manifest.optString("comparison_mode", "system_vs_turnip");
+            if (!"system_vs_turnip".equals(comparisonMode)
+                    && !"turnip_vs_turnip".equals(comparisonMode)) return false;
+            JSONObject referenceDriver = manifest.optJSONObject("reference_driver");
+            if ("turnip_vs_turnip".equals(comparisonMode)) {
+                if (referenceDriver == null
+                        || referenceDriver.optString("sha256", "").length() != 64
+                        || driver.optString("sha256").equalsIgnoreCase(
+                                referenceDriver.optString("sha256"))) return false;
+            }
             JSONObject execution = manifest.optJSONObject("execution");
             JSONArray states = execution == null ? null : execution.optJSONArray("steps");
             int profileVersion = profile.optInt("profile_version", -1);

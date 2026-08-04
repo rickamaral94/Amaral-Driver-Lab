@@ -619,3 +619,7 @@ methodology_changed = false
 ```
 
 A preferência de modo é local e não é exportada como chave de comparabilidade. Full Qualification v1, v2 e v3, workloads, métricas, hashes, gates, pesos e enums permanecem exatamente nas séries definidas anteriormente.
+
+### Comparações selecionadas na home (Fase 13 alpha2)
+
+O manifesto e o relatório Full adicionam `comparison_mode` (`system_vs_turnip` ou `turnip_vs_turnip`) e `reference_driver`. Esses campos são aditivos; `schema_version` permanece 13. O baseline continua ocupando a função técnica `system` nas métricas e no score para preservar a análise existente, enquanto `reference_driver` identifica quando esse baseline foi executado por outro pacote Turnip. Rankings exigem o mesmo modo de comparação e, no modo Turnip × Turnip, o mesmo SHA-256 de referência.

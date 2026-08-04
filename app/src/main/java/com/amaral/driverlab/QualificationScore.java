@@ -19,8 +19,9 @@ final class QualificationScore {
             throw new IllegalArgumentException("Perfil Full Qualification inválido");
         }
         int profileVersion = profile.getInt("profile_version");
-        int minimumValidSteps = profileVersion >= 3
-                ? Phase11Contract.MINIMUM_VALID_PERFORMANCE_CATEGORIES
+        int minimumValidSteps = profileVersion >= 4
+                ? Phase13ValidationContract.MINIMUM_VALID_PERFORMANCE_CATEGORIES
+                : profileVersion >= 3 ? Phase11Contract.MINIMUM_VALID_PERFORMANCE_CATEGORIES
                 : profileVersion >= 2 ? Phase8Contract.MINIMUM_VALID_PERFORMANCE_STEPS_V2
                 : Phase7Contract.MINIMUM_VALID_PERFORMANCE_STEPS;
         Map<String, JSONObject> byStep = new HashMap<>();
@@ -201,15 +202,25 @@ final class QualificationScore {
         for (JSONObject category : categories) encoded.put(category);
         JSONObject best = firstFinite(categories, true);
         JSONObject worst = firstFinite(categories, false);
-        int highThreshold = profileVersion >= 3 ? 10 : 8;
-        int highConclusive = profileVersion >= 3 ? 8 : 6;
+        int highThreshold = profileVersion >= 4
+                ? Phase13ValidationContract.HIGH_CONFIDENCE_PERFORMANCE_CATEGORIES
+                : profileVersion >= 3 ? 10 : 8;
+        int highConclusive = profileVersion >= 4
+                ? Phase13ValidationContract.HIGH_CONFIDENCE_CONCLUSIVE_CATEGORIES
+                : profileVersion >= 3 ? 8 : 6;
+        int mediumThreshold = profileVersion >= 4
+                ? Phase13ValidationContract.MEDIUM_CONFIDENCE_PERFORMANCE_CATEGORIES : 6;
+        int mediumConclusive = profileVersion >= 4
+                ? Phase13ValidationContract.MEDIUM_CONFIDENCE_CONCLUSIVE_CATEGORIES : 4;
         String confidence = validPerformanceSteps[0] >= highThreshold
                 && conclusiveSteps[0] >= highConclusive && warnings.length() == 0 ? "high"
-                : validPerformanceSteps[0] >= 6 && conclusiveSteps[0] >= 4 ? "medium" : "low";
+                : validPerformanceSteps[0] >= mediumThreshold
+                && conclusiveSteps[0] >= mediumConclusive ? "medium" : "low";
         int scoreVersion = profileVersion >= 3 ? Phase11Contract.SCORE_VERSION
                 : profileVersion >= 2 ? Phase8Contract.CURRENT_QUALIFICATION_SCORE_VERSION
                 : Phase7Contract.SCORE_VERSION;
-        String limitation = profileVersion >= 3 ? Phase11Contract.LIMITATION
+        String limitation = profileVersion >= 4 ? Phase13ValidationContract.LIMITATION
+                : profileVersion >= 3 ? Phase11Contract.LIMITATION
                 : profileVersion >= 2 ? Phase8Contract.LIMITATION : Phase7Contract.LIMITATION;
 
         return new JSONObject()

@@ -26,6 +26,7 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
     static final String EXTRA_RESULT_PATH = "result_path";
     static final String EXTRA_PHASE_LABEL = "phase_label";
     static final String EXTRA_DRIVER_DIR = "driver_dir";
+    static final String EXTRA_DRIVER_MODE_OVERRIDE = "driver_mode_override";
     static final String EXTRA_DRIVER_NAME = "driver_name";
     static final String EXTRA_DRIVER_META = "driver_meta";
     static final String EXTRA_DRIVER_SHA = "driver_sha";
@@ -89,6 +90,7 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
                                     Phase10Contract.DEFAULT_MEMORY_MIB),
                             Phase10Contract.MAX_MEMORY_MIB));
             String driverDir = getIntent().getStringExtra(EXTRA_DRIVER_DIR);
+            String driverModeOverride = getIntent().getStringExtra(EXTRA_DRIVER_MODE_OVERRIDE);
             String driverName = getIntent().getStringExtra(EXTRA_DRIVER_NAME);
             String driverMeta = getIntent().getStringExtra(EXTRA_DRIVER_META);
             String driverSha = getIntent().getStringExtra(EXTRA_DRIVER_SHA);
@@ -98,8 +100,10 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
                     .put("phase10_contract", Phase10Contract.contractJson())
                     .put("phase11_contract", Phase11Contract.contractJson())
                     .put("phase", phase == null ? "unknown" : phase)
-                    .put("driver_mode", driverDir == null || driverDir.isEmpty()
-                            ? "system" : "custom")
+                    .put("driver_mode", "system".equals(driverModeOverride)
+                            || "custom".equals(driverModeOverride)
+                            ? driverModeOverride
+                            : driverDir == null || driverDir.isEmpty() ? "system" : "custom")
                     .put("driver_sha256", driverSha == null || driverSha.isEmpty()
                             ? JSONObject.NULL : driverSha)
                     .put("driver_metadata", driverMeta == null || driverMeta.isEmpty()

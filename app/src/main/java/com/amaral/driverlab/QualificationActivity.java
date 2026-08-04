@@ -1,18 +1,15 @@
 package com.amaral.driverlab;
 
-import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Intent;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
-import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Spinner;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import org.json.JSONArray;
@@ -32,9 +29,14 @@ public final class QualificationActivity extends LocalizedActivity
     static final String EXTRA_GUIDED = "guided";
     static final String EXTRA_AUTOSTART = "autostart";
     static final String EXTRA_DRIVER_SHA = "driver_sha";
+    static final String EXTRA_REFERENCE_DRIVER_SHA = "reference_driver_sha";
+    static final String EXTRA_COMPARISON_MODE = "comparison_mode";
+    static final String EXTRA_OPEN_LOG_ON_COMPLETE = "open_log_on_complete";
+    static final String EXTRA_PROFILE_VERSION = "profile_version";
 
     private final List<DriverPackage> drivers = new ArrayList<>();
     private Spinner driverSpinner;
+    private TextView comparisonSummary;
     private TextView status;
     private TextView preview;
     private Button startButton;
@@ -45,15 +47,32 @@ public final class QualificationActivity extends LocalizedActivity
     private QualificationCoordinator coordinator;
     private File currentQualificationFile;
     private File currentBundleFile;
+    private DriverPackage referenceDriver;
+    private String comparisonMode = "system_vs_turnip";
+    private boolean guidedLaunch;
+    private int profileVersion = QualificationProfile.currentVersion();
     private boolean busy;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         AppTheme.apply(this);
+        guidedLaunch = getIntent().getBooleanExtra(EXTRA_GUIDED, false);
+        profileVersion = getIntent().getIntExtra(EXTRA_PROFILE_VERSION,
+                QualificationProfile.currentVersion());
+        try { QualificationProfile.stepsForVersion(profileVersion); }
+        catch (IllegalArgumentException ignored) {
+            profileVersion = QualificationProfile.currentVersion();
+        }
+        comparisonMode = "turnip_vs_turnip".equals(
+                getIntent().getStringExtra(EXTRA_COMPARISON_MODE))
+                ? "turnip_vs_turnip" : "system_vs_turnip";
         buildUi();
         loadDrivers();
         selectDriverBySha(getIntent().getStringExtra(EXTRA_DRIVER_SHA));
+        referenceDriver = DriverCatalog.findBySha(this,
+                getIntent().getStringExtra(EXTRA_REFERENCE_DRIVER_SHA));
+        updateComparisonSummary();
         findLatestQualification();
         if (getIntent().getBooleanExtra(EXTRA_AUTOSTART, false)) {
             startButton.post(() -> {
@@ -70,43 +89,68 @@ public final class QualificationActivity extends LocalizedActivity
         root.setPadding(dp(18), dp(18), dp(18), dp(36));
         scroll.addView(root);
 
-        root.addView(text("Teste Full Recomendado · Fase 11", 25, true));
-        TextView subtitle = text(
-                "Executa o Full v3 com cenas visíveis, todos os testes anteriores, diagnóstico profundo, soak curto e bundle completo.",
-                14, false);
+        boolean legacyFull = profileVersion == Phase11Contract.PROFILE_VERSION;
+        root.addView(text(legacyFull ? getString(R.string.phase13_legacy_full_title)
+                : getString(R.string.phase13_full_title), 25, true));
+        TextView subtitle = text(legacyFull
+                ? getString(R.string.phase13_legacy_full_detail)
+                : getString(R.string.phase13_quick_test_description), 14, false);
         subtitle.setTextColor(AmaralColors.TEXT_SECONDARY);
-        root.addView(subtitle, margins(0, 4, 0, 14));
+        root.addView(subtitle, margins(0, 4, 0, 12));
 
-        TextView note = text("Perfil imutável: " + Phase11Contract.PROFILE_LABEL
-                + "\n" + QualificationProfile.steps().size() + " blocos orquestrados · "
-                + Phase11Contract.AUTOMATED_LOGICAL_TESTS + " testes automáticos · "
-                + "1 evidência real opcional.\nDiagnóstico profundo: 128 MiB · soak curto: 5 ciclos.\n\n"
-                + Phase11Contract.LIMITATION, 13, false);
+        comparisonSummary = text("", 14, true);
+        comparisonSummary.setBackground(AppTheme.rounded(AmaralColors.SURFACE_HIGHLIGHT,
+                14, AmaralColors.BORDER, 1, this));
+        comparisonSummary.setPadding(dp(12), dp(12), dp(12), dp(12));
+        root.addView(comparisonSummary, margins(0, 0, 0, 14));
+
+        TextView note = text("Perfil imutável: " + (legacyFull
+                ? Phase11Contract.PROFILE_LABEL : Phase13ValidationContract.PROFILE_LABEL)
+                + "\n" + QualificationProfile.stepsForVersion(profileVersion).size()
+                + " etapas orquestradas.\n\n"
+                + (legacyFull ? Phase11Contract.LIMITATION
+                : Phase13ValidationContract.LIMITATION), 13, false);
         note.setTextColor(AmaralColors.TEXT_SECONDARY);
-        root.addView(note, margins(0, 0, 0, 16));
+        if (!guidedLaunch) root.addView(note, margins(0, 0, 0, 16));
 
-        root.addView(text("Driver candidato", 18, true));
+        TextView driverLabel = text("Driver candidato", 18, true);
         driverSpinner = new Spinner(this);
+        if (guidedLaunch) {
+            driverLabel.setVisibility(View.GONE);
+            driverSpinner.setVisibility(View.GONE);
+        }
+        root.addView(driverLabel);
         root.addView(driverSpinner, margins(0, 6, 0, 16));
 
-        startButton = button("▶ INICIAR TESTE FULL RECOMENDADO", view -> preflightAndStart());
+        startButton = button(legacyFull ? getString(R.string.phase13_start_legacy_full)
+                : getString(R.string.phase13_start_selected_test), view -> preflightAndStart());
         resumeButton = button("RETOMAR TESTE FULL INCOMPLETO", view -> resume());
         pauseButton = button("PAUSAR APÓS A ETAPA ATUAL", view -> pause());
         exportButton = button("EXPORTAR LOG FULL (.ZIP)", view -> chooseExport());
+        Button logButton = button(getString(R.string.phase13_open_test_log), view -> openLog(false));
         Button refreshButton = button("ATUALIZAR RESULTADO", view -> refresh());
         root.addView(startButton);
+        if (guidedLaunch) {
+            startButton.setVisibility(View.GONE);
+            resumeButton.setVisibility(View.GONE);
+            exportButton.setVisibility(View.GONE);
+            logButton.setVisibility(View.GONE);
+            refreshButton.setVisibility(View.GONE);
+        }
         root.addView(resumeButton, margins(0, 5, 0, 0));
         root.addView(pauseButton, margins(0, 5, 0, 0));
         root.addView(exportButton, margins(0, 5, 0, 0));
+        root.addView(logButton, margins(0, 5, 0, 0));
         root.addView(refreshButton, margins(0, 5, 0, 16));
 
         overallProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        overallProgress.setMax(QualificationProfile.steps().size());
+        overallProgress.setMax(QualificationProfile.stepsForVersion(profileVersion).size());
         overallProgress.setProgressTintList(android.content.res.ColorStateList.valueOf(
                 AmaralColors.BRAND_SECONDARY));
         overallProgress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(
                 AmaralColors.SURFACE_HIGHLIGHT));
-        overallProgress.setContentDescription(getString(R.string.phase13_execution_progress_description));
+        overallProgress.setContentDescription(
+                getString(R.string.phase13_execution_progress_description));
         root.addView(overallProgress, margins(0, 0, 0, 14));
 
         status = text("Pronto.", 14, true);
@@ -123,21 +167,7 @@ public final class QualificationActivity extends LocalizedActivity
 
     private void loadDrivers() {
         drivers.clear();
-        File root = new File(getFilesDir(), "drivers");
-        File[] directories = root.listFiles(File::isDirectory);
-        if (directories != null) {
-            for (File directory : directories) {
-                if (directory.getName().startsWith(".partial-")) continue;
-                try {
-                    DriverPackage driver = DriverPackage.fromJson(
-                            ResultFiles.readUtf8(new File(directory, "descriptor.json")));
-                    if (driver.isUsable()) drivers.add(driver);
-                } catch (Exception ignored) {
-                    // Invalid packages remain unavailable.
-                }
-            }
-        }
-        drivers.sort(Comparator.comparing(DriverPackage::displayName));
+        drivers.addAll(DriverCatalog.load(this));
         List<String> labels = new ArrayList<>();
         if (drivers.isEmpty()) labels.add("Importe um driver na tela principal");
         for (DriverPackage driver : drivers) {
@@ -145,7 +175,24 @@ public final class QualificationActivity extends LocalizedActivity
         }
         driverSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, labels));
+        driverSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view,
+                                                  int position, long id) {
+                updateComparisonSummary();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
         updateButtons();
+    }
+
+    private void updateComparisonSummary() {
+        if (comparisonSummary == null) return;
+        DriverPackage candidate = selectedDriver();
+        String candidateLabel = candidate == null ? "—" : candidate.displayName();
+        String referenceLabel = referenceDriver == null
+                ? getString(R.string.phase13_system_driver) : referenceDriver.displayName();
+        comparisonSummary.setText(getString(R.string.phase13_comparison_summary_format,
+                referenceLabel, candidateLabel));
     }
 
     private void preflightAndStart() {
@@ -153,6 +200,16 @@ public final class QualificationActivity extends LocalizedActivity
         if (driver == null) {
             status.setText("Importe um driver Turnip válido primeiro.");
             return;
+        }
+        if ("turnip_vs_turnip".equals(comparisonMode)) {
+            if (referenceDriver == null) {
+                status.setText(getString(R.string.phase13_select_reference_error));
+                return;
+            }
+            if (driver.sha256.equals(referenceDriver.sha256)) {
+                status.setText(getString(R.string.phase13_same_driver_error));
+                return;
+            }
         }
         try {
             JSONObject preflight = QualificationPreflight.capture(this);
@@ -178,11 +235,12 @@ public final class QualificationActivity extends LocalizedActivity
     private void createAndRun(DriverPackage driver, JSONObject preflight) {
         try {
             currentQualificationFile = QualificationStore.create(
-                    getFilesDir(), driver, preflight);
+                    getFilesDir(), driver, referenceDriver, comparisonMode,
+                    profileVersion, preflight);
             currentBundleFile = null;
             beginCoordinator();
         } catch (Throwable error) {
-            status.setText("Falha ao criar o teste Full: " + error.getMessage());
+            status.setText("Falha ao criar o teste: " + error.getMessage());
         }
     }
 
@@ -193,7 +251,8 @@ public final class QualificationActivity extends LocalizedActivity
             File root = new File(getFilesDir(), "qualifications");
             File[] dirs = root.listFiles(File::isDirectory);
             if (dirs != null && dirs.length > 0) {
-                java.util.Arrays.sort(dirs, Comparator.comparingLong(File::lastModified).reversed());
+                java.util.Arrays.sort(dirs,
+                        Comparator.comparingLong(File::lastModified).reversed());
                 File latest = new File(dirs[0], "qualification.json");
                 if (latest.isFile()) currentQualificationFile = latest;
             }
@@ -322,10 +381,7 @@ public final class QualificationActivity extends LocalizedActivity
         }
     }
 
-    @Override
-    public void onStatus(String message) {
-        status.setText(message);
-    }
+    @Override public void onStatus(String message) { status.setText(message); }
 
     @Override
     public void onUpdated(File qualificationFile, JSONObject manifest) {
@@ -345,11 +401,14 @@ public final class QualificationActivity extends LocalizedActivity
         setBusy(false);
         try {
             showManifest(manifest);
-            status.append("\nTeste Full concluído. O log completo está pronto para exportação.");
+            status.append("\nTeste concluído. Abrindo o log completo…");
         } catch (Exception error) {
             status.setText("Teste concluído: " + error.getMessage());
         }
         updateButtons();
+        if (getIntent().getBooleanExtra(EXTRA_OPEN_LOG_ON_COMPLETE, false)) {
+            overallProgress.postDelayed(() -> openLog(true), 350L);
+        }
     }
 
     @Override
@@ -357,14 +416,33 @@ public final class QualificationActivity extends LocalizedActivity
         setBusy(false);
         status.setText(message + ": " + (error == null ? "falha desconhecida" : error.getMessage()));
         updateButtons();
+        if (getIntent().getBooleanExtra(EXTRA_OPEN_LOG_ON_COMPLETE, false)
+                && currentQualificationFile != null && currentQualificationFile.isFile()) {
+            overallProgress.postDelayed(() -> openLog(true), 700L);
+        }
     }
 
+    private void openLog(boolean finishCurrent) {
+        if (currentQualificationFile == null || !currentQualificationFile.isFile()) {
+            status.setText(getString(R.string.phase13_no_result_yet));
+            return;
+        }
+        Intent intent = new Intent(this, QualificationLogActivity.class);
+        intent.putExtra(QualificationLogActivity.EXTRA_QUALIFICATION_PATH,
+                currentQualificationFile.getAbsolutePath());
+        startActivity(intent);
+        if (finishCurrent) {
+            setResult(RESULT_OK);
+            finish();
+        }
+    }
 
     private void selectDriverBySha(String sha) {
         if (sha == null || sha.isEmpty() || driverSpinner == null) return;
         for (int index = 0; index < drivers.size(); index++) {
             if (sha.equals(drivers.get(index).sha256)) {
                 driverSpinner.setSelection(index);
+                updateComparisonSummary();
                 return;
             }
         }

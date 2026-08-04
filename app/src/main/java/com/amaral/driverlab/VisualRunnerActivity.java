@@ -168,6 +168,8 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             }
             String phase = getIntent().getStringExtra(RunnerActivity.EXTRA_PHASE_LABEL);
             String driverDir = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_DIR);
+            String driverModeOverride = getIntent().getStringExtra(
+                    RunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE);
             String driverName = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_NAME);
             String driverMetadata = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_META);
             String driverSha = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_SHA);
@@ -192,8 +194,10 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                     .put("workload_config", VisualSceneContract.workloadConfig(
                             workloadId, warmup, measure, pixelTolerance,
                             maximumDivergentBlocks))
-                    .put("driver_mode", driverDir == null || driverDir.isEmpty()
-                            ? "system" : "custom")
+                    .put("driver_mode", "system".equals(driverModeOverride)
+                            || "custom".equals(driverModeOverride)
+                            ? driverModeOverride
+                            : driverDir == null || driverDir.isEmpty() ? "system" : "custom")
                     .put("driver_sha256", driverSha == null || driverSha.isEmpty()
                             ? JSONObject.NULL : driverSha)
                     .put("driver_metadata", driverMetadata == null || driverMetadata.isEmpty()

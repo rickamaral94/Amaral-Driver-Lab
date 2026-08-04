@@ -50,7 +50,10 @@ public final class GuidedTestFlowActivity extends LocalizedActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_FULL) showStep(4);
+        if (requestCode == REQUEST_FULL) {
+            preferences.setLastGuidedStep(0);
+            finish();
+        }
     }
 
     private void buildUi() {
@@ -168,6 +171,15 @@ public final class GuidedTestFlowActivity extends LocalizedActivity {
             intent.putExtra(QualificationActivity.EXTRA_AUTOSTART, true);
             intent.putExtra(QualificationActivity.EXTRA_DRIVER_SHA,
                     preferences.guidedDriverSha());
+            String selectedMode = "turnip_vs_turnip".equals(comparisonMode)
+                    && !preferences.quickReferenceSha().isEmpty()
+                    ? "turnip_vs_turnip" : "system_vs_turnip";
+            intent.putExtra(QualificationActivity.EXTRA_COMPARISON_MODE, selectedMode);
+            if ("turnip_vs_turnip".equals(selectedMode)) {
+                intent.putExtra(QualificationActivity.EXTRA_REFERENCE_DRIVER_SHA,
+                        preferences.quickReferenceSha());
+            }
+            intent.putExtra(QualificationActivity.EXTRA_OPEN_LOG_ON_COMPLETE, true);
             startActivityForResult(intent, REQUEST_FULL);
             return;
         }

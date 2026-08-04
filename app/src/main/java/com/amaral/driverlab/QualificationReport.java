@@ -82,15 +82,18 @@ final class QualificationReport {
                 manifest.getJSONObject("profile"), scoredSteps,
                 manifest.getJSONObject("preflight"), environmentComparison);
         JSONObject driver = manifest.getJSONObject("driver");
+        String comparisonMode = manifest.optString("comparison_mode", "system_vs_turnip");
+        JSONObject referenceDriver = manifest.optJSONObject("reference_driver");
         JSONObject telemetry = profileVersion >= 3
                 ? FullTelemetryAttachment.inspect(filesDir, driver.getString("sha256"))
                 : new JSONObject().put("status", "not_part_of_profile")
                 .put("optional", true).put("automatically_changes_score", false);
-        JSONObject human = humanSummary(driver, score);
+        JSONObject human = humanSummary(driver, referenceDriver, comparisonMode, score);
         int reportVersion = profileVersion >= 3 ? Phase11Contract.REPORT_VERSION
                 : profileVersion >= 2 ? Phase8Contract.CURRENT_QUALIFICATION_REPORT_VERSION
                 : Phase7Contract.REPORT_VERSION;
-        String limitation = profileVersion >= 3 ? Phase11Contract.LIMITATION
+        String limitation = profileVersion >= 4 ? Phase13ValidationContract.LIMITATION
+                : profileVersion >= 3 ? Phase11Contract.LIMITATION
                 : profileVersion >= 2 ? Phase8Contract.LIMITATION : Phase7Contract.LIMITATION;
         return new JSONObject()
                 .put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION)
@@ -107,10 +110,15 @@ final class QualificationReport {
                 .put("phase11_contract", profileVersion >= 3
                         ? Phase11Contract.contractJson() : JSONObject.NULL)
                 .put("phase12_contract", Phase12Contract.contractJson())
+                .put("phase13_validation_contract", profileVersion >= 4
+                        ? Phase13ValidationContract.contractJson() : JSONObject.NULL)
                 .put("profile_id", Phase7Contract.PROFILE_ID)
                 .put("profile_version", profileVersion)
                 .put("profile_sha256", manifest.getString("profile_sha256"))
                 .put("driver", driver)
+                .put("comparison_mode", comparisonMode)
+                .put("reference_driver", referenceDriver == null
+                        ? JSONObject.NULL : referenceDriver)
                 .put("hardware_identity", hardware)
                 .put("preflight", manifest.getJSONObject("preflight"))
                 .put("final_environment", finalEnvironment)
@@ -128,23 +136,32 @@ final class QualificationReport {
     }
 
     static JSONObject humanSummary(JSONObject driver, JSONObject score) throws Exception {
-        String name = driver.optString("name", "Driver candidato");
-        String version = driver.optString("packageVersion",
-                driver.optString("driverVersion", ""));
-        String label = version.isEmpty() ? name : name + " · " + version;
+        return humanSummary(driver, null, "system_vs_turnip", score);
+    }
+
+    static JSONObject humanSummary(JSONObject driver, JSONObject referenceDriver,
+                                   String comparisonMode, JSONObject score) throws Exception {
+        String label = driverLabel(driver, "Driver candidato");
+        boolean turnipVsTurnip = "turnip_vs_turnip".equals(comparisonMode)
+                && referenceDriver != null;
+        String referenceLabel = turnipVsTurnip
+                ? driverLabel(referenceDriver, "Driver de referência")
+                : "driver do sistema";
         String recommendation = score.optString("recommendation");
         String headline;
         String detail;
         if ("candidate_recommended_over_system".equals(recommendation)) {
             headline = "Driver candidato recomendado";
-            detail = label + " foi superior ao driver do sistema no perfil Full v"
+            detail = label + " foi superior a " + referenceLabel + " no perfil de validação v"
                     + score.optInt("profile_version", 1) + ".";
         } else if ("system_recommended_over_candidate".equals(recommendation)) {
-            headline = "Driver do sistema recomendado";
-            detail = label + " apresentou resultado geral inferior ao driver do sistema.";
+            headline = turnipVsTurnip
+                    ? "Driver de referência recomendado" : "Driver do sistema recomendado";
+            detail = label + " apresentou resultado geral inferior a " + referenceLabel + ".";
         } else if ("technical_tie_no_clear_winner".equals(recommendation)) {
             headline = "Empate técnico";
-            detail = "A diferença geral ficou dentro da margem prática de ±"
+            detail = "A diferença geral entre " + referenceLabel + " e " + label
+                    + " ficou dentro da margem prática de ±"
                     + Phase7Contract.PRACTICAL_WIN_MARGIN_PERCENT + "%.";
         } else {
             headline = "Driver candidato não recomendado";
@@ -156,6 +173,9 @@ final class QualificationReport {
                 .put("headline", headline)
                 .put("detail", detail)
                 .put("driver_label", label)
+                .put("reference_label", referenceLabel)
+                .put("comparison_mode", turnipVsTurnip
+                        ? "turnip_vs_turnip" : "system_vs_turnip")
                 .put("winner", score.optString("winner"))
                 .put("confidence", score.optString("confidence"))
                 .put("performance_index", score.opt("performance_index"))
@@ -164,5 +184,13 @@ final class QualificationReport {
                 .put("weighted_improvement_percent", score.opt("weighted_improvement_percent"))
                 .put("best_area", best == null ? JSONObject.NULL : best.optString("label"))
                 .put("worst_area", worst == null ? JSONObject.NULL : worst.optString("label"));
+    }
+
+    private static String driverLabel(JSONObject driver, String fallback) {
+        if (driver == null) return fallback;
+        String name = driver.optString("name", fallback);
+        String version = driver.optString("packageVersion",
+                driver.optString("driverVersion", ""));
+        return version.isEmpty() ? name : name + " · " + version;
     }
 }

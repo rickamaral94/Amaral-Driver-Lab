@@ -22,6 +22,7 @@ final class QualificationCoordinator {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private JSONObject manifest;
     private DriverPackage driver;
+    private DriverPackage referenceDriver;
     private RunCoordinator currentRun;
     private DeepDiagnosticsCoordinator currentDeepDiagnostics;
     private boolean active;
@@ -37,6 +38,9 @@ final class QualificationCoordinator {
         try {
             manifest = QualificationStore.load(qualificationFile);
             driver = loadDriver(manifest.getJSONObject("driver").getString("sha256"));
+            JSONObject reference = manifest.optJSONObject("reference_driver");
+            referenceDriver = reference == null ? null
+                    : loadDriver(reference.getString("sha256"));
             int recovered = QualificationStore.recoverInterrupted(manifest);
             QualificationStore.markRunning(manifest);
             QualificationStore.save(qualificationFile, manifest);
@@ -132,7 +136,8 @@ final class QualificationCoordinator {
                 .put("step_count", stepCount)
                 .put("score_weight", step.weight)
                 .put("compatibility_gate", step.compatibilityGate);
-        currentRun = new RunCoordinator(activity, driver, RunCoordinator.MODE_AB,
+        currentRun = new RunCoordinator(activity, driver, referenceDriver,
+                RunCoordinator.MODE_AB,
                 step.rounds, step.warmupSeconds, step.measureSeconds,
                 step.workloadId, step.traceId,
                 VisualSceneContract.isVisualScene(step.workloadId)
@@ -160,7 +165,8 @@ final class QualificationCoordinator {
 
     private void launchDeepDiagnostics(QualificationProfile.Step step) {
         String mode = QualificationProfile.KIND_SHORT_SOAK.equals(step.kind) ? "soak" : "full";
-        currentDeepDiagnostics = new DeepDiagnosticsCoordinator(activity, driver, mode,
+        currentDeepDiagnostics = new DeepDiagnosticsCoordinator(activity, driver,
+                referenceDriver, mode,
                 Math.max(1, step.diagnosticCycles), step.memoryMiB,
                 new DeepDiagnosticsCoordinator.Listener() {
                     @Override public void onStatus(String status) {

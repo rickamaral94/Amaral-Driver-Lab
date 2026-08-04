@@ -1,25 +1,42 @@
 package com.amaral.driverlab;
 
+import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Typeface;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import org.json.JSONObject;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
-/** Phase 13 home: guided first, technical depth progressively disclosed. */
+/** Phase 13 home: choose drivers and run the recommended test without technical detours. */
 public final class MainActivity extends LocalizedActivity {
+    private static final int REQUEST_IMPORT_DRIVER = 1310;
+
+    private final List<DriverPackage> drivers = new ArrayList<>();
     private UxPreferenceStore uxPreferences;
     private LinearLayout root;
     private Button modeButton;
+    private Spinner comparisonSpinner;
+    private Spinner candidateSpinner;
+    private Spinner referenceSpinner;
+    private LinearLayout referenceBlock;
+    private TextView candidateDetails;
+    private TextView referenceDetails;
+    private Button startButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,9 +63,8 @@ public final class MainActivity extends LocalizedActivity {
                 ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
 
         addHeader();
-        addLatestSummary();
         addRecommendedTest();
-        addComparisonSection();
+        addLatestSummary();
         if (uxPreferences.advancedMode()) addIndividualTests();
         addResultsSection();
         if (uxPreferences.advancedMode()) addAdvancedWorkspace();
@@ -112,12 +128,10 @@ public final class MainActivity extends LocalizedActivity {
             card.addView(top);
             String headline = getString(R.string.phase13_result_in_progress);
             if (report != null && report.optJSONObject("human_summary") != null) {
-                headline = report.optJSONObject("human_summary")
-                        .optString("headline", headline);
+                headline = report.optJSONObject("human_summary").optString("headline", headline);
             }
             card.addView(AppTheme.body(this, headline), AppTheme.matchWrap(this, 12, 0));
-            card.setOnClickListener(view -> open(GuidedTestFlowActivity.class,
-                    GuidedTestFlowActivity.EXTRA_START_STEP, 4));
+            card.setOnClickListener(view -> openLog(latest));
             card.setContentDescription(getString(R.string.phase13_open_latest_result));
             root.addView(card, AppTheme.matchWrap(this, 0, 16));
         } catch (Exception ignored) {
@@ -134,29 +148,189 @@ public final class MainActivity extends LocalizedActivity {
                 AmaralColors.SUCCESS), new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
-        TextView title = AppTheme.heading(this, getString(R.string.phase13_full_title), 24);
-        hero.addView(title, AppTheme.matchWrap(this, 14, 8));
-        hero.addView(AppTheme.body(this, getString(R.string.phase13_full_description)));
+        hero.addView(AppTheme.heading(this, getString(R.string.phase13_full_title), 24),
+                AppTheme.matchWrap(this, 14, 8));
+        hero.addView(AppTheme.body(this, getString(R.string.phase13_quick_test_description)));
+
         TextView composition = AppTheme.caption(this, getString(R.string.phase13_full_composition));
         composition.setTypeface(Typeface.MONOSPACE);
-        hero.addView(composition, AppTheme.matchWrap(this, 14, 14));
-        hero.addView(AppTheme.primaryButton(this, getString(R.string.phase13_start_full),
-                view -> open(GuidedTestFlowActivity.class)),
-                AppTheme.matchWrap(this, 0, 0));
+        hero.addView(composition, AppTheme.matchWrap(this, 12, 16));
+
+        hero.addView(AppTheme.heading(this, getString(R.string.phase13_compare_against), 15));
+        comparisonSpinner = new Spinner(this);
+        comparisonSpinner.setMinimumHeight(dp(52));
+        comparisonSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item,
+                new String[]{
+                        getString(R.string.phase13_comparison_system_turnip),
+                        getString(R.string.phase13_comparison_turnip_turnip)
+                }));
+        comparisonSpinner.setSelection("turnip_vs_turnip".equals(
+                uxPreferences.quickComparisonMode()) ? 1 : 0);
+        hero.addView(comparisonSpinner, AppTheme.matchWrap(this, 6, 12));
+
+        hero.addView(AppTheme.heading(this, getString(R.string.phase13_candidate_driver_label), 15));
+        candidateSpinner = new Spinner(this);
+        candidateSpinner.setMinimumHeight(dp(52));
+        hero.addView(candidateSpinner, AppTheme.matchWrap(this, 6, 4));
+        candidateDetails = AppTheme.caption(this, "");
+        candidateDetails.setTextIsSelectable(true);
+        hero.addView(candidateDetails, AppTheme.matchWrap(this, 0, 12));
+
+        referenceBlock = AppTheme.vertical(this);
+        referenceBlock.addView(AppTheme.heading(this,
+                getString(R.string.phase13_reference_driver_label), 15));
+        referenceSpinner = new Spinner(this);
+        referenceSpinner.setMinimumHeight(dp(52));
+        referenceBlock.addView(referenceSpinner, AppTheme.matchWrap(this, 6, 4));
+        referenceDetails = AppTheme.caption(this, "");
+        referenceDetails.setTextIsSelectable(true);
+        referenceBlock.addView(referenceDetails, AppTheme.matchWrap(this, 0, 12));
+        hero.addView(referenceBlock);
+
+        Button importButton = AppTheme.secondaryButton(this,
+                getString(R.string.phase13_import_driver), view -> chooseDriverZip());
+        hero.addView(importButton, AppTheme.matchWrap(this, 0, 8));
+
+        startButton = AppTheme.primaryButton(this,
+                getString(R.string.phase13_start_selected_test),
+                view -> startQuickQualification());
+        hero.addView(startButton);
         root.addView(hero, AppTheme.matchWrap(this, 0, 20));
+
+        loadDriverSelectors();
+        comparisonSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view,
+                                                  int position, long id) {
+                uxPreferences.setQuickComparisonMode(position == 1
+                        ? "turnip_vs_turnip" : "system_vs_turnip");
+                updateReferenceVisibility();
+                updateStartState();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        updateReferenceVisibility();
+        updateStartState();
     }
 
-    private void addComparisonSection() {
-        sectionTitle(R.string.phase13_comparisons);
-        LinearLayout card = AppTheme.card(this);
-        card.addView(actionButton(R.string.phase13_system_vs_turnip,
-                R.string.phase13_system_vs_turnip_detail,
-                view -> openGuided("system_vs_turnip")));
-        card.addView(AppTheme.divider(this), dividerParams());
-        card.addView(actionButton(R.string.phase13_turnip_vs_turnip,
-                R.string.phase13_turnip_vs_turnip_detail,
-                view -> openGuided("turnip_vs_turnip")));
-        root.addView(card, AppTheme.matchWrap(this, 0, 20));
+    private void loadDriverSelectors() {
+        drivers.clear();
+        drivers.addAll(DriverCatalog.load(this));
+        List<String> labels = new ArrayList<>();
+        if (drivers.isEmpty()) labels.add(getString(R.string.phase13_no_driver_imported));
+        for (DriverPackage driver : drivers) labels.add(driver.displayName());
+
+        candidateSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, labels));
+        referenceSpinner.setAdapter(new LocalizedArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, labels));
+        candidateSpinner.setSelection(indexForSha(uxPreferences.quickCandidateSha(), 0));
+        int referenceFallback = drivers.size() > 1 ? 1 : 0;
+        referenceSpinner.setSelection(indexForSha(
+                uxPreferences.quickReferenceSha(), referenceFallback));
+
+        candidateSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view,
+                                                  int position, long id) {
+                DriverPackage selected = driverAt(position);
+                if (selected != null) uxPreferences.setQuickCandidateSha(selected.sha256);
+                updateDriverDetails(candidateDetails, selected);
+                updateStartState();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        referenceSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view,
+                                                  int position, long id) {
+                DriverPackage selected = driverAt(position);
+                if (selected != null) uxPreferences.setQuickReferenceSha(selected.sha256);
+                updateDriverDetails(referenceDetails, selected);
+                updateStartState();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        updateDriverDetails(candidateDetails, driverAt(candidateSpinner.getSelectedItemPosition()));
+        updateDriverDetails(referenceDetails, driverAt(referenceSpinner.getSelectedItemPosition()));
+    }
+
+    private void updateReferenceVisibility() {
+        boolean turnipVsTurnip = comparisonSpinner != null
+                && comparisonSpinner.getSelectedItemPosition() == 1;
+        if (referenceBlock != null) referenceBlock.setVisibility(
+                turnipVsTurnip ? View.VISIBLE : View.GONE);
+    }
+
+    private void updateStartState() {
+        if (startButton == null) return;
+        DriverPackage candidate = selectedCandidate();
+        boolean enabled = candidate != null;
+        if (enabled && isTurnipVsTurnip()) {
+            DriverPackage reference = selectedReference();
+            enabled = reference != null && !candidate.sha256.equals(reference.sha256);
+        }
+        startButton.setEnabled(enabled);
+    }
+
+    private void startQuickQualification() {
+        DriverPackage candidate = selectedCandidate();
+        if (candidate == null) {
+            showMessage(R.string.phase13_select_candidate_error);
+            return;
+        }
+        DriverPackage reference = isTurnipVsTurnip() ? selectedReference() : null;
+        if (isTurnipVsTurnip() && reference == null) {
+            showMessage(R.string.phase13_select_reference_error);
+            return;
+        }
+        if (reference != null && reference.sha256.equals(candidate.sha256)) {
+            showMessage(R.string.phase13_same_driver_error);
+            return;
+        }
+        Intent intent = new Intent(this, QualificationActivity.class);
+        intent.putExtra(QualificationActivity.EXTRA_GUIDED, true);
+        intent.putExtra(QualificationActivity.EXTRA_AUTOSTART, true);
+        intent.putExtra(QualificationActivity.EXTRA_OPEN_LOG_ON_COMPLETE, true);
+        intent.putExtra(QualificationActivity.EXTRA_PROFILE_VERSION,
+                Phase13ValidationContract.PROFILE_VERSION);
+        intent.putExtra(QualificationActivity.EXTRA_DRIVER_SHA, candidate.sha256);
+        intent.putExtra(QualificationActivity.EXTRA_COMPARISON_MODE,
+                isTurnipVsTurnip() ? "turnip_vs_turnip" : "system_vs_turnip");
+        if (reference != null) {
+            intent.putExtra(QualificationActivity.EXTRA_REFERENCE_DRIVER_SHA, reference.sha256);
+        }
+        startActivity(intent);
+    }
+
+    private void chooseDriverZip() {
+        Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        picker.addCategory(Intent.CATEGORY_OPENABLE);
+        picker.setType("application/zip");
+        startActivityForResult(picker, REQUEST_IMPORT_DRIVER);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_IMPORT_DRIVER || resultCode != Activity.RESULT_OK
+                || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        Toast.makeText(this, getString(R.string.phase13_importing_driver),
+                Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                DriverPackage imported = DriverImporter.importZip(this, uri);
+                uxPreferences.setQuickCandidateSha(imported.sha256);
+                runOnUiThread(() -> {
+                    Toast.makeText(this, getString(R.string.phase13_import_success,
+                            imported.displayName()), Toast.LENGTH_LONG).show();
+                    buildUi();
+                });
+            } catch (Throwable error) {
+                runOnUiThread(() -> Toast.makeText(this,
+                        getString(R.string.phase13_import_failed, error.getMessage()),
+                        Toast.LENGTH_LONG).show());
+            }
+        }, "home-driver-import").start();
     }
 
     private void addIndividualTests() {
@@ -190,7 +364,11 @@ public final class MainActivity extends LocalizedActivity {
                 R.string.phase13_rankings_detail, view -> open(Phase4Activity.class)));
         card.addView(AppTheme.divider(this), dividerParams());
         card.addView(actionButton(R.string.phase13_reports,
-                R.string.phase13_reports_detail, view -> open(AdvancedSettingsActivity.class)));
+                R.string.phase13_reports_detail, view -> {
+                    File latest = latestQualification();
+                    if (latest == null) showMessage(R.string.phase13_no_result_yet);
+                    else openLog(latest);
+                }));
         card.addView(AppTheme.divider(this), dividerParams());
         card.addView(actionButton(R.string.phase13_telemetry,
                 R.string.phase13_telemetry_detail, view -> open(TelemetryActivity.class)));
@@ -200,6 +378,10 @@ public final class MainActivity extends LocalizedActivity {
     private void addAdvancedWorkspace() {
         sectionTitle(R.string.phase13_advanced_tools);
         LinearLayout card = AppTheme.card(this);
+        card.addView(actionButton(R.string.phase13_legacy_full_title,
+                R.string.phase13_legacy_full_detail,
+                view -> openLegacyFull()));
+        card.addView(AppTheme.divider(this), dividerParams());
         card.addView(actionButton(R.string.phase13_technical_workspace,
                 R.string.phase13_technical_workspace_detail,
                 view -> open(AdvancedSettingsActivity.class)));
@@ -232,9 +414,10 @@ public final class MainActivity extends LocalizedActivity {
                 AppTheme.matchWrap(this, 0, 10));
     }
 
-    private void openGuided(String comparisonMode) {
-        Intent intent = new Intent(this, GuidedTestFlowActivity.class);
-        intent.putExtra(GuidedTestFlowActivity.EXTRA_COMPARISON_MODE, comparisonMode);
+    private void openLegacyFull() {
+        Intent intent = new Intent(this, QualificationActivity.class);
+        intent.putExtra(QualificationActivity.EXTRA_PROFILE_VERSION,
+                Phase11Contract.PROFILE_VERSION);
         startActivity(intent);
     }
 
@@ -248,15 +431,16 @@ public final class MainActivity extends LocalizedActivity {
         startActivity(new Intent(this, activityClass));
     }
 
-    private void open(Class<?> activityClass, String extra, int value) {
-        Intent intent = new Intent(this, activityClass);
-        intent.putExtra(extra, value);
+    private void openLog(File qualificationFile) {
+        Intent intent = new Intent(this, QualificationLogActivity.class);
+        intent.putExtra(QualificationLogActivity.EXTRA_QUALIFICATION_PATH,
+                qualificationFile.getAbsolutePath());
         startActivity(intent);
     }
 
     private File latestQualification() {
-        File root = new File(getFilesDir(), "qualifications");
-        File[] directories = root.listFiles(File::isDirectory);
+        File qualifications = new File(getFilesDir(), "qualifications");
+        File[] directories = qualifications.listFiles(File::isDirectory);
         if (directories == null || directories.length == 0) return null;
         java.util.Arrays.sort(directories,
                 java.util.Comparator.comparingLong(File::lastModified).reversed());
@@ -265,6 +449,49 @@ public final class MainActivity extends LocalizedActivity {
             if (manifest.isFile()) return manifest;
         }
         return null;
+    }
+
+    private DriverPackage selectedCandidate() {
+        return candidateSpinner == null ? null
+                : driverAt(candidateSpinner.getSelectedItemPosition());
+    }
+
+    private DriverPackage selectedReference() {
+        return referenceSpinner == null ? null
+                : driverAt(referenceSpinner.getSelectedItemPosition());
+    }
+
+    private DriverPackage driverAt(int position) {
+        return position >= 0 && position < drivers.size() ? drivers.get(position) : null;
+    }
+
+    private int indexForSha(String sha, int fallback) {
+        for (int index = 0; index < drivers.size(); index++) {
+            if (drivers.get(index).sha256.equals(sha)) return index;
+        }
+        return Math.max(0, Math.min(fallback, Math.max(0, drivers.size() - 1)));
+    }
+
+    private void updateDriverDetails(TextView target, DriverPackage driver) {
+        if (target == null) return;
+        if (driver == null) {
+            target.setText(getString(R.string.phase13_import_driver_instruction));
+            return;
+        }
+        String sha = driver.sha256.length() > 16
+                ? driver.sha256.substring(0, 16) + "…" : driver.sha256;
+        target.setText(driver.displayName() + " · SHA-256 " + sha);
+    }
+
+    private boolean isTurnipVsTurnip() {
+        return comparisonSpinner != null && comparisonSpinner.getSelectedItemPosition() == 1;
+    }
+
+    private void showMessage(int messageRes) {
+        new LocalizedAlertDialogBuilder(this)
+                .setMessage(getString(messageRes))
+                .setPositiveButton(getString(R.string.action_close), null)
+                .show();
     }
 
     private String localizedState(String state) {

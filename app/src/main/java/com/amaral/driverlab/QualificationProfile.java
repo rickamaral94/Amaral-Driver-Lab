@@ -95,14 +95,15 @@ final class QualificationProfile {
 
     private QualificationProfile() {}
 
-    static int currentVersion() { return Phase11Contract.PROFILE_VERSION; }
+    static int currentVersion() { return Phase13ValidationContract.PROFILE_VERSION; }
     static List<Step> steps() { return stepsForVersion(currentVersion()); }
 
     static List<Step> stepsForVersion(int version) {
         if (version == Phase7Contract.PROFILE_VERSION) return legacyV1Steps();
         if (version == Phase8Contract.CURRENT_FULL_PROFILE_VERSION) return v2Steps();
         if (version == Phase11Contract.PROFILE_VERSION) return v3Steps();
-        throw new IllegalArgumentException("Versão Full Qualification desconhecida: " + version);
+        if (version == Phase13ValidationContract.PROFILE_VERSION) return recommendedV4Steps();
+        throw new IllegalArgumentException("Versão de Qualification desconhecida: " + version);
     }
 
     private static List<Step> legacyV1Steps() {
@@ -204,6 +205,28 @@ final class QualificationProfile {
         return Collections.unmodifiableList(output);
     }
 
+    private static List<Step> recommendedV4Steps() {
+        List<Step> output = new ArrayList<>();
+        output.add(new Step("correctness_pre", "Correção offscreen inicial",
+                WorkloadContract.RENDER_CORRECTNESS_ID, "", 3, 0, 1, 2, 0, true));
+        output.add(new Step("visual_geometry", "Cena visível: geometria e depth",
+                VisualSceneContract.GEOMETRY_ID, "", 5, 1, 5, 2, 20, true));
+        output.add(new Step("visual_materials", "Cena visível: materiais e amostragem",
+                VisualSceneContract.MATERIALS_ID, "", 5, 1, 5, 2, 15, true));
+        output.add(new Step("visual_postprocess", "Cena visível: pós-processamento",
+                VisualSceneContract.POSTPROCESS_ID, "", 5, 1, 5, 2, 15, true));
+        output.add(new Step("shader_compile", "Compilação de shaders",
+                WorkloadContract.SHADER_COMPILE_ID, "", 5, 1, 1, 2, 15, false));
+        output.add(new Step("stable_scene", "Frametime da cena estável",
+                WorkloadContract.STABLE_SCENE_ID, "", 5, 2, 6, 2, 25, false));
+        output.add(new Step("trace_mixed", "Trace gráfico, compute e barreiras",
+                WorkloadContract.TRACE_REPLAY_ID, TraceReplayContract.MIXED_TRACE_ID,
+                5, 2, 5, 2, 10, true));
+        output.add(new Step("correctness_post", "Correção offscreen após carga",
+                WorkloadContract.RENDER_CORRECTNESS_ID, "", 3, 0, 1, 0, 0, true));
+        return Collections.unmodifiableList(output);
+    }
+
     static JSONObject definition() throws Exception { return definitionForVersion(currentVersion()); }
 
     static JSONObject definitionForVersion(int version) throws Exception {
@@ -215,14 +238,17 @@ final class QualificationProfile {
         }
         String label = version == 1 ? Phase7Contract.PROFILE_LABEL
                 : version == 2 ? Phase8Contract.FULL_PROFILE_LABEL
-                : Phase11Contract.PROFILE_LABEL;
+                : version == 3 ? Phase11Contract.PROFILE_LABEL
+                : Phase13ValidationContract.PROFILE_LABEL;
         String limitations = version == 1 ? Phase7Contract.LIMITATION
-                : version == 2 ? Phase8Contract.LIMITATION : Phase11Contract.LIMITATION;
+                : version == 2 ? Phase8Contract.LIMITATION
+                : version == 3 ? Phase11Contract.LIMITATION
+                : Phase13ValidationContract.LIMITATION;
         JSONObject definition = new JSONObject()
                 .put("profile_id", Phase7Contract.PROFILE_ID)
                 .put("profile_version", version)
                 .put("label", label)
-                .put("mode", "ab_system_vs_candidate")
+                .put("mode", version >= 4 ? "ab_reference_vs_candidate" : "ab_system_vs_candidate")
                 .put("step_count", encodedSteps.length())
                 .put("performance_weight_total", totalWeight)
                 .put("default_pixel_tolerance", version >= 2
@@ -234,8 +260,9 @@ final class QualificationProfile {
                 .put("steps", encodedSteps)
                 .put("limitations", limitations);
         if (version >= 3) {
-            definition.put("automated_logical_test_count",
-                            Phase11Contract.AUTOMATED_LOGICAL_TESTS)
+            definition.put("automated_logical_test_count", version >= 4
+                            ? Phase13ValidationContract.AUTOMATED_LOGICAL_TESTS
+                            : Phase11Contract.AUTOMATED_LOGICAL_TESTS)
                     .put("optional_evidence_slot_count",
                             Phase11Contract.OPTIONAL_EVIDENCE_SLOTS)
                     .put("telemetry_attachment_optional", true)
@@ -250,7 +277,7 @@ final class QualificationProfile {
         try {
             if (!Phase7Contract.PROFILE_ID.equals(profile.optString("profile_id"))) return false;
             int version = profile.optInt("profile_version", -1);
-            if (version != 1 && version != 2 && version != 3) return false;
+            if (version != 1 && version != 2 && version != 3 && version != 4) return false;
             JSONArray steps = profile.optJSONArray("steps");
             if (steps == null || steps.length() != stepsForVersion(version).size()) return false;
             String expected = profile.optString("profile_sha256", "");
