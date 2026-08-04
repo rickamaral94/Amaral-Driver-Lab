@@ -56,7 +56,7 @@ public final class Phase12ResourcesTest {
     }
 
     private static String read(File file) throws Exception {
-        return Files.readString(file.toPath(), StandardCharsets.UTF_8);
+        return new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
     }
 
     private static String extractArray(String xml) {
