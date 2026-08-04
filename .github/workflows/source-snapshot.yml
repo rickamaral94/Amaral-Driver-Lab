@@ -37,43 +37,7 @@ jobs:
           echo '232ab3e7d0a8fb6438252173496a4cecd3b991245b5f10d00082a247c7845d3c  /tmp/phase9.patch' | sha256sum --check
           git apply --check /tmp/phase9.patch
           git apply /tmp/phase9.patch
-          rm -rf .phase9 .github/workflows/phase9-materialize.yml
-          cat > .github/workflows/source-snapshot.yml <<'EOF'
-          name: Source Snapshot
-
-          on:
-            pull_request:
-            workflow_dispatch:
-
-          permissions:
-            contents: read
-
-          jobs:
-            snapshot:
-              runs-on: ubuntu-latest
-              timeout-minutes: 10
-              steps:
-                - name: Checkout
-                  uses: actions/checkout@v4
-                - name: Upload source snapshot
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: amaral-driver-lab-phase2-source
-                    path: |
-                      .github
-                      app
-                      telemetry-sdk
-                      docs
-                      README.md
-                      build.gradle
-                      settings.gradle
-                      gradle.properties
-                      gradlew
-                      gradlew.bat
-                      gradle
-                    if-no-files-found: error
-                    retention-days: 3
-          EOF
+          rm -rf .phase9
           git config user.name 'OpenAI Agent'
           git config user.email 'agent@openai.com'
           git add -A
