@@ -53,10 +53,15 @@ driverlab_compile_shader("shaders/phase2_branch.frag" "phase2_branch_frag")
 driverlab_compile_shader("shaders/phase2_compute.comp" "phase2_compute_comp")
 driverlab_compile_shader("shaders/trace_solid.frag" "trace_solid_frag")
 driverlab_compile_shader("shaders/trace_integer.comp" "trace_integer_comp")
+driverlab_compile_shader("shaders/visual_scene.vert" "visual_scene_vert")
+driverlab_compile_shader("shaders/visual_scene.frag" "visual_scene_frag")
+driverlab_compile_shader("shaders/visual_post.vert" "visual_post_vert")
+driverlab_compile_shader("shaders/visual_post.frag" "visual_post_frag")
 
 add_custom_target(driverlab_shaders DEPENDS ${DRIVERLAB_SHADER_OUTPUTS})
 
-add_library(driverlab SHARED benchmark.cpp render_correctness.cpp phase2_workloads.cpp)
+add_library(driverlab SHARED benchmark.cpp render_correctness.cpp phase2_workloads.cpp
+        visual_scenes.cpp)
 add_dependencies(driverlab driverlab_shaders)
 target_include_directories(driverlab PRIVATE "${GENERATED_SHADER_DIR}")
 target_compile_features(driverlab PRIVATE cxx_std_20)

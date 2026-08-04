@@ -5,7 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 final class WorkloadContract {
-    static final int RESULT_SCHEMA_VERSION = 8;
+    static final int RESULT_SCHEMA_VERSION = 9;
 
     static final int STATISTICAL_ANALYSIS_VERSION = 1;
     static final int BOOTSTRAP_ITERATIONS = 5_000;
@@ -71,6 +71,12 @@ final class WorkloadContract {
                     + "capturas de jogos, não reproduz CPU/I/O de emuladores e não garante FPS ou "
                     + "compatibilidade em aplicações reais.";
 
+    static final String VISUAL_GEOMETRY_ID = VisualSceneContract.GEOMETRY_ID;
+    static final String VISUAL_MATERIALS_ID = VisualSceneContract.MATERIALS_ID;
+    static final String VISUAL_POSTPROCESS_ID = VisualSceneContract.POSTPROCESS_ID;
+    static final int VISUAL_SCENE_VERSION = VisualSceneContract.VERSION;
+    static final String VISUAL_SCENE_METRIC = VisualSceneContract.PRIMARY_METRIC;
+
     static final String THERMAL_SUSTAIN_LIMITATION =
             "Mede sustentação de uma carga compute fixa e energia do aparelho inteiro; sensores "
                     + "podem ser ausentes e o resultado não representa autonomia ou jogos.";
@@ -108,6 +114,7 @@ final class WorkloadContract {
         return TRANSFER_ID.equals(workloadId)
                 || RENDER_CORRECTNESS_ID.equals(workloadId)
                 || TRACE_REPLAY_ID.equals(workloadId)
+                || VisualSceneContract.isVisualScene(workloadId)
                 || PHASE2_IDS.contains(workloadId);
     }
 
@@ -117,7 +124,7 @@ final class WorkloadContract {
 
     static boolean isPerformance(String workloadId) {
         return TRANSFER_ID.equals(workloadId) || TRACE_REPLAY_ID.equals(workloadId)
-                || isPhase2(workloadId);
+                || VisualSceneContract.isVisualScene(workloadId) || isPhase2(workloadId);
     }
 
     static int versionFor(String workloadId) {
@@ -129,6 +136,7 @@ final class WorkloadContract {
         if (STABLE_SCENE_ID.equals(workloadId)) return STABLE_SCENE_VERSION;
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return THERMAL_SUSTAIN_VERSION;
         if (TRACE_REPLAY_ID.equals(workloadId)) return TRACE_REPLAY_VERSION;
+        if (VisualSceneContract.isVisualScene(workloadId)) return VISUAL_SCENE_VERSION;
         throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
     }
 
@@ -141,6 +149,9 @@ final class WorkloadContract {
         if (STABLE_SCENE_ID.equals(workloadId)) return STABLE_SCENE_LIMITATION;
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return THERMAL_SUSTAIN_LIMITATION;
         if (TRACE_REPLAY_ID.equals(workloadId)) return TRACE_REPLAY_LIMITATION;
+        if (VisualSceneContract.isVisualScene(workloadId)) {
+            return VisualSceneContract.limitationFor(workloadId);
+        }
         throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
     }
 
@@ -153,12 +164,16 @@ final class WorkloadContract {
         if (STABLE_SCENE_ID.equals(workloadId)) return "frametime estável v1";
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return "sustentação térmica v1";
         if (TRACE_REPLAY_ID.equals(workloadId)) return "trace replay Vulkan v1";
+        if (VisualSceneContract.isVisualScene(workloadId)) {
+            return VisualSceneContract.labelFor(workloadId);
+        }
         throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
     }
 
     static String nativeNameFor(String workloadId) {
         if (TRANSFER_ID.equals(workloadId)) return TRANSFER_NATIVE_NAME;
         if (TRACE_REPLAY_ID.equals(workloadId)) return "vulkan_command_trace_replay_v1";
+        if (VisualSceneContract.isVisualScene(workloadId)) return workloadId + "_v1";
         return workloadId + "_v" + versionFor(workloadId);
     }
 
@@ -170,6 +185,7 @@ final class WorkloadContract {
         if (STABLE_SCENE_ID.equals(workloadId)) return STABLE_SCENE_METRIC;
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return THERMAL_SUSTAIN_METRIC;
         if (TRACE_REPLAY_ID.equals(workloadId)) return TRACE_REPLAY_METRIC;
+        if (VisualSceneContract.isVisualScene(workloadId)) return VISUAL_SCENE_METRIC;
         throw new IllegalArgumentException("Workload sem métrica primária: " + workloadId);
     }
 
@@ -177,7 +193,8 @@ final class WorkloadContract {
         return SHADER_COMPILE_ID.equals(workloadId)
                 || RENDERPASS_TILING_ID.equals(workloadId)
                 || STABLE_SCENE_ID.equals(workloadId)
-                || TRACE_REPLAY_ID.equals(workloadId);
+                || TRACE_REPLAY_ID.equals(workloadId)
+                || VisualSceneContract.isVisualScene(workloadId);
     }
 
     static long timeoutSeconds(String workloadId, int warmupSeconds, int measureSeconds) {
@@ -185,6 +202,9 @@ final class WorkloadContract {
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return warmupSeconds + measureSeconds + 90L;
         if (SHADER_COMPILE_ID.equals(workloadId)) return 180L;
         if (TRACE_REPLAY_ID.equals(workloadId)) return warmupSeconds + measureSeconds + 120L;
+        if (VisualSceneContract.isVisualScene(workloadId)) {
+            return warmupSeconds + measureSeconds + 150L;
+        }
         return warmupSeconds + measureSeconds + 60L;
     }
 }

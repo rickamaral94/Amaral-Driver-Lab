@@ -9,21 +9,22 @@ import static org.junit.Assert.assertTrue;
 
 public final class QualificationScoreTest {
     @Test
-    public void compatibleFasterDriverIsRecommended() throws Exception {
+    public void compatibleFasterDriverIsRecommendedInV2() throws Exception {
         JSONObject score = QualificationScore.evaluate(QualificationProfile.definition(),
-                completed(8.0, false), preflight(), environment());
+                completed(8.0, false, false), preflight(), environment());
         assertTrue(score.getBoolean("eligible_for_recommendation"));
         assertEquals("candidate", score.getString("winner"));
         assertEquals("candidate_recommended_over_system",
                 score.getString("recommendation"));
         assertTrue(score.getDouble("overall_index") > 50.0);
-        assertEquals(8, score.getInt("valid_performance_steps"));
+        assertEquals(11, score.getInt("valid_performance_steps"));
+        assertEquals(2, score.getInt("qualification_score_version"));
     }
 
     @Test
-    public void renderFailureBlocksEvenFastDriver() throws Exception {
+    public void finalCorrectionFailureBlocksEvenFastDriver() throws Exception {
         JSONObject score = QualificationScore.evaluate(QualificationProfile.definition(),
-                completed(15.0, true), preflight(), environment());
+                completed(15.0, true, false), preflight(), environment());
         assertTrue(!score.getBoolean("eligible_for_recommendation"));
         assertEquals("none", score.getString("winner"));
         assertEquals("not_recommended_incompatible_or_invalid",
@@ -31,16 +32,46 @@ public final class QualificationScoreTest {
         assertTrue(score.getJSONArray("gate_reasons").length() > 0);
     }
 
-    private static JSONArray completed(double improvement, boolean failFinalCorrection)
-            throws Exception {
+    @Test
+    public void visualCheckpointMismatchBlocksFastDriver() throws Exception {
+        JSONObject score = QualificationScore.evaluate(QualificationProfile.definition(),
+                completed(18.0, false, true), preflight(), environment());
+        assertTrue(!score.getBoolean("eligible_for_recommendation"));
+        assertEquals("none", score.getString("winner"));
+        assertTrue(score.getJSONArray("gate_reasons").toString()
+                .contains("visual_scene_gate_failed:visual_materials"));
+    }
+
+    @Test
+    public void legacyV1ScoreStillUsesVersionOneContract() throws Exception {
+        JSONObject profile = QualificationProfile.definitionForVersion(1);
+        JSONObject score = QualificationScore.evaluate(profile,
+                completedForProfile(profile, 5.0, false, false), preflight(), environment());
+        assertEquals(1, score.getInt("qualification_score_version"));
+        assertEquals(1, score.getInt("profile_version"));
+        assertTrue(score.getBoolean("eligible_for_recommendation"));
+    }
+
+    private static JSONArray completed(double improvement, boolean failFinalCorrection,
+                                       boolean failVisualMaterials) throws Exception {
+        return completedForProfile(QualificationProfile.definition(), improvement,
+                failFinalCorrection, failVisualMaterials);
+    }
+
+    private static JSONArray completedForProfile(JSONObject profile, double improvement,
+                                                 boolean failFinalCorrection,
+                                                 boolean failVisualMaterials) throws Exception {
         JSONArray output = new JSONArray();
-        for (QualificationProfile.Step step : QualificationProfile.steps()) {
+        int version = profile.getInt("profile_version");
+        for (QualificationProfile.Step step : QualificationProfile.stepsForVersion(version)) {
             JSONObject report;
             if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(step.workloadId)) {
                 boolean pass = !(failFinalCorrection && "correctness_post".equals(step.stepId));
                 report = correctionReport(pass);
             } else {
-                report = performanceReport(step, improvement);
+                boolean visualPass = !(failVisualMaterials
+                        && "visual_materials".equals(step.stepId));
+                report = performanceReport(step, improvement, visualPass);
             }
             output.put(new JSONObject()
                     .put("step_id", step.stepId)
@@ -51,9 +82,10 @@ public final class QualificationScoreTest {
     }
 
     private static JSONObject performanceReport(QualificationProfile.Step step,
-                                                double improvement) throws Exception {
+                                                double improvement,
+                                                boolean visualPass) throws Exception {
         JSONObject report = new JSONObject()
-                .put("schema_version", 8)
+                .put("schema_version", 9)
                 .put("suite_id", "suite-" + step.stepId)
                 .put("workload_id", step.workloadId)
                 .put("workload_version", 1)
@@ -73,12 +105,19 @@ public final class QualificationScoreTest {
             report.put("trace_replay", new JSONObject()
                     .put("passed_correctness_gate", true));
         }
+        if (VisualSceneContract.isVisualScene(step.workloadId)) {
+            report.put("visual_scene", new JSONObject()
+                    .put("passed_correctness_gate", visualPass)
+                    .put("comparison_available", true)
+                    .put("minimum_pixel_match_percent", visualPass ? 100.0 : 97.0)
+                    .put("checkpoint_mismatch_count", visualPass ? 0 : 1));
+        }
         return report;
     }
 
     private static JSONObject correctionReport(boolean pass) throws Exception {
         return new JSONObject()
-                .put("schema_version", 8)
+                .put("schema_version", 9)
                 .put("suite_id", "suite-correction")
                 .put("workload_id", WorkloadContract.RENDER_CORRECTNESS_ID)
                 .put("workload_version", 1)

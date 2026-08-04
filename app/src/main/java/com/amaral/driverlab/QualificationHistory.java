@@ -61,7 +61,10 @@ final class QualificationHistory {
             encoded.put(entry);
         }
         return new JSONObject()
-                .put("qualification_score_version", Phase7Contract.SCORE_VERSION)
+                .put("qualification_score_version", reference.optJSONObject("score") == null
+                        ? Phase7Contract.SCORE_VERSION
+                        : reference.optJSONObject("score").optInt(
+                                "qualification_score_version", Phase7Contract.SCORE_VERSION))
                 .put("profile_sha256", profileSha)
                 .put("hardware_key", hardwareKey)
                 .put("eligible_entry_count", entries.size())

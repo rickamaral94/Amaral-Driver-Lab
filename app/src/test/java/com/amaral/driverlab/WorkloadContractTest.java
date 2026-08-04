@@ -23,7 +23,7 @@ public final class WorkloadContractTest {
 
     @Test
     public void phaseTwoSeriesRemainVersionOneWhileSchemaAdvancesAdditively() {
-        assertEquals(8, WorkloadContract.RESULT_SCHEMA_VERSION);
+        assertEquals(9, WorkloadContract.RESULT_SCHEMA_VERSION);
         assertEquals(5, WorkloadContract.PHASE2_IDS.size());
         for (String workloadId : WorkloadContract.PHASE2_IDS) {
             assertEquals(1, WorkloadContract.versionFor(workloadId));
@@ -84,6 +84,21 @@ public final class WorkloadContractTest {
         assertEquals(1, WorkloadContract.RENDER_CORRECTNESS_VERSION);
         assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
         assertEquals(1, WorkloadContract.STATISTICAL_ANALYSIS_VERSION);
+    }
+
+    @Test
+    public void phaseEightAddsVisibleScenesWithoutRedefiningEarlierSeries() {
+        assertEquals(1, Phase8Contract.VISUAL_SCENE_CONTRACT_VERSION);
+        assertEquals(1, Phase8Contract.CHECKPOINT_ANALYSIS_VERSION);
+        assertEquals(2, Phase8Contract.CURRENT_FULL_PROFILE_VERSION);
+        assertEquals(3, VisualSceneContract.IDS.size());
+        for (String workloadId : VisualSceneContract.IDS) {
+            assertEquals(1, WorkloadContract.versionFor(workloadId));
+            assertEquals("p99_gpu_frame_ms", WorkloadContract.primaryMetricFor(workloadId));
+            assertTrue(WorkloadContract.lowerIsBetter(workloadId));
+        }
+        assertEquals(1, WorkloadContract.RENDER_CORRECTNESS_VERSION);
+        assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
     }
 
 }

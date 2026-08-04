@@ -14,6 +14,7 @@ final class QualificationReport {
         if (!QualificationStore.verify(manifest)) {
             throw new IllegalArgumentException("Manifesto Full inválido");
         }
+        int profileVersion = manifest.getJSONObject("profile").getInt("profile_version");
         JSONArray scoredSteps = new JSONArray();
         JSONArray compactSteps = new JSONArray();
         JSONObject hardware = null;
@@ -26,7 +27,7 @@ final class QualificationReport {
                     .put("status", state.optString("status"));
             JSONObject compact = new JSONObject()
                     .put("step_id", stepId)
-                    .put("label", QualificationProfile.step(stepId).label)
+                    .put("label", QualificationProfile.step(profileVersion, stepId).label)
                     .put("status", state.optString("status"))
                     .put("attempt_count", state.optInt("attempt_count", 0))
                     .put("suite_id", state.opt("suite_id"))
@@ -44,7 +45,8 @@ final class QualificationReport {
                             .put("failure_catalog", suite.optJSONArray("failure_catalog"))
                             .put("statistical_analysis", suite.opt("statistical_analysis"))
                             .put("render_correctness", suite.opt("render_correctness"))
-                            .put("trace_replay", suite.opt("trace_replay"));
+                            .put("trace_replay", suite.opt("trace_replay"))
+                            .put("visual_scene", suite.opt("visual_scene"));
                     if (hardware == null) hardware = suite.optJSONObject("hardware_identity");
                 }
             }
@@ -68,14 +70,18 @@ final class QualificationReport {
         JSONObject driver = manifest.getJSONObject("driver");
         JSONObject human = humanSummary(driver, score);
         return new JSONObject()
-                .put("qualification_report_version", Phase7Contract.REPORT_VERSION)
+                .put("qualification_report_version", profileVersion >= 2
+                        ? Phase8Contract.CURRENT_QUALIFICATION_REPORT_VERSION
+                        : Phase7Contract.REPORT_VERSION)
                 .put("qualification_id", manifest.getString("qualification_id"))
                 .put("created_at_ms", manifest.getLong("created_at_ms"))
                 .put("finished_at_ms", System.currentTimeMillis())
                 .put("app_version", BuildConfig.VERSION_NAME)
                 .put("phase7_contract", Phase7Contract.contractJson())
+                .put("phase8_contract", profileVersion >= 2
+                        ? Phase8Contract.contractJson() : JSONObject.NULL)
                 .put("profile_id", Phase7Contract.PROFILE_ID)
-                .put("profile_version", Phase7Contract.PROFILE_VERSION)
+                .put("profile_version", profileVersion)
                 .put("profile_sha256", manifest.getString("profile_sha256"))
                 .put("driver", driver)
                 .put("hardware_identity", hardware)
@@ -90,7 +96,8 @@ final class QualificationReport {
                 .put("score", score)
                 .put("human_summary", human)
                 .put("local_leaderboard", JSONObject.NULL)
-                .put("limitations", Phase7Contract.LIMITATION);
+                .put("limitations", profileVersion >= 2
+                        ? Phase8Contract.LIMITATION : Phase7Contract.LIMITATION);
     }
 
     static JSONObject humanSummary(JSONObject driver, JSONObject score) throws Exception {
@@ -103,7 +110,8 @@ final class QualificationReport {
         String detail;
         if ("candidate_recommended_over_system".equals(recommendation)) {
             headline = "Driver candidato recomendado";
-            detail = label + " foi superior ao driver do sistema no perfil Full v1.";
+            detail = label + " foi superior ao driver do sistema no perfil Full v"
+                    + score.optInt("profile_version", 1) + ".";
         } else if ("system_recommended_over_candidate".equals(recommendation)) {
             headline = "Driver do sistema recomendado";
             detail = label + " apresentou resultado geral inferior ao driver do sistema.";

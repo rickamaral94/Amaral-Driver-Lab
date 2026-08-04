@@ -57,16 +57,17 @@ public final class QualificationActivity extends Activity
         root.setPadding(dp(18), dp(18), dp(18), dp(36));
         scroll.addView(root);
 
-        root.addView(text("Teste Full Recomendado · Fase 7", 25, true));
+        root.addView(text("Teste Full Recomendado · Fase 8", 25, true));
         TextView subtitle = text(
-                "Executa todos os testes oficiais, correção antes/depois, ranking claro e log completo.",
+                "Executa o perfil Full v2 com cenas Vulkan visíveis, correção A/B, ranking claro e log completo.",
                 14, false);
         subtitle.setTextColor(Color.DKGRAY);
         root.addView(subtitle, margins(0, 4, 0, 14));
 
-        TextView note = text("Perfil imutável: " + Phase7Contract.PROFILE_LABEL
-                + "\n10 etapas · A/B sistema × candidato · duração estimada variável.\n\n"
-                + Phase7Contract.LIMITATION, 13, false);
+        TextView note = text("Perfil imutável: " + Phase8Contract.FULL_PROFILE_LABEL
+                + "\n" + QualificationProfile.steps().size()
+                + " etapas · A/B sistema × candidato · três cenas visíveis.\n\n"
+                + Phase8Contract.LIMITATION, 13, false);
         note.setTextColor(Color.DKGRAY);
         root.addView(note, margins(0, 0, 0, 16));
 

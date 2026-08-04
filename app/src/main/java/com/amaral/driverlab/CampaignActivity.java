@@ -71,6 +71,12 @@ public final class CampaignActivity extends Activity implements CampaignCoordina
         workloadOptions.add(new WorkloadOption(new CampaignWorkload(
                 WorkloadContract.RENDER_CORRECTNESS_ID, ""), true));
         workloadOptions.add(new WorkloadOption(new CampaignWorkload(
+                WorkloadContract.VISUAL_GEOMETRY_ID, ""), true));
+        workloadOptions.add(new WorkloadOption(new CampaignWorkload(
+                WorkloadContract.VISUAL_MATERIALS_ID, ""), true));
+        workloadOptions.add(new WorkloadOption(new CampaignWorkload(
+                WorkloadContract.VISUAL_POSTPROCESS_ID, ""), true));
+        workloadOptions.add(new WorkloadOption(new CampaignWorkload(
                 WorkloadContract.TRACE_REPLAY_ID, TraceReplayContract.MIXED_TRACE_ID), true));
         workloadOptions.add(new WorkloadOption(new CampaignWorkload(
                 WorkloadContract.TRACE_REPLAY_ID,

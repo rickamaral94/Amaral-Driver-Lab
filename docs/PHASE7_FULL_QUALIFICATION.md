@@ -1,5 +1,7 @@
 # Fase 7 · Turnip Full Qualification v1
 
+> Histórico: este documento descreve o perfil v1. A Fase 8 introduz o perfil v2 com cenas Vulkan visíveis. O v1 permanece válido e não é convertido nem misturado ao ranking v2.
+
 A Fase 7 cria o modo recomendado do Amaral Driver Lab: selecionar um driver, executar todo o protocolo oficial e receber uma recomendação clara acompanhada de um pacote completo de diagnóstico.
 
 ## Contratos

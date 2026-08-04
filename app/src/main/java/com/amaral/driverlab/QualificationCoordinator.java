@@ -91,30 +91,38 @@ final class QualificationCoordinator {
             }
             String stepId = state.getString("step_id");
             launchingStep = stepId;
-            QualificationProfile.Step step = QualificationProfile.step(stepId);
+            int profileVersion = manifest.getJSONObject("profile")
+                    .getInt("profile_version");
+            java.util.List<QualificationProfile.Step> profileSteps =
+                    QualificationProfile.stepsForVersion(profileVersion);
+            QualificationProfile.Step step = QualificationProfile.step(profileVersion, stepId);
             if (step == null) throw new IllegalStateException("Etapa desconhecida: " + stepId);
             QualificationStore.markStepRunning(manifest, stepId);
             QualificationStore.save(qualificationFile, manifest);
             listener.onUpdated(qualificationFile, manifest);
             int ordinal = stepOrdinal(stepId);
             listener.onStatus("Full Qualification " + ordinal + "/"
-                    + QualificationProfile.steps().size() + " · " + step.label);
+                    + profileSteps.size() + " · " + step.label);
             JSONObject context = new JSONObject()
                     .put("qualification_schema_version", Phase7Contract.QUALIFICATION_SCHEMA_VERSION)
                     .put("qualification_id", manifest.getString("qualification_id"))
                     .put("profile_id", Phase7Contract.PROFILE_ID)
-                    .put("profile_version", Phase7Contract.PROFILE_VERSION)
+                    .put("profile_version", profileVersion)
                     .put("profile_sha256", manifest.getString("profile_sha256"))
                     .put("step_id", stepId)
                     .put("step_ordinal", ordinal)
-                    .put("step_count", QualificationProfile.steps().size())
+                    .put("step_count", profileSteps.size())
                     .put("score_weight", step.weight)
                     .put("compatibility_gate", step.compatibilityGate);
             currentRun = new RunCoordinator(activity, driver, RunCoordinator.MODE_AB,
                     step.rounds, step.warmupSeconds, step.measureSeconds,
                     step.workloadId, step.traceId,
-                    WorkloadContract.DEFAULT_PIXEL_TOLERANCE,
-                    WorkloadContract.DEFAULT_MAX_DIVERGENT_BLOCKS,
+                    VisualSceneContract.isVisualScene(step.workloadId)
+                            ? VisualSceneContract.DEFAULT_PIXEL_TOLERANCE
+                            : WorkloadContract.DEFAULT_PIXEL_TOLERANCE,
+                    VisualSceneContract.isVisualScene(step.workloadId)
+                            ? VisualSceneContract.DEFAULT_MAX_DIVERGENT_BLOCKS
+                            : WorkloadContract.DEFAULT_MAX_DIVERGENT_BLOCKS,
                     null, context, new RunCoordinator.Listener() {
                         @Override
                         public void onStatus(String message) {
@@ -225,8 +233,13 @@ final class QualificationCoordinator {
     }
 
     private int stepOrdinal(String stepId) {
+        int profileVersion = manifest == null ? QualificationProfile.currentVersion()
+                : manifest.optJSONObject("profile") == null
+                ? QualificationProfile.currentVersion()
+                : manifest.optJSONObject("profile").optInt(
+                        "profile_version", QualificationProfile.currentVersion());
         int index = 1;
-        for (QualificationProfile.Step step : QualificationProfile.steps()) {
+        for (QualificationProfile.Step step : QualificationProfile.stepsForVersion(profileVersion)) {
             if (step.stepId.equals(stepId)) return index;
             index++;
         }
