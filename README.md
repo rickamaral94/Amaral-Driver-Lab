@@ -218,3 +218,9 @@ Abra **DIAGNÓSTICO PROFUNDO TURNIP · FASE 10** para executar o perfil `turnip_
 O botão **SOAK TEST A/B** repete ciclos de criação/destruição de objetos Vulkan, memória limitada e submits com fence. Falhas de capacidade, shader, sincronização, crash ou `device lost` bloqueiam qualquer conclusão favorável de tempo.
 
 A Fase 10 forma uma série histórica própria. Ela não altera workloads anteriores, Full Qualification, campanhas, ranking ou telemetria de emuladores. Veja [docs/PHASE10_DEEP_TURNIP_DIAGNOSTICS.md](docs/PHASE10_DEEP_TURNIP_DIAGNOSTICS.md).
+
+## Phase 11 — Full Qualification v3
+
+The recommended Full test now orchestrates every automatic test added through Phase 10: existing A/B suites, visible Vulkan scenes, deep diagnostics at the safe 128 MiB memory profile and a five-cycle short soak. The report exposes separate performance and compatibility indices. Emulator telemetry remains optional, local and not scored automatically.
+
+Historical Full v1 and v2 profiles remain immutable and separate from v3.

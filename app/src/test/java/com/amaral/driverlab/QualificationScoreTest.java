@@ -10,8 +10,9 @@ import static org.junit.Assert.assertTrue;
 public final class QualificationScoreTest {
     @Test
     public void compatibleFasterDriverIsRecommendedInV2() throws Exception {
-        JSONObject score = QualificationScore.evaluate(QualificationProfile.definition(),
-                completed(8.0, false, false), preflight(), environment());
+        JSONObject profile = QualificationProfile.definitionForVersion(2);
+        JSONObject score = QualificationScore.evaluate(profile,
+                completedForProfile(profile, 8.0, false, false), preflight(), environment());
         assertTrue(score.getBoolean("eligible_for_recommendation"));
         assertEquals("candidate", score.getString("winner"));
         assertEquals("candidate_recommended_over_system",
@@ -23,8 +24,9 @@ public final class QualificationScoreTest {
 
     @Test
     public void finalCorrectionFailureBlocksEvenFastDriver() throws Exception {
-        JSONObject score = QualificationScore.evaluate(QualificationProfile.definition(),
-                completed(15.0, true, false), preflight(), environment());
+        JSONObject profile = QualificationProfile.definitionForVersion(2);
+        JSONObject score = QualificationScore.evaluate(profile,
+                completedForProfile(profile, 15.0, true, false), preflight(), environment());
         assertTrue(!score.getBoolean("eligible_for_recommendation"));
         assertEquals("none", score.getString("winner"));
         assertEquals("not_recommended_incompatible_or_invalid",
@@ -34,8 +36,9 @@ public final class QualificationScoreTest {
 
     @Test
     public void visualCheckpointMismatchBlocksFastDriver() throws Exception {
-        JSONObject score = QualificationScore.evaluate(QualificationProfile.definition(),
-                completed(18.0, false, true), preflight(), environment());
+        JSONObject profile = QualificationProfile.definitionForVersion(2);
+        JSONObject score = QualificationScore.evaluate(profile,
+                completedForProfile(profile, 18.0, false, true), preflight(), environment());
         assertTrue(!score.getBoolean("eligible_for_recommendation"));
         assertEquals("none", score.getString("winner"));
         assertTrue(score.getJSONArray("gate_reasons").toString()
@@ -50,12 +53,6 @@ public final class QualificationScoreTest {
         assertEquals(1, score.getInt("qualification_score_version"));
         assertEquals(1, score.getInt("profile_version"));
         assertTrue(score.getBoolean("eligible_for_recommendation"));
-    }
-
-    private static JSONArray completed(double improvement, boolean failFinalCorrection,
-                                       boolean failVisualMaterials) throws Exception {
-        return completedForProfile(QualificationProfile.definition(), improvement,
-                failFinalCorrection, failVisualMaterials);
     }
 
     private static JSONArray completedForProfile(JSONObject profile, double improvement,

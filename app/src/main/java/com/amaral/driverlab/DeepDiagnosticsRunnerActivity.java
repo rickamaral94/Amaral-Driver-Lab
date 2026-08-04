@@ -96,6 +96,7 @@ public final class DeepDiagnosticsRunnerActivity extends Activity {
 
             result.put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION)
                     .put("phase10_contract", Phase10Contract.contractJson())
+                    .put("phase11_contract", Phase11Contract.contractJson())
                     .put("phase", phase == null ? "unknown" : phase)
                     .put("driver_mode", driverDir == null || driverDir.isEmpty()
                             ? "system" : "custom")

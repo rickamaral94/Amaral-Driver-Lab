@@ -210,7 +210,7 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         controls.add(runButton);
 
         Button phase7Button = new Button(this);
-        phase7Button.setText("★ TESTE FULL RECOMENDADO · FASE 8 / PERFIL v2");
+        phase7Button.setText("★ TESTE FULL RECOMENDADO · FASE 11 / PERFIL v3");
         phase7Button.setOnClickListener(view ->
                 startActivity(new Intent(this, QualificationActivity.class)));
         root.addView(phase7Button, margins(0, 0, 0, 8));
