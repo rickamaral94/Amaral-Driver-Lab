@@ -1,0 +1,1 @@
+Temporary, hash-verified transport for materializing Phase 7. Removed before final validation.
