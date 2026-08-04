@@ -2524,7 +2524,7 @@ private:
                 {VK_FORMAT_B8G8R8A8_UNORM, "B8G8R8A8_UNORM", false, false},
                 {VK_FORMAT_B8G8R8A8_SRGB, "B8G8R8A8_SRGB", false, false},
                 {VK_FORMAT_A2B10G10R10_UNORM_PACK32, "A2B10G10R10_UNORM_PACK32", false, false},
-                {VK_FORMAT_R11G11B10_UFLOAT_PACK32, "R11G11B10_UFLOAT_PACK32", false, false},
+                {VK_FORMAT_B10G11R11_UFLOAT_PACK32, "R11G11B10_UFLOAT_PACK32", false, false},
                 {VK_FORMAT_R16G16_SFLOAT, "R16G16_SFLOAT", false, false},
                 {VK_FORMAT_R16G16B16A16_SFLOAT, "R16G16B16A16_SFLOAT", false, false},
                 {VK_FORMAT_R32_SFLOAT, "R32_SFLOAT", false, false},
