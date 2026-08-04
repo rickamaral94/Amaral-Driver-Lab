@@ -18,7 +18,7 @@ jobs:
           ref: agent/phase13-ux-redesign
           fetch-depth: 0
 
-      - name: Verify, apply and clean alpha4 fix
+      - name: Verify and apply alpha4 fix
         shell: bash
         run: |
           set -euo pipefail
@@ -26,43 +26,6 @@ jobs:
           git apply --check .phase13-alpha4.patch
           git apply .phase13-alpha4.patch
           rm .phase13-alpha4.patch
-          cat > .github/workflows/source-snapshot.yml <<'RESTORE'
-          name: Source Snapshot
-
-          on:
-            pull_request:
-            workflow_dispatch:
-
-          permissions:
-            contents: read
-
-          jobs:
-            snapshot:
-              runs-on: ubuntu-latest
-              timeout-minutes: 10
-              steps:
-                - name: Checkout
-                  uses: actions/checkout@v4
-                - name: Upload source snapshot
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: amaral-driver-lab-phase2-source
-                    path: |
-                      .github
-                      app
-                      telemetry-sdk
-                      docs
-                      README.md
-                      build.gradle
-                      settings.gradle
-                      gradle.properties
-                      gradlew
-                      gradlew.bat
-                      gradle
-                    if-no-files-found: error
-                    retention-days: 3
-          RESTORE
-          sed -i 's/^          //' .github/workflows/source-snapshot.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
