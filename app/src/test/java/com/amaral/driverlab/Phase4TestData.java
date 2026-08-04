@@ -9,9 +9,9 @@ final class Phase4TestData {
     static JSONObject report(String suiteId, String sha, String name, double score,
                              String classification, long finishedAtMs) throws Exception {
         JSONObject report = new JSONObject();
-        report.put("schema_version", 7);
+        report.put("schema_version", 8);
         report.put("suite_id", suiteId);
-        report.put("app_version", "0.6.0-alpha1");
+        report.put("app_version", "0.7.0-alpha1");
         report.put("finished_at_ms", finishedAtMs);
         report.put("mode", "ab_system_vs_candidate");
         report.put("workload_id", WorkloadContract.COMPUTE_ARITHMETIC_ID);

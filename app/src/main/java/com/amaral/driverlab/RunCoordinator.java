@@ -55,7 +55,8 @@ final class RunCoordinator {
     private final int pixelTolerance;
     private final int maximumDivergentBlocks;
     private final Listener listener;
-    private final JSONObject executionContext;
+    private final JSONObject campaignContext;
+    private final JSONObject qualificationContext;
     private final List<Phase> phases = new ArrayList<>();
     private final JSONArray phaseResults = new JSONArray();
 
@@ -70,13 +71,21 @@ final class RunCoordinator {
                    int warmupSeconds, int measureSeconds, String workloadId, String traceId,
                    int pixelTolerance, int maximumDivergentBlocks, Listener listener) {
         this(activity, candidate, mode, rounds, warmupSeconds, measureSeconds, workloadId,
-                traceId, pixelTolerance, maximumDivergentBlocks, null, listener);
+                traceId, pixelTolerance, maximumDivergentBlocks, null, null, listener);
     }
 
     RunCoordinator(Activity activity, DriverPackage candidate, int mode, int rounds,
                    int warmupSeconds, int measureSeconds, String workloadId, String traceId,
-                   int pixelTolerance, int maximumDivergentBlocks, JSONObject executionContext,
+                   int pixelTolerance, int maximumDivergentBlocks, JSONObject campaignContext,
                    Listener listener) {
+        this(activity, candidate, mode, rounds, warmupSeconds, measureSeconds, workloadId,
+                traceId, pixelTolerance, maximumDivergentBlocks, campaignContext, null, listener);
+    }
+
+    RunCoordinator(Activity activity, DriverPackage candidate, int mode, int rounds,
+                   int warmupSeconds, int measureSeconds, String workloadId, String traceId,
+                   int pixelTolerance, int maximumDivergentBlocks, JSONObject campaignContext,
+                   JSONObject qualificationContext, Listener listener) {
         this.activity = activity;
         this.candidate = candidate;
         this.mode = mode;
@@ -92,16 +101,17 @@ final class RunCoordinator {
                 : TraceReplayContract.MIXED_TRACE_ID) : TraceReplayContract.MIXED_TRACE_ID;
         this.pixelTolerance = Math.max(0, Math.min(pixelTolerance, 255));
         this.maximumDivergentBlocks = Math.max(0, maximumDivergentBlocks);
-        this.executionContext = copyExecutionContext(executionContext);
+        this.campaignContext = copyContext(campaignContext, "campaign_context");
+        this.qualificationContext = copyContext(qualificationContext, "qualification_context");
         this.listener = listener;
     }
 
-    private static JSONObject copyExecutionContext(JSONObject source) {
+    private static JSONObject copyContext(JSONObject source, String label) {
         if (source == null) return null;
         try {
             return new JSONObject(source.toString());
         } catch (Exception error) {
-            throw new IllegalArgumentException("campaign_context inválido", error);
+            throw new IllegalArgumentException(label + " inválido", error);
         }
     }
 
@@ -326,10 +336,14 @@ final class RunCoordinator {
             report.put("validity_warnings", buildWarnings(
                     renderCorrectness, failureCatalog, statisticalAnalysis, traceReplay));
             report.put("phase4_contract", Phase4Contract.contractJson());
-            report.put("phase6_contract", executionContext == null
+            report.put("phase6_contract", campaignContext == null
                     ? JSONObject.NULL : Phase6Contract.contractJson());
-            report.put("campaign_context", executionContext == null
-                    ? JSONObject.NULL : executionContext);
+            report.put("campaign_context", campaignContext == null
+                    ? JSONObject.NULL : campaignContext);
+            report.put("phase7_contract", qualificationContext == null
+                    ? JSONObject.NULL : Phase7Contract.contractJson());
+            report.put("qualification_context", qualificationContext == null
+                    ? JSONObject.NULL : qualificationContext);
             report.put("hardware_identity", HardwareIdentity.fromReport(report));
 
             File reportFile = new File(suiteDirectory, "suite.json");
