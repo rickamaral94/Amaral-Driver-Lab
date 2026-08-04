@@ -1,14 +1,14 @@
-name: Apply Phase 13 alpha5
+name: Inspect Phase 13 alpha5 patch
 
 on:
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-alpha5:
+  inspect-alpha5:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -16,9 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: agent/phase13-ux-redesign
-          fetch-depth: 0
-
-      - name: Decode, verify and apply alpha5
+      - name: Decode and inspect malformed area
         shell: bash
         run: |
           set -euo pipefail
@@ -26,11 +24,7 @@ jobs:
           for part in .phase13-alpha5/part-*.b64; do
             base64 --decode "$part" >> /tmp/phase13-alpha5.patch
           done
+          echo '--- lines 330-390 ---'
+          nl -ba /tmp/phase13-alpha5.patch | sed -n '330,390p'
+          echo '--- patch diagnostics ---'
           git apply --recount --check /tmp/phase13-alpha5.patch
-          git apply --recount /tmp/phase13-alpha5.patch
-          rm -rf .phase13-alpha5
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "enrich Turnip optimization issue reports"
-          git push origin "HEAD:agent/phase13-ux-redesign"
