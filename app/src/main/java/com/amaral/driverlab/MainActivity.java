@@ -207,8 +207,15 @@ public final class MainActivity extends Activity implements RunCoordinator.Liste
         phase4Button.setText("HISTÓRICO · DIFF · RANKING · BISECT");
         phase4Button.setOnClickListener(view ->
                 startActivity(new Intent(this, Phase4Activity.class)));
-        root.addView(phase4Button, margins(0, 0, 0, 20));
+        root.addView(phase4Button, margins(0, 0, 0, 6));
         controls.add(phase4Button);
+
+        Button phase6Button = new Button(this);
+        phase6Button.setText("CAMPANHAS DE REGRESSÃO · FASE 6");
+        phase6Button.setOnClickListener(view ->
+                startActivity(new Intent(this, CampaignActivity.class)));
+        root.addView(phase6Button, margins(0, 0, 0, 20));
+        controls.add(phase6Button);
 
         root.addView(text("4. GitHub Issues", 19, true), margins(0, 0, 0, 8));
         ownerInput = textInput("Owner", preferences.getString("github_owner", "rickamaral94"));

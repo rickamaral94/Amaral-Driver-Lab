@@ -17,6 +17,10 @@
         android:theme="@style/Theme.DriverLab">
 
         <activity
+            android:name=".CampaignActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".Phase4Activity"
             android:exported="false" />
 

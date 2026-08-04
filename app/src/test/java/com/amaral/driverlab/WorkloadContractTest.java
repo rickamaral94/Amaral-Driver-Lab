@@ -23,7 +23,7 @@ public final class WorkloadContractTest {
 
     @Test
     public void phaseTwoSeriesRemainVersionOneWhileSchemaAdvancesAdditively() {
-        assertEquals(6, WorkloadContract.RESULT_SCHEMA_VERSION);
+        assertEquals(7, WorkloadContract.RESULT_SCHEMA_VERSION);
         assertEquals(5, WorkloadContract.PHASE2_IDS.size());
         for (String workloadId : WorkloadContract.PHASE2_IDS) {
             assertEquals(1, WorkloadContract.versionFor(workloadId));
@@ -64,4 +64,14 @@ public final class WorkloadContractTest {
         assertEquals(1, WorkloadContract.COMPUTE_ARITHMETIC_VERSION);
         assertEquals(1, WorkloadContract.STABLE_SCENE_VERSION);
     }
+    @Test
+    public void phaseSixCampaignVersionsDoNotRedefineWorkloads() {
+        assertEquals(1, Phase6Contract.CAMPAIGN_SCHEMA_VERSION);
+        assertEquals(1, Phase6Contract.SCHEDULER_VERSION);
+        assertEquals(1, Phase6Contract.SUMMARY_VERSION);
+        assertEquals("rotating_serpentine_v1", Phase6Contract.ORDER_POLICY);
+        assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
+        assertEquals(1, WorkloadContract.COMPUTE_ARITHMETIC_VERSION);
+    }
+
 }
