@@ -25,7 +25,14 @@ final class DriverExecutionIdentity {
         String role = phase.optString("driver_role", "");
         if (ROLE_CANDIDATE.equals(role)) return true;
         if (ROLE_REFERENCE.equals(role) || ROLE_SYSTEM.equals(role)) return false;
-        return ROLE_CANDIDATE.equals(phase.optString("phase", ""));
+
+        String historicalPhase = phase.optString("phase", "");
+        if (ROLE_CANDIDATE.equals(historicalPhase)) return true;
+        if (ROLE_SYSTEM.equals(historicalPhase)) return false;
+
+        // Compatibility with reports/tests created before driver_role and phase
+        // were recorded separately. In those files, custom meant candidate.
+        return "custom".equals(phase.optString("driver_mode", "system"));
     }
 
     static boolean isReferenceArm(JSONObject phase) {
