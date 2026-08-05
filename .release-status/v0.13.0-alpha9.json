@@ -1,0 +1,49 @@
+{
+  "assets": [
+    {
+      "apiUrl": "https://api.github.com/repos/rickamaral94/Amaral-Driver-Lab/releases/assets/503021064",
+      "contentType": "application/vnd.android.package-archive",
+      "createdAt": "2026-08-05T19:50:39Z",
+      "digest": "sha256:3a8b51d15ca125453d0b95024fd4a34712eea792987add69a7b7bb89453eeb11",
+      "downloadCount": 0,
+      "id": "RA_kwDOTslf9M4d-34I",
+      "label": "",
+      "name": "Amaral-Driver-Lab-v0.13.0-alpha9.apk",
+      "size": 1807848,
+      "state": "uploaded",
+      "updatedAt": "2026-08-05T19:50:39Z",
+      "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/download/v0.13.0-alpha9/Amaral-Driver-Lab-v0.13.0-alpha9.apk"
+    },
+    {
+      "apiUrl": "https://api.github.com/repos/rickamaral94/Amaral-Driver-Lab/releases/assets/503021065",
+      "contentType": "application/octet-stream",
+      "createdAt": "2026-08-05T19:50:39Z",
+      "digest": "sha256:68a3156fd8fc7040101f3c240394147a9bc4a229d53cc6f6815d879f29ff7401",
+      "downloadCount": 0,
+      "id": "RA_kwDOTslf9M4d-34J",
+      "label": "",
+      "name": "Amaral-Driver-Lab-v0.13.0-alpha9.sha256",
+      "size": 111,
+      "state": "uploaded",
+      "updatedAt": "2026-08-05T19:50:39Z",
+      "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/download/v0.13.0-alpha9/Amaral-Driver-Lab-v0.13.0-alpha9.sha256"
+    }
+  ],
+  "isDraft": false,
+  "isPrerelease": false,
+  "name": "Amaral Driver Lab v0.13.0-alpha9",
+  "publishedAt": "2026-08-05T19:50:38Z",
+  "tagName": "v0.13.0-alpha9",
+  "targetCommitish": "75e570219d2015739635a0514f92e0f55b113a8e",
+  "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/tag/v0.13.0-alpha9",
+  "verification": {
+    "expected_apk_sha256": "3a8b51d15ca125453d0b95024fd4a34712eea792987add69a7b7bb89453eeb11",
+    "workflow_run": "31041277142",
+    "source_android_workflow": "31040981978",
+    "source_artifact": "8944574749",
+    "tests": 107,
+    "failures": 0,
+    "ignored": 0,
+    "status": "published_as_full_release_and_verified"
+  }
+}
