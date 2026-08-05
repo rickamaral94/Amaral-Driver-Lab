@@ -23,6 +23,7 @@ jobs:
       EXPECTED_APK_SHA256: a6d4c3b109308631a9247b294786ccc8c7a4bcd936d941bd18947a5dfca49dc9
       APK_NAME: Amaral-Driver-Lab-v0.13.0-alpha6.apk
       SHA_NAME: Amaral-Driver-Lab-v0.13.0-alpha6.sha256
+      STATUS_PATH: .release-status/v0.13.0-alpha6.json
     steps:
       - name: Download validated APK artifact
         shell: bash
@@ -101,4 +102,39 @@ jobs:
               --title "Amaral Driver Lab v0.13.0-alpha6" \
               --notes-file /tmp/release-notes.md \
               --prerelease
+          fi
+
+      - name: Record verified publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_JSON="$(gh release view "$TAG" --repo "${{ github.repository }}" --json url,tagName,isPrerelease,publishedAt,assets,targetCommitish)"
+          printf '%s' "$RELEASE_JSON" | jq \
+            --arg expected_sha256 "$EXPECTED_APK_SHA256" \
+            --arg apk_name "$APK_NAME" \
+            --arg sha_name "$SHA_NAME" \
+            --arg workflow_run "${{ github.run_id }}" \
+            '. + {
+              verification: {
+                apk_name: $apk_name,
+                sha256_file: $sha_name,
+                expected_apk_sha256: $expected_sha256,
+                workflow_run: $workflow_run,
+                status: "published_and_verified"
+              }
+            }' > /tmp/release-status.json
+
+          CONTENT="$(base64 -w0 /tmp/release-status.json)"
+          EXISTING_SHA="$(gh api "repos/${{ github.repository }}/contents/$STATUS_PATH?ref=main" --jq .sha 2>/dev/null || true)"
+          if [ -n "$EXISTING_SHA" ]; then
+            gh api --method PUT "repos/${{ github.repository }}/contents/$STATUS_PATH" \
+              -f message='chore: record v0.13.0-alpha6 release publication' \
+              -f branch='main' \
+              -f content="$CONTENT" \
+              -f sha="$EXISTING_SHA" >/dev/null
+          else
+            gh api --method PUT "repos/${{ github.repository }}/contents/$STATUS_PATH" \
+              -f message='chore: record v0.13.0-alpha6 release publication' \
+              -f branch='main' \
+              -f content="$CONTENT" >/dev/null
           fi
