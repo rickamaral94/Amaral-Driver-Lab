@@ -394,11 +394,10 @@ public final class MainActivity extends LocalizedActivity {
     private void chooseEmulatorLog() {
         Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         picker.addCategory(Intent.CATEGORY_OPENABLE);
+        // Do not apply an Android MIME whitelist here. Several file managers classify
+        // .log files as unknown/proprietary MIME types and disable them before the app
+        // can validate the extension. The app validates .txt/.log after selection.
         picker.setType("*/*");
-        picker.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
-                "text/plain", "text/x-log", "application/log",
-                "application/octet-stream"
-        });
         startActivityForResult(picker, REQUEST_IMPORT_EMULATOR_LOG);
     }
 
