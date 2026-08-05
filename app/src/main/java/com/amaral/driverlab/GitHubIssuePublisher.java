@@ -1,9 +1,12 @@
 package com.amaral.driverlab;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -13,12 +16,14 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
 final class GitHubIssuePublisher {
     private static final Pattern REPOSITORY_PART = Pattern.compile("[A-Za-z0-9_.-]{1,100}");
+    private static final int MAX_BROWSER_DRAFT_URL_LENGTH = 3_500;
 
     private GitHubIssuePublisher() {}
 
@@ -35,14 +40,8 @@ final class GitHubIssuePublisher {
     static void openDraft(Activity activity, String owner, String repository,
                           JSONObject report) throws Exception {
         validateRepository(owner, repository);
-        String body = issueBody(report, false);
-        if (body.length() > 1800) body = body.substring(0, 1800) + "\n\n_Result JSON salvo no aparelho._";
-        Uri uri = Uri.parse("https://github.com/" + owner + "/" + repository + "/issues/new")
-                .buildUpon()
-                .appendQueryParameter("title", issueTitle(report))
-                .appendQueryParameter("body", body)
-                .build();
-        activity.startActivity(new Intent(Intent.ACTION_VIEW, uri));
+        openIssueDraft(activity, owner, repository,
+                issueTitle(report), issueBody(report, false));
     }
 
 
@@ -58,17 +57,64 @@ final class GitHubIssuePublisher {
     static void openQualificationDraft(Activity activity, String owner, String repository,
                                        JSONObject manifest) throws Exception {
         validateRepository(owner, repository);
-        String body = qualificationIssueBody(manifest, false);
-        if (body.length() > 8000) {
-            body = body.substring(0, 8000)
-                    + "\n\n_Log completo disponível no Amaral Driver Lab._";
+        openIssueDraft(activity, owner, repository,
+                qualificationIssueTitle(manifest), qualificationIssueBody(manifest, false));
+    }
+
+    private static void openIssueDraft(Activity activity, String owner, String repository,
+                                       String title, String body) {
+        boolean clipboardFallback = requiresClipboardFallback(owner, repository, title, body);
+        Uri uri;
+        if (clipboardFallback) {
+            ClipboardManager clipboard = (ClipboardManager) activity.getSystemService(
+                    Activity.CLIPBOARD_SERVICE);
+            if (clipboard == null) {
+                throw new IllegalStateException("Área de transferência indisponível");
+            }
+            clipboard.setPrimaryClip(ClipData.newPlainText(
+                    "Amaral Driver Lab — GitHub issue", body));
+            uri = buildDraftUri(owner, repository, title, null);
+            Toast.makeText(activity, R.string.github_draft_body_copied,
+                    Toast.LENGTH_LONG).show();
+        } else {
+            uri = buildDraftUri(owner, repository, title, body);
         }
-        Uri uri = Uri.parse("https://github.com/" + owner + "/" + repository + "/issues/new")
-                .buildUpon()
-                .appendQueryParameter("title", qualificationIssueTitle(manifest))
-                .appendQueryParameter("body", body)
-                .build();
         activity.startActivity(new Intent(Intent.ACTION_VIEW, uri));
+    }
+
+    static boolean requiresClipboardFallback(String owner, String repository,
+                                              String title, String body) {
+        return estimatedDraftUrlLength(owner, repository, title, body)
+                > MAX_BROWSER_DRAFT_URL_LENGTH;
+    }
+
+    static int estimatedDraftUrlLength(String owner, String repository,
+                                       String title, String body) {
+        String base = "https://github.com/" + owner + "/" + repository + "/issues/new";
+        int length = base.length() + "?title=".length() + encodedLength(title);
+        if (body != null) {
+            length += "&body=".length() + encodedLength(body);
+        }
+        return length;
+    }
+
+    private static int encodedLength(String value) {
+        try {
+            return URLEncoder.encode(value == null ? "" : value,
+                    StandardCharsets.UTF_8.name()).length();
+        } catch (Exception impossible) {
+            throw new IllegalStateException("UTF-8 indisponível", impossible);
+        }
+    }
+
+    private static Uri buildDraftUri(String owner, String repository,
+                                     String title, String body) {
+        Uri.Builder builder = Uri.parse("https://github.com/" + owner + "/" + repository
+                        + "/issues/new")
+                .buildUpon()
+                .appendQueryParameter("title", title);
+        if (body != null) builder.appendQueryParameter("body", body);
+        return builder.build();
     }
 
     static String qualificationIssueTitle(JSONObject manifest) {
