@@ -9,7 +9,7 @@ import java.util.Locale;
 
 /** Builds the compact, issue-ready evidence needed to optimize Turnip packages. */
 final class QualificationOptimizationReport {
-    static final int FORMAT_VERSION = 1;
+    static final int FORMAT_VERSION = 2;
     private static final double PRACTICAL_MARGIN_PERCENT = 3.0;
 
     private QualificationOptimizationReport() {}
@@ -45,11 +45,13 @@ final class QualificationOptimizationReport {
         JSONObject preflight = manifest.optJSONObject("preflight");
         JSONObject device = preflight == null ? null : preflight.optJSONObject("device");
         JSONObject target = hardwareTarget(hardware, device);
+        JSONObject comparisonSummary = comparisonSummary(metrics);
         return new JSONObject()
                 .put("format_version", FORMAT_VERSION)
                 .put("hardware_target", target)
                 .put("loader_audit", loaderAudit)
                 .put("metrics", metrics)
+                .put("comparison_summary", comparisonSummary)
                 .put("best_area", best == null ? JSONObject.NULL : finding(best))
                 .put("worst_area", worst == null ? JSONObject.NULL : finding(worst))
                 .put("score_summary", score == null ? JSONObject.NULL : new JSONObject()
@@ -82,12 +84,16 @@ final class QualificationOptimizationReport {
             return item.put("kind", "correctness")
                     .put("metric", "pixel_match_percent")
                     .put("unit", "%")
+                    .put("lower_is_better", false)
                     .put("reference_value", 100.0)
                     .put("candidate_value", finite(match))
+                    .put("absolute_difference", finite(match - 100.0))
+                    .put("candidate_to_reference_ratio", finite(match / 100.0))
                     .put("maximum_divergent_blocks",
                             render.opt("maximum_divergent_block_count"))
                     .put("comparison_count", render.optInt("comparison_count", 0))
                     .put("classification", passed ? "passed" : "failed")
+                    .put("winner", passed ? "tie" : DriverExecutionIdentity.ROLE_REFERENCE)
                     .put("candidate_improvement_percent", JSONObject.NULL);
         }
 
@@ -114,14 +120,35 @@ final class QualificationOptimizationReport {
                 ? classify(delta) : analysis.optString("classification", classify(delta));
         JSONObject ci = analysis == null ? null
                 : analysis.optJSONObject("confidence_interval_95_percent");
+        JSONObject reference = compactStats(referenceStats);
+        JSONObject candidate = compactStats(candidateStats);
+        double referenceMedian = numeric(reference.opt("median"));
+        double candidateMedian = numeric(candidate.opt("median"));
+        double referenceMean = numeric(reference.opt("mean"));
+        double candidateMean = numeric(candidate.opt("mean"));
+        double referenceP95 = numeric(reference.opt("p95"));
+        double candidateP95 = numeric(candidate.opt("p95"));
+        double referenceP99 = numeric(reference.opt("p99"));
+        double candidateP99 = numeric(candidate.opt("p99"));
+        double referenceCv = numeric(reference.opt("coefficient_of_variation_percent"));
+        double candidateCv = numeric(candidate.opt("coefficient_of_variation_percent"));
         return item.put("kind", "performance")
                 .put("metric", metricName)
                 .put("unit", metricUnit(metricName))
                 .put("lower_is_better", lowerIsBetter)
-                .put("reference", compactStats(referenceStats))
-                .put("candidate", compactStats(candidateStats))
+                .put("reference", reference)
+                .put("candidate", candidate)
+                .put("absolute_difference", finite(candidateMedian - referenceMedian))
+                .put("mean_difference", finite(candidateMean - referenceMean))
+                .put("p95_difference", finite(candidateP95 - referenceP95))
+                .put("p99_difference", finite(candidateP99 - referenceP99))
+                .put("coefficient_of_variation_difference_pp",
+                        finite(candidateCv - referenceCv))
+                .put("candidate_to_reference_ratio",
+                        finite(ratio(candidateMedian, referenceMedian)))
                 .put("candidate_improvement_percent", finite(delta))
                 .put("classification", classification)
+                .put("winner", winner(classification))
                 .put("paired_sample_count", analysis == null ? 0
                         : analysis.optInt("paired_sample_count", 0))
                 .put("wins", analysis == null ? 0 : analysis.optInt("wins", 0))
@@ -241,30 +268,108 @@ final class QualificationOptimizationReport {
     }
 
     static String metricsDisplay(JSONObject manifest) {
-        JSONArray metrics = metrics(manifest);
-        if (metrics.length() == 0) return "Sem métricas consolidadas.";
+        JSONArray values = metrics(manifest);
+        if (values.length() == 0) return "Sem métricas consolidadas.";
         StringBuilder out = new StringBuilder();
-        for (int i = 0; i < metrics.length(); i++) {
-            JSONObject item = metrics.optJSONObject(i);
+        JSONObject summary = comparisonSummary(manifest);
+        out.append("Placar por etapas: CANDIDATO ")
+                .append(summary.optInt("candidate_stage_wins", 0))
+                .append(" × ").append(summary.optInt("reference_stage_wins", 0))
+                .append(" REFERÊNCIA")
+                .append(" · empates ").append(summary.optInt("technical_ties", 0))
+                .append(" · inconclusivas ").append(summary.optInt("inconclusive_stages", 0));
+        for (int i = 0; i < values.length(); i++) {
+            JSONObject item = values.optJSONObject(i);
             if (item == null) continue;
-            if (out.length() > 0) out.append("\n\n");
-            out.append(item.optString("label", item.optString("step_id"))).append("\n");
+            out.append("\n\n").append(item.optString("label", item.optString("step_id")))
+                    .append("\nVencedor: ").append(winnerLabel(item.optString("winner", "inconclusive")));
             if ("correctness".equals(item.optString("kind"))) {
-                out.append("Pixel match: ").append(number(item.opt("candidate_value"), 4))
-                        .append("% · ").append(item.optString("classification", "—"));
+                out.append("\nREFERÊNCIA: ").append(number(item.opt("reference_value"), 4)).append("%")
+                        .append("\nCANDIDATO: ").append(number(item.opt("candidate_value"), 4)).append("%")
+                        .append("\nDiferença: ").append(number(item.opt("absolute_difference"), 4))
+                        .append(" p.p.")
+                        .append("\nBlocos divergentes: ")
+                        .append(string(item.opt("maximum_divergent_blocks")))
+                        .append(" · comparações: ").append(item.optInt("comparison_count", 0));
             } else {
                 JSONObject ref = item.optJSONObject("reference");
                 JSONObject cand = item.optJSONObject("candidate");
-                out.append("Referência: ").append(number(ref == null ? null : ref.opt("median"), 3))
-                        .append(" · Candidato: ")
-                        .append(number(cand == null ? null : cand.opt("median"), 3))
-                        .append(" ").append(item.optString("unit", ""))
-                        .append(" · Delta: ")
+                String unit = item.optString("unit", "");
+                out.append("\nREFERÊNCIA — mediana ").append(number(ref == null ? null : ref.opt("median"), 3))
+                        .append(", média ").append(number(ref == null ? null : ref.opt("mean"), 3))
+                        .append(", P95 ").append(number(ref == null ? null : ref.opt("p95"), 3))
+                        .append(", P99 ").append(number(ref == null ? null : ref.opt("p99"), 3))
+                        .append(" ").append(unit)
+                        .append("\nCANDIDATO — mediana ").append(number(cand == null ? null : cand.opt("median"), 3))
+                        .append(", média ").append(number(cand == null ? null : cand.opt("mean"), 3))
+                        .append(", P95 ").append(number(cand == null ? null : cand.opt("p95"), 3))
+                        .append(", P99 ").append(number(cand == null ? null : cand.opt("p99"), 3))
+                        .append(" ").append(unit)
+                        .append("\nDiferença absoluta: ").append(number(item.opt("absolute_difference"), 3))
+                        .append(" ").append(unit)
+                        .append(" · delta normalizado: ")
                         .append(signed(item.opt("candidate_improvement_percent")))
-                        .append(" · ").append(item.optString("classification", "—"));
+                        .append(" · razão cand/ref: ")
+                        .append(number(item.opt("candidate_to_reference_ratio"), 4))
+                        .append("\nCV ref/cand: ")
+                        .append(number(ref == null ? null : ref.opt("coefficient_of_variation_percent"), 2))
+                        .append("% / ")
+                        .append(number(cand == null ? null : cand.opt("coefficient_of_variation_percent"), 2))
+                        .append("% · amostras ref/cand: ")
+                        .append(ref == null ? 0 : ref.optInt("sample_count", 0))
+                        .append(" / ").append(cand == null ? 0 : cand.optInt("sample_count", 0))
+                        .append(" · pares: ").append(item.optInt("paired_sample_count", 0));
             }
         }
         return out.toString();
+    }
+
+    static String driverIdentityMarkdown(JSONObject manifest) {
+        JSONObject candidate = manifest == null ? null : manifest.optJSONObject("driver");
+        JSONObject reference = manifest == null ? null : manifest.optJSONObject("reference_driver");
+        boolean systemReference = !"turnip_vs_turnip".equals(
+                manifest == null ? "" : manifest.optString("comparison_mode", ""));
+        String referencePackage = systemReference
+                ? "Driver do sistema Android" : driverPackageLabel(reference);
+        String referenceSha = systemReference ? "system" : driverSha(reference);
+        return "### Identidade dos drivers — não confundir os papéis\n\n"
+                + "> **DRIVER CANDIDATO:** versão nova ou experimental que está sendo avaliada.  \n"
+                + "> **DRIVER DE REFERÊNCIA:** baseline usado para medir se o candidato melhorou ou piorou.\n\n"
+                + "| Papel no teste | Pacote carregado | Loader | SHA-256 completo |\n"
+                + "|---|---|---|---|\n"
+                + "| **DRIVER CANDIDATO** | " + escape(driverPackageLabel(candidate))
+                + " | `custom / candidate` | `" + escape(driverSha(candidate)) + "` |\n"
+                + "| **DRIVER DE REFERÊNCIA** | " + escape(referencePackage)
+                + " | `" + (systemReference ? "system / system" : "custom / reference")
+                + "` | `" + escape(referenceSha) + "` |\n\n";
+    }
+
+    static String comparisonSummaryMarkdown(JSONObject manifest) {
+        JSONObject summary = comparisonSummary(manifest);
+        if (summary.optInt("performance_stage_count", 0) == 0) return "";
+        return "### Placar geral da comparação\n\n"
+                + "| Indicador | Resultado |\n|---|---:|\n"
+                + row("Etapas de performance", String.valueOf(summary.optInt("performance_stage_count", 0)))
+                + row("Vitórias do DRIVER CANDIDATO",
+                        String.valueOf(summary.optInt("candidate_stage_wins", 0)))
+                + row("Vitórias do DRIVER DE REFERÊNCIA",
+                        String.valueOf(summary.optInt("reference_stage_wins", 0)))
+                + row("Empates técnicos", String.valueOf(summary.optInt("technical_ties", 0)))
+                + row("Etapas inconclusivas",
+                        String.valueOf(summary.optInt("inconclusive_stages", 0)))
+                + row("Delta médio do candidato",
+                        signed(summary.opt("mean_candidate_improvement_percent")))
+                + row("Delta mediano do candidato",
+                        signed(summary.opt("median_candidate_improvement_percent")))
+                + row("Pares estatísticos válidos",
+                        String.valueOf(summary.optInt("total_paired_samples", 0)))
+                + row("Rodadas candidato / empate / referência",
+                        summary.optInt("candidate_round_wins", 0) + " / "
+                                + summary.optInt("tied_rounds", 0) + " / "
+                                + summary.optInt("reference_round_wins", 0))
+                + row("Vencedor por etapas",
+                        winnerLabel(summary.optString("stage_winner", "inconclusive")))
+                + "\n";
     }
 
     static String hardwareMarkdown(JSONObject manifest) {
@@ -306,35 +411,104 @@ final class QualificationOptimizationReport {
 
     static String metricsMarkdown(JSONObject manifest) {
         JSONArray values = metrics(manifest);
-        if (values.length() == 0) return "### Métricas por etapa\n\n- Sem métricas consolidadas.\n\n";
-        StringBuilder out = new StringBuilder("### Métricas por etapa\n\n"
-                + "| Etapa | Métrica | Referência | Candidato | Delta candidato | P95 ref/cand | CV ref/cand | Classificação |\n"
-                + "|---|---|---:|---:|---:|---:|---:|---|\n");
+        if (values.length() == 0) {
+            return "### Comparativo principal por etapa\n\n- Sem métricas consolidadas.\n\n";
+        }
+        StringBuilder out = new StringBuilder("### Comparativo principal por etapa\n\n"
+                + "| Etapa | Melhor valor | DRIVER DE REFERÊNCIA (mediana) | DRIVER CANDIDATO (mediana) | Diferença absoluta | Delta normalizado | Vencedor | IC 95% |\n"
+                + "|---|---|---:|---:|---:|---:|---|---|\n");
         for (int i = 0; i < values.length(); i++) {
             JSONObject m = values.optJSONObject(i);
             if (m == null) continue;
             JSONObject ref = m.optJSONObject("reference");
             JSONObject cand = m.optJSONObject("candidate");
-            String reference = "correctness".equals(m.optString("kind"))
-                    ? number(m.opt("reference_value"), 3)
+            boolean correctness = "correctness".equals(m.optString("kind"));
+            String reference = correctness
+                    ? number(m.opt("reference_value"), 4)
                     : number(ref == null ? null : ref.opt("median"), 3);
-            String candidate = "correctness".equals(m.optString("kind"))
-                    ? number(m.opt("candidate_value"), 3)
+            String candidate = correctness
+                    ? number(m.opt("candidate_value"), 4)
                     : number(cand == null ? null : cand.opt("median"), 3);
+            String unit = m.optString("unit", "");
+            String absolute = number(m.opt("absolute_difference"), correctness ? 4 : 3)
+                    + (correctness ? " p.p." : (unit.isEmpty() ? "" : " " + escape(unit)));
             out.append("| ").append(escape(m.optString("label", m.optString("step_id"))))
-                    .append(" | `").append(escape(m.optString("metric", "—"))).append("` ")
-                    .append(escape(m.optString("unit", ""))).append(" | ")
-                    .append(reference).append(" | ").append(candidate).append(" | ")
-                    .append(signed(m.opt("candidate_improvement_percent"))).append(" | ")
-                    .append(number(ref == null ? null : ref.opt("p95"), 3)).append(" / ")
-                    .append(number(cand == null ? null : cand.opt("p95"), 3)).append(" | ")
-                    .append(number(ref == null ? null : ref.opt("coefficient_of_variation_percent"), 2))
-                    .append("% / ")
-                    .append(number(cand == null ? null : cand.opt("coefficient_of_variation_percent"), 2))
-                    .append("% | ").append(escape(m.optString("classification", "—")))
+                    .append(" | ").append(correctness ? "mais próximo de 100%" :
+                            (m.optBoolean("lower_is_better", false) ? "menor" : "maior"))
+                    .append(" | ").append(reference).append(" ").append(escape(unit))
+                    .append(" | ").append(candidate).append(" ").append(escape(unit))
+                    .append(" | ").append(absolute)
+                    .append(" | ").append(signed(m.opt("candidate_improvement_percent")))
+                    .append(" | **").append(winnerLabel(m.optString("winner", "inconclusive")))
+                    .append("** | ").append(interval(m.optJSONObject("confidence_interval_95_percent")))
                     .append(" |\n");
         }
         return out.append("\n").toString();
+    }
+
+    static String detailedMetricsMarkdown(JSONObject manifest) {
+        JSONArray values = metrics(manifest);
+        if (values.length() == 0) return "";
+        StringBuilder out = new StringBuilder("### Estatística detalhada por etapa\n\n");
+        for (int i = 0; i < values.length(); i++) {
+            JSONObject m = values.optJSONObject(i);
+            if (m == null) continue;
+            String label = m.optString("label", m.optString("step_id", "Etapa"));
+            out.append("<details><summary><strong>")
+                    .append(escape(label)).append("</strong> — ")
+                    .append(winnerLabel(m.optString("winner", "inconclusive")))
+                    .append("</summary>\n\n");
+            if ("correctness".equals(m.optString("kind"))) {
+                out.append("| Valor | DRIVER DE REFERÊNCIA | DRIVER CANDIDATO | Diferença |\n")
+                        .append("|---|---:|---:|---:|\n")
+                        .append("| Pixel match | ")
+                        .append(number(m.opt("reference_value"), 6)).append("% | ")
+                        .append(number(m.opt("candidate_value"), 6)).append("% | ")
+                        .append(number(m.opt("absolute_difference"), 6)).append(" p.p. |\n\n")
+                        .append("- Blocos divergentes máximos: **")
+                        .append(string(m.opt("maximum_divergent_blocks"))).append("**\n")
+                        .append("- Comparações visuais: **").append(m.optInt("comparison_count", 0))
+                        .append("**\n")
+                        .append("- Classificação: `").append(escape(m.optString("classification", "—")))
+                        .append("`\n\n");
+            } else {
+                JSONObject ref = m.optJSONObject("reference");
+                JSONObject cand = m.optJSONObject("candidate");
+                String unit = m.optString("unit", "");
+                out.append("| Estatística | DRIVER DE REFERÊNCIA | DRIVER CANDIDATO | Diferença cand-ref |\n")
+                        .append("|---|---:|---:|---:|\n")
+                        .append(detailRow("Mediana", ref, cand, "median", unit,
+                                m.opt("absolute_difference"), false))
+                        .append(detailRow("Média", ref, cand, "mean", unit,
+                                m.opt("mean_difference"), false))
+                        .append(detailRow("P95", ref, cand, "p95", unit,
+                                m.opt("p95_difference"), false))
+                        .append(detailRow("P99", ref, cand, "p99", unit,
+                                m.opt("p99_difference"), false))
+                        .append(detailRow("Coeficiente de variação", ref, cand,
+                                "coefficient_of_variation_percent", "%",
+                                m.opt("coefficient_of_variation_difference_pp"), true))
+                        .append(detailRow("Amostras", ref, cand, "sample_count", "",
+                                JSONObject.NULL, false))
+                        .append("\n- Razão candidato/referência: **")
+                        .append(number(m.opt("candidate_to_reference_ratio"), 5)).append("×**\n")
+                        .append("- Melhoria normalizada do candidato: **")
+                        .append(signed(m.opt("candidate_improvement_percent"))).append("**\n")
+                        .append("- Pares estatísticos válidos: **")
+                        .append(m.optInt("paired_sample_count", 0)).append("**\n")
+                        .append("- Rodadas vencidas — candidato / empate / referência: **")
+                        .append(m.optInt("wins", 0)).append(" / ")
+                        .append(m.optInt("ties", 0)).append(" / ")
+                        .append(m.optInt("losses", 0)).append("**\n")
+                        .append("- Intervalo de confiança de 95%: **")
+                        .append(interval(m.optJSONObject("confidence_interval_95_percent")))
+                        .append("**\n")
+                        .append("- Classificação: `")
+                        .append(escape(m.optString("classification", "—"))).append("`\n\n");
+            }
+            out.append("</details>\n\n");
+        }
+        return out.toString();
     }
 
     static String findingsMarkdown(JSONObject manifest) {
@@ -352,6 +526,157 @@ final class QualificationOptimizationReport {
                 .append(" — ").append(signed(worst.opt("candidate_improvement_percent")))
                 .append(" (`").append(escape(worst.optString("classification", "—"))).append("`).\n");
         return out.append("\n").toString();
+    }
+
+    private static JSONObject comparisonSummary(JSONArray metrics) throws Exception {
+        int performanceStages = 0;
+        int candidateStageWins = 0;
+        int referenceStageWins = 0;
+        int technicalTies = 0;
+        int inconclusiveStages = 0;
+        int pairedSamples = 0;
+        int candidateRoundWins = 0;
+        int tiedRounds = 0;
+        int referenceRoundWins = 0;
+        JSONArray deltas = new JSONArray();
+        for (int i = 0; i < metrics.length(); i++) {
+            JSONObject metric = metrics.optJSONObject(i);
+            if (metric == null || !"performance".equals(metric.optString("kind"))) continue;
+            performanceStages++;
+            String stageWinner = metric.optString("winner", "inconclusive");
+            if (DriverExecutionIdentity.ROLE_CANDIDATE.equals(stageWinner)) candidateStageWins++;
+            else if (DriverExecutionIdentity.ROLE_REFERENCE.equals(stageWinner)) referenceStageWins++;
+            else if ("tie".equals(stageWinner)) technicalTies++;
+            else inconclusiveStages++;
+            double delta = metric.optDouble("candidate_improvement_percent", Double.NaN);
+            if (Double.isFinite(delta)) deltas.put(delta);
+            pairedSamples += metric.optInt("paired_sample_count", 0);
+            candidateRoundWins += metric.optInt("wins", 0);
+            tiedRounds += metric.optInt("ties", 0);
+            referenceRoundWins += metric.optInt("losses", 0);
+        }
+        return new JSONObject()
+                .put("performance_stage_count", performanceStages)
+                .put("candidate_stage_wins", candidateStageWins)
+                .put("reference_stage_wins", referenceStageWins)
+                .put("technical_ties", technicalTies)
+                .put("inconclusive_stages", inconclusiveStages)
+                .put("mean_candidate_improvement_percent", finite(mean(deltas)))
+                .put("median_candidate_improvement_percent", finite(median(deltas)))
+                .put("total_paired_samples", pairedSamples)
+                .put("candidate_round_wins", candidateRoundWins)
+                .put("tied_rounds", tiedRounds)
+                .put("reference_round_wins", referenceRoundWins)
+                .put("stage_winner", stageWinner(candidateStageWins, referenceStageWins,
+                        technicalTies, inconclusiveStages));
+    }
+
+    private static JSONObject comparisonSummary(JSONObject manifest) {
+        JSONObject value = optimization(manifest).optJSONObject("comparison_summary");
+        if (value != null) return value;
+        try { return comparisonSummary(metrics(manifest)); }
+        catch (Exception ignored) { return new JSONObject(); }
+    }
+
+    private static double mean(JSONArray values) {
+        if (values.length() == 0) return Double.NaN;
+        double sum = 0.0;
+        int count = 0;
+        for (int i = 0; i < values.length(); i++) {
+            double value = values.optDouble(i, Double.NaN);
+            if (!Double.isFinite(value)) continue;
+            sum += value;
+            count++;
+        }
+        return count == 0 ? Double.NaN : sum / count;
+    }
+
+    private static double median(JSONArray values) {
+        int count = values.length();
+        if (count == 0) return Double.NaN;
+        double[] sorted = new double[count];
+        int valid = 0;
+        for (int i = 0; i < count; i++) {
+            double value = values.optDouble(i, Double.NaN);
+            if (Double.isFinite(value)) sorted[valid++] = value;
+        }
+        if (valid == 0) return Double.NaN;
+        java.util.Arrays.sort(sorted, 0, valid);
+        int middle = valid / 2;
+        return valid % 2 == 0 ? (sorted[middle - 1] + sorted[middle]) / 2.0
+                : sorted[middle];
+    }
+
+    private static String winner(String classification) {
+        if ("candidate_better".equals(classification)) {
+            return DriverExecutionIdentity.ROLE_CANDIDATE;
+        }
+        if ("candidate_worse".equals(classification)) {
+            return DriverExecutionIdentity.ROLE_REFERENCE;
+        }
+        if ("technical_tie".equals(classification)
+                || "practically_equivalent".equals(classification)) return "tie";
+        return "inconclusive";
+    }
+
+    private static String stageWinner(int candidateWins, int referenceWins,
+                                      int ties, int inconclusive) {
+        if (candidateWins > referenceWins) return DriverExecutionIdentity.ROLE_CANDIDATE;
+        if (referenceWins > candidateWins) return DriverExecutionIdentity.ROLE_REFERENCE;
+        if (candidateWins == referenceWins && candidateWins > 0) return "tie";
+        if (ties > 0 && inconclusive == 0) return "tie";
+        return "inconclusive";
+    }
+
+    private static String winnerLabel(String winner) {
+        if (DriverExecutionIdentity.ROLE_CANDIDATE.equals(winner)) return "DRIVER CANDIDATO";
+        if (DriverExecutionIdentity.ROLE_REFERENCE.equals(winner)) return "DRIVER DE REFERÊNCIA";
+        if ("tie".equals(winner)) return "EMPATE TÉCNICO";
+        return "INCONCLUSIVO";
+    }
+
+    private static String driverPackageLabel(JSONObject driver) {
+        if (driver == null) return "—";
+        String name = driver.optString("name", "Turnip");
+        String version = driver.optString("packageVersion",
+                driver.optString("driverVersion", ""));
+        return version.isEmpty() ? name : name + " · " + version;
+    }
+
+    private static String driverSha(JSONObject driver) {
+        return driver == null ? "—" : driver.optString("sha256", "—");
+    }
+
+    private static double numeric(Object value) {
+        if (!(value instanceof Number)) return Double.NaN;
+        double number = ((Number) value).doubleValue();
+        return Double.isFinite(number) ? number : Double.NaN;
+    }
+
+    private static double ratio(double candidate, double reference) {
+        return Double.isFinite(candidate) && Double.isFinite(reference) && reference != 0.0
+                ? candidate / reference : Double.NaN;
+    }
+
+    private static String interval(JSONObject value) {
+        if (value == null) return "—";
+        return "[" + signed(value.opt("lower")) + "; " + signed(value.opt("upper")) + "]";
+    }
+
+    private static String detailRow(String label, JSONObject reference, JSONObject candidate,
+                                    String key, String unit, Object difference,
+                                    boolean differenceIsPercentagePoints) {
+        String ref = number(reference == null ? null : reference.opt(key),
+                "sample_count".equals(key) ? 0 : 3);
+        String cand = number(candidate == null ? null : candidate.opt(key),
+                "sample_count".equals(key) ? 0 : 3);
+        String suffix = unit.isEmpty() ? "" : " " + unit;
+        String diff;
+        if (!(difference instanceof Number)) diff = "—";
+        else diff = number(difference, 3)
+                + (differenceIsPercentagePoints ? " p.p." : suffix);
+        return "| " + escape(label) + " | " + ref + suffix + " | "
+                + cand + suffix + " | " + diff + " |\n";
     }
 
     private static JSONObject target(JSONObject manifest) {

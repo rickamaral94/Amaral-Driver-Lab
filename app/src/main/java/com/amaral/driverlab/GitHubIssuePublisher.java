@@ -74,14 +74,19 @@ final class GitHubIssuePublisher {
     static String qualificationIssueTitle(JSONObject manifest) {
         JSONObject report = manifest.optJSONObject("report");
         JSONObject hardware = report == null ? null : report.optJSONObject("hardware_identity");
-        JSONObject driver = manifest.optJSONObject("driver");
+        JSONObject candidate = manifest.optJSONObject("driver");
+        JSONObject reference = manifest.optJSONObject("reference_driver");
+        String mode = manifest.optString("comparison_mode", "system_vs_turnip");
+        String referenceLabel = "turnip_vs_turnip".equals(mode)
+                ? driverLabel(reference) : "Sistema Android";
         String model = hardware == null ? Build.MODEL : hardware.optString("model", Build.MODEL);
         String gpu = hardware == null ? "" : hardware.optString("gpu_model", "");
         String state = manifest.optJSONObject("execution") == null ? "unknown"
                 : manifest.optJSONObject("execution").optString("state", "unknown");
-        String title = "[Turnip Validation] " + model
-                + (gpu.isEmpty() ? "" : " · " + gpu)
-                + " · " + driverLabel(driver) + " · " + state;
+        String title = "[Turnip Validation] CANDIDATO " + driverLabel(candidate)
+                + " vs REFERÊNCIA " + referenceLabel
+                + " · " + model + (gpu.isEmpty() ? "" : " · " + gpu)
+                + " · " + state;
         return title.length() > 240 ? title.substring(0, 240) : title;
     }
 
@@ -101,14 +106,7 @@ final class GitHubIssuePublisher {
                     .append(human.optString("detail", "")).append("\n\n");
         }
         body.append(QualificationOptimizationReport.hardwareMarkdown(manifest));
-        body.append("### Drivers avaliados\n\n")
-                .append("| Papel | Pacote | SHA-256 |\n|---|---|---|\n")
-                .append("| Referência | ").append(table(referenceLabel)).append(" | `")
-                .append(reference == null ? "system" : table(reference.optString("sha256")))
-                .append("` |\n")
-                .append("| Candidato | ").append(table(driverLabel(candidate))).append(" | `")
-                .append(candidate == null ? "—" : table(candidate.optString("sha256")))
-                .append("` |\n\n");
+        body.append(QualificationOptimizationReport.driverIdentityMarkdown(manifest));
         body.append("### Resumo da execução\n\n")
                 .append("| Campo | Valor |\n|---|---|\n")
                 .append("| Qualification | `").append(table(manifest.optString("qualification_id"))).append("` |\n")
@@ -128,8 +126,10 @@ final class GitHubIssuePublisher {
                     .append("| Confiança | ").append(table(score.optString("confidence", "—"))).append(" |\n");
         }
         body.append("\n")
-                .append(QualificationOptimizationReport.loaderMarkdown(manifest))
+                .append(QualificationOptimizationReport.comparisonSummaryMarkdown(manifest))
                 .append(QualificationOptimizationReport.metricsMarkdown(manifest))
+                .append(QualificationOptimizationReport.detailedMetricsMarkdown(manifest))
+                .append(QualificationOptimizationReport.loaderMarkdown(manifest))
                 .append(QualificationOptimizationReport.findingsMarkdown(manifest));
         if (score != null) {
             JSONArray reasons = score.optJSONArray("gate_reasons");
