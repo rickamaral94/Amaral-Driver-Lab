@@ -30,16 +30,16 @@ jobs:
           main = Path('app/src/main/java/com/amaral/driverlab/MainActivity.java')
           text = main.read_text(encoding='utf-8')
           old = '''        picker.setType("*/*");
-                  picker.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
-                          "text/plain", "text/x-log", "application/log",
-                          "application/octet-stream"
-                  });
-                  startActivityForResult(picker, REQUEST_IMPORT_EMULATOR_LOG);'''
+        picker.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                "text/plain", "text/x-log", "application/log",
+                "application/octet-stream"
+        });
+        startActivityForResult(picker, REQUEST_IMPORT_EMULATOR_LOG);'''
           new = '''        // Do not apply an Android MIME whitelist here. Several file managers classify
-                  // .log files as unknown/proprietary MIME types and disable them before the app
-                  // can validate the extension. The app validates .txt/.log after selection.
-                  picker.setType("*/*");
-                  startActivityForResult(picker, REQUEST_IMPORT_EMULATOR_LOG);'''
+        // .log files as unknown/proprietary MIME types and disable them before the app
+        // can validate the extension. The app validates .txt/.log after selection.
+        picker.setType("*/*");
+        startActivityForResult(picker, REQUEST_IMPORT_EMULATOR_LOG);'''
           if old in text:
               text = text.replace(old, new, 1)
           elif new not in text:
@@ -58,7 +58,7 @@ jobs:
 
       - name: Commit alpha10 source when needed
         run: |
-          if git diff --quiet && git status --porcelain --untracked-files=normal | grep -q '^$'; then
+          if [ -z "$(git status --porcelain)" ]; then
             echo "No source changes required"
             exit 0
           fi
