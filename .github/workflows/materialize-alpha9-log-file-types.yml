@@ -129,3 +129,5 @@ jobs:
           git diff --cached --check
           git commit -m "feat: accept txt and log emulator files"
           git push origin HEAD:agent/alpha9-log-file-extensions
+
+# trigger: 2
