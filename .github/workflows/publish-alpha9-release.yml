@@ -90,3 +90,5 @@ jobs:
           git add .release-status/v0.13.0-alpha9.json
           git commit -m "release: record verified v0.13.0-alpha9" || true
           git push origin HEAD:main
+
+# trigger: 2
