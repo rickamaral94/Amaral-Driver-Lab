@@ -1,44 +1,34 @@
 {
+  "tagName": "v0.13.0-alpha7",
+  "name": "Amaral Driver Lab v0.13.0-alpha7",
+  "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/tag/v0.13.0-alpha7",
+  "targetCommitish": "9f4020527f9807d960aaad03e1fe05f5f7a5da1b",
+  "publishedAt": "2026-08-05T10:20:27Z",
+  "isDraft": false,
+  "isPrerelease": false,
   "assets": [
     {
-      "apiUrl": "https://api.github.com/repos/rickamaral94/Amaral-Driver-Lab/releases/assets/502480993",
-      "contentType": "application/vnd.android.package-archive",
-      "createdAt": "2026-08-05T10:20:26Z",
-      "digest": "sha256:ed315a5d5a353aa10b2138693f3141f5751f114c7d47bcf53e871c93302a3c28",
-      "downloadCount": 0,
-      "id": "RA_kwDOTslf9M4d80Bh",
-      "label": "",
       "name": "Amaral-Driver-Lab-v0.13.0-alpha7.apk",
       "size": 1786268,
+      "contentType": "application/vnd.android.package-archive",
       "state": "uploaded",
-      "updatedAt": "2026-08-05T10:20:26Z",
+      "digest": "sha256:ed315a5d5a353aa10b2138693f3141f5751f114c7d47bcf53e871c93302a3c28",
+      "downloadCount": 0,
       "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/download/v0.13.0-alpha7/Amaral-Driver-Lab-v0.13.0-alpha7.apk"
     },
     {
-      "apiUrl": "https://api.github.com/repos/rickamaral94/Amaral-Driver-Lab/releases/assets/502480994",
-      "contentType": "application/octet-stream",
-      "createdAt": "2026-08-05T10:20:26Z",
-      "digest": "sha256:70f58c6b26defec44f95fcf766ac9712be6230e8b4fb172f2fa840b7754adfa5",
-      "downloadCount": 0,
-      "id": "RA_kwDOTslf9M4d80Bi",
-      "label": "",
       "name": "Amaral-Driver-Lab-v0.13.0-alpha7.sha256",
       "size": 103,
+      "contentType": "application/octet-stream",
       "state": "uploaded",
-      "updatedAt": "2026-08-05T10:20:26Z",
+      "digest": "sha256:70f58c6b26defec44f95fcf766ac9712be6230e8b4fb172f2fa840b7754adfa5",
+      "downloadCount": 0,
       "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/download/v0.13.0-alpha7/Amaral-Driver-Lab-v0.13.0-alpha7.sha256"
     }
   ],
-  "isPrerelease": true,
-  "publishedAt": "2026-08-05T10:20:27Z",
-  "tagName": "v0.13.0-alpha7",
-  "targetCommitish": "9f4020527f9807d960aaad03e1fe05f5f7a5da1b",
-  "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/tag/v0.13.0-alpha7",
   "verification": {
-    "apk_name": "Amaral-Driver-Lab-v0.13.0-alpha7.apk",
-    "sha256_file": "Amaral-Driver-Lab-v0.13.0-alpha7.sha256",
     "expected_apk_sha256": "ed315a5d5a353aa10b2138693f3141f5751f114c7d47bcf53e871c93302a3c28",
-    "workflow_run": "30997010846",
-    "status": "published_and_verified"
+    "workflow_run": "31002590567",
+    "status": "published_as_full_release_and_verified"
   }
 }
