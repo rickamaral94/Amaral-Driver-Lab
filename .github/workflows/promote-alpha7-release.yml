@@ -1,0 +1,90 @@
+name: Promote v0.13.0-alpha7 to full release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/promote-alpha7-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: v0.13.0-alpha7
+      APK_NAME: Amaral-Driver-Lab-v0.13.0-alpha7.apk
+      SHA_NAME: Amaral-Driver-Lab-v0.13.0-alpha7.sha256
+      EXPECTED_APK_SHA256: ed315a5d5a353aa10b2138693f3141f5751f114c7d47bcf53e871c93302a3c28
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Promote and verify release
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="${{ github.repository }}"
+          before="$(gh api "repos/$repo/releases/tags/$TAG")"
+          release_id="$(jq -r '.id' <<<"$before")"
+          test "$release_id" != "null"
+
+          apk_digest="$(jq -r --arg name "$APK_NAME" '.assets[] | select(.name == $name) | .digest' <<<"$before")"
+          sha_asset="$(jq -r --arg name "$SHA_NAME" '.assets[] | select(.name == $name) | .name' <<<"$before")"
+          test "$apk_digest" = "sha256:$EXPECTED_APK_SHA256"
+          test "$sha_asset" = "$SHA_NAME"
+
+          gh api --method PATCH "repos/$repo/releases/$release_id" \
+            -F prerelease=false \
+            -F draft=false \
+            -F make_latest=true >/tmp/promoted-release.json
+
+          after="$(gh api "repos/$repo/releases/tags/$TAG")"
+          test "$(jq -r '.prerelease' <<<"$after")" = "false"
+          test "$(jq -r '.draft' <<<"$after")" = "false"
+
+          mkdir -p .release-status
+          jq --arg expected "$EXPECTED_APK_SHA256" \
+             --arg workflow_run "${{ github.run_id }}" \
+             '{
+                tagName: .tag_name,
+                name: .name,
+                url: .html_url,
+                targetCommitish: .target_commitish,
+                publishedAt: .published_at,
+                isDraft: .draft,
+                isPrerelease: .prerelease,
+                assets: [.assets[] | {
+                  name: .name,
+                  size: .size,
+                  contentType: .content_type,
+                  state: .state,
+                  digest: .digest,
+                  downloadCount: .download_count,
+                  url: .browser_download_url
+                }],
+                verification: {
+                  expected_apk_sha256: $expected,
+                  workflow_run: $workflow_run,
+                  status: "published_as_full_release_and_verified"
+                }
+              }' <<<"$after" > ".release-status/$TAG.json"
+
+      - name: Commit verification record
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ".release-status/$TAG.json"
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "docs: record alpha7 full release"
+          git push origin HEAD:main
