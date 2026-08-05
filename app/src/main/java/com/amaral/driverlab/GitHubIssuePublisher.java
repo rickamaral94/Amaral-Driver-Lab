@@ -61,6 +61,19 @@ final class GitHubIssuePublisher {
                 qualificationIssueTitle(manifest), qualificationIssueBody(manifest, false));
     }
 
+    static void openPreparedDraft(Activity activity, String owner, String repository,
+                                  String title, String body) {
+        validateRepository(owner, repository);
+        if (title == null || title.trim().isEmpty()) {
+            throw new IllegalArgumentException("Título da issue vazio");
+        }
+        if (body == null || body.trim().isEmpty()) {
+            throw new IllegalArgumentException("Corpo da issue vazio");
+        }
+        String safeTitle = title.length() > 240 ? title.substring(0, 240) : title;
+        openIssueDraft(activity, owner, repository, safeTitle, body);
+    }
+
     private static void openIssueDraft(Activity activity, String owner, String repository,
                                        String title, String body) {
         boolean clipboardFallback = requiresClipboardFallback(owner, repository, title, body);
