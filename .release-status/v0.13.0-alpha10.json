@@ -1,0 +1,49 @@
+{
+  "assets": [
+    {
+      "apiUrl": "https://api.github.com/repos/rickamaral94/Amaral-Driver-Lab/releases/assets/503034835",
+      "contentType": "application/vnd.android.package-archive",
+      "createdAt": "2026-08-05T20:06:53Z",
+      "digest": "sha256:ab20db427f07496ba50f244709115e8de7fb8b36c87e5c42037bb3a40d9450ad",
+      "downloadCount": 0,
+      "id": "RA_kwDOTslf9M4d-7PT",
+      "label": "",
+      "name": "Amaral-Driver-Lab-v0.13.0-alpha10.apk",
+      "size": 1807652,
+      "state": "uploaded",
+      "updatedAt": "2026-08-05T20:06:54Z",
+      "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/download/v0.13.0-alpha10/Amaral-Driver-Lab-v0.13.0-alpha10.apk"
+    },
+    {
+      "apiUrl": "https://api.github.com/repos/rickamaral94/Amaral-Driver-Lab/releases/assets/503034837",
+      "contentType": "application/octet-stream",
+      "createdAt": "2026-08-05T20:06:53Z",
+      "digest": "sha256:3e31a69c00a3b43962361326ec2b764e613fb7dc2315a1001b2b4d117fa6b022",
+      "downloadCount": 0,
+      "id": "RA_kwDOTslf9M4d-7PV",
+      "label": "",
+      "name": "Amaral-Driver-Lab-v0.13.0-alpha10.sha256",
+      "size": 112,
+      "state": "uploaded",
+      "updatedAt": "2026-08-05T20:06:54Z",
+      "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/download/v0.13.0-alpha10/Amaral-Driver-Lab-v0.13.0-alpha10.sha256"
+    }
+  ],
+  "isDraft": false,
+  "isPrerelease": false,
+  "name": "Amaral Driver Lab v0.13.0-alpha10",
+  "publishedAt": "2026-08-05T20:06:53Z",
+  "tagName": "v0.13.0-alpha10",
+  "targetCommitish": "7f4de78441853843c1cc06a9e67537b5716db0c3",
+  "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/tag/v0.13.0-alpha10",
+  "verification": {
+    "expected_apk_sha256": "ab20db427f07496ba50f244709115e8de7fb8b36c87e5c42037bb3a40d9450ad",
+    "workflow_run": "31042542446",
+    "source_android_workflow": "31042238251",
+    "source_artifact": "8945067280",
+    "tests": 107,
+    "failures": 0,
+    "ignored": 0,
+    "status": "published_as_full_release_and_verified"
+  }
+}
