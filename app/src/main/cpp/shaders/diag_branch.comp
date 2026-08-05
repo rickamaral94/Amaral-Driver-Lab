@@ -1,0 +1,13 @@
+#version 450
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0, std430) buffer Values { uint data[]; } values;
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    uint value = values.data[index] ^ (index * 747796405u + 2891336453u);
+    for (uint step = 0u; step < 96u; ++step) {
+        if (((value ^ step) & 3u) == 0u) value = value * 1664525u + 1013904223u;
+        else if ((value & 1u) != 0u) value = (value << 5u) ^ (value >> 11u) ^ step;
+        else value = value + (step * 2654435761u) ^ (value >> 7u);
+    }
+    values.data[index] = value;
+}

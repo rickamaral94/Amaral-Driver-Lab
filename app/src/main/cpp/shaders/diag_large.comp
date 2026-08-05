@@ -1,0 +1,16 @@
+#version 450
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0, std430) buffer Values { uint data[]; } values;
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    uint x = values.data[index] ^ 0xa511e9b3u;
+    float y = uintBitsToFloat(0x3f000000u | (x & 0x007fffffu));
+    for (uint i = 0u; i < 256u; ++i) {
+        x = x * 1664525u + 1013904223u + i;
+        x ^= (x >> 13u);
+        x = (x << 9u) | (x >> 23u);
+        y = fma(y, 1.0000011, float(x & 1023u) * 0.00000001);
+        y = fma(y, 0.9999993, -0.0000002);
+    }
+    values.data[index] = x ^ floatBitsToUint(y);
+}

@@ -1,0 +1,14 @@
+#version 450
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0, std430) buffer Values { uint data[]; } values;
+shared uint tile[64];
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    uint lane = gl_LocalInvocationID.x;
+    tile[lane] = values.data[index] ^ (lane * 0x9e3779b9u);
+    barrier();
+    uint a = tile[(lane + 1u) & 63u];
+    uint b = tile[(lane + 17u) & 63u];
+    barrier();
+    values.data[index] = (tile[lane] + a) ^ ((b << 7u) | (b >> 25u));
+}

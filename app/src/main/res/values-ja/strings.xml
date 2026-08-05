@@ -1,0 +1,510 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Amaral Driver Lab</string>
+    <string name="language_system">システム言語を使用</string>
+    <string name="language_portuguese_brazil">Português do Brasil</string>
+    <string name="language_english">English</string>
+    <string name="language_spanish">Español</string>
+    <string name="language_french">Français</string>
+    <string name="language_german">Deutsch</string>
+    <string name="language_italian">Italiano</string>
+    <string name="language_japanese">日本語</string>
+    <string name="language_chinese_simplified">简体中文</string>
+    <string name="language_selector_title">言語</string>
+    <string name="language_selector_content_description">アプリの言語を変更</string>
+    <string name="action_cancel">キャンセル</string>
+    <string name="report_title">Amaral Driver Lab・Full Qualification</string>
+    <string name="report_result">結果</string>
+    <string name="report_driver">ドライバー</string>
+    <string name="report_performance">パフォーマンス</string>
+    <string name="report_compatibility">互換性</string>
+    <string name="report_weighted_gain">加重改善</string>
+    <string name="report_confidence">信頼度</string>
+    <string name="report_results_by_area">領域別結果</string>
+    <string name="report_area">領域</string>
+    <string name="report_status">ステータス</string>
+    <string name="report_gain">改善</string>
+    <string name="report_weight">重み</string>
+    <string name="report_compatibility_gate">互換性ゲート</string>
+    <string name="report_approved">合格。</string>
+    <string name="report_unavailable">利用不可</string>
+    <string name="report_unknown_driver">不明</string>
+    <string name="report_candidate_driver">候補</string>
+    <string name="phase12_label">フェーズ12・完全な多言語化</string>
+    <!-- Phase 13 UX redesign -->
+    <string name="action_back">戻る</string>
+    <string name="action_close">閉じる</string>
+    <string name="action_continue">続行</string>
+    <string name="action_finish">完了</string>
+    <string name="phase13_home_title">AMARAL DRIVER LAB</string>
+    <string name="phase13_home_subtitle">Android GPUドライバーの信頼できる検証</string>
+    <string name="phase13_brand_logo_description">Amaral Driver Labロゴ</string>
+    <string name="phase13_mode_basic">基本モード</string>
+    <string name="phase13_mode_advanced">詳細モード</string>
+    <string name="phase13_mode_content_description">Switch between basic and advanced experience</string>
+    <string name="phase13_latest_result">最新の結果</string>
+    <string name="phase13_open_latest_result">Open latest guided result</string>
+    <string name="phase13_result_in_progress">A qualification is still in progress.</string>
+    <string name="phase13_recommended_section">推奨テスト</string>
+    <string name="phase13_status_recommended">推奨</string>
+    <string name="phase13_full_title">推奨 Turnip テスト</string>
+    <string name="phase13_full_description">The most complete and guided comparison: visual correctness, controlled performance, deep diagnostics and short soak.</string>
+    <string name="phase13_full_composition">8つの重点ステップ・描画正確性・シェーダー・フレームタイム・混合同期トレース</string>
+    <string name="phase13_start_full">Fullテストを開始</string>
+    <string name="phase13_comparisons">比較</string>
+    <string name="phase13_system_vs_turnip">System × Turnip</string>
+    <string name="phase13_system_vs_turnip_detail">Compare the Android stock driver with one imported candidate.</string>
+    <string name="phase13_turnip_vs_turnip">Turnip A × Turnip B</string>
+    <string name="phase13_turnip_vs_turnip_detail">Use comparable Full runs to choose between two candidates.</string>
+    <string name="phase13_individual_tests">個別テスト</string>
+    <string name="phase13_visual_scenes">ビジュアルシーン</string>
+    <string name="phase13_visual_scenes_detail">Geometry, materials and post-processing with captured evidence.</string>
+    <string name="phase13_performance">パフォーマンス</string>
+    <string name="phase13_performance_detail">Shaders, render pass, compute, frametime, traces and transfer.</string>
+    <string name="phase13_deep_diagnostics">詳細診断</string>
+    <string name="phase13_deep_diagnostics_detail">Formats, shader corpus, pipeline cache, synchronization and memory.</string>
+    <string name="phase13_soak_test">Soak Test</string>
+    <string name="phase13_soak_test_detail">Repeat 10–50 cycles to investigate long-running stability.</string>
+    <string name="phase13_results">結果</string>
+    <string name="phase13_history">履歴</string>
+    <string name="phase13_history_detail">Browse previous runs and comparable series.</string>
+    <string name="phase13_rankings">ランキング</string>
+    <string name="phase13_rankings_detail">Best overall, performance, compatibility, stability and thermal behavior.</string>
+    <string name="phase13_reports">レポート</string>
+    <string name="phase13_reports_detail">Review and export technical JSON and diagnostic evidence.</string>
+    <string name="phase13_telemetry">エミュレーターテレメトリ</string>
+    <string name="phase13_telemetry_detail">Attach real sessions from supported emulators.</string>
+    <string name="phase13_advanced_tools">詳細ツール</string>
+    <string name="phase13_technical_workspace">技術ワークスペース</string>
+    <string name="phase13_technical_workspace_detail">Run individual workloads and configure raw protocol parameters.</string>
+    <string name="phase13_regression_campaigns">Regression campaigns</string>
+    <string name="phase13_regression_campaigns_detail">Automate repeated campaigns, diffs and bisect evidence.</string>
+    <string name="phase13_guided_title">ガイド付きFullテスト</string>
+    <string name="phase13_step_format">ステップ %1$d / %2$d · %3$s</string>
+    <string name="phase13_step_driver">ドライバー</string>
+    <string name="phase13_step_test">テスト</string>
+    <string name="phase13_step_preparation">準備</string>
+    <string name="phase13_step_execution">実行</string>
+    <string name="phase13_step_result">結果</string>
+    <string name="phase13_start_execution">実行開始</string>
+    <string name="phase13_open_technical_workspace">Open technical workspace</string>
+    <string name="phase13_driver_step_title">ドライバーを選択</string>
+    <string name="phase13_driver_step_description">システムドライバーが固定基準です。評価するTurnip候補を選択してください。</string>
+    <string name="phase13_baseline_chip">基準</string>
+    <string name="phase13_system_driver">Androidシステムドライバー</string>
+    <string name="phase13_system_driver_detail">Used as the stock reference under the same device and thermal conditions.</string>
+    <string name="phase13_candidate_driver">Turnip候補</string>
+    <string name="phase13_no_driver_imported">インポート済みドライバーなし</string>
+    <string name="phase13_import_driver_instruction">ホーム画面から有効な AdrenoTools ZIP を直接インポートしてください。</string>
+    <string name="phase13_driver_details_format">SHA-256: %1$s\nImported: %2$s\nKnown compatibility: %3$s</string>
+    <string name="phase13_compatibility_available">available for this Android version</string>
+    <string name="phase13_compatibility_warning">requires a newer Android API</string>
+    <string name="phase13_no_driver_title">候補ドライバーなし</string>
+    <string name="phase13_no_driver_message">Import and validate a Turnip driver before starting the guided comparison.</string>
+    <string name="phase13_test_step_title">テストを選択</string>
+    <string name="phase13_test_step_description">For most users, the Full Qualification v3 is the recommended and comparable path.</string>
+    <string name="phase13_system_comparison_guidance">This run compares the selected candidate against the Android system driver.</string>
+    <string name="phase13_turnip_comparison_guidance">Complete comparable Full runs for both candidates, then use History and Rankings to compare them.</string>
+    <string name="phase13_preparation_title">端末を準備</string>
+    <string name="phase13_preparation_description">Confirm the same conditions before every comparison.</string>
+    <string name="phase13_check_close_apps">他のアプリを閉じる</string>
+    <string name="phase13_check_performance_mode">同じパフォーマンスモードを使用</string>
+    <string name="phase13_check_temperature">端末温度を安定させる</string>
+    <string name="phase13_check_not_charging">テスト中は充電しない</string>
+    <string name="phase13_check_ventilation">冷却条件を一定に保つ</string>
+    <string name="phase13_checklist_note">The preflight will still measure battery, temperature, memory and eligibility.</string>
+    <string name="phase13_checklist_incomplete_title">Preparation incomplete</string>
+    <string name="phase13_checklist_incomplete_message">Confirm every item to reduce noise and preserve comparability.</string>
+    <string name="phase13_execution_title">検証を実行</string>
+    <string name="phase13_execution_description">The Full test runs in controlled blocks. You can pause after the current stage and resume later.</string>
+    <string name="phase13_execution_ready">Ready to open the technical execution screen.</string>
+    <string name="phase13_execution_progress_description">Overall Full Qualification progress</string>
+    <string name="phase13_progress_visual">表示の正確性</string>
+    <string name="phase13_progress_performance">パフォーマンス</string>
+    <string name="phase13_progress_diagnostics">詳細診断</string>
+    <string name="phase13_progress_soak">Soak</string>
+    <string name="phase13_progress_state_format">%1$d / %2$d ステージ · %3$s</string>
+    <string name="phase13_result_title">結果を理解する</string>
+    <string name="phase13_result_description">The recommendation appears first. Raw metrics and evidence remain available below.</string>
+    <string name="phase13_no_result_yet">No Full result is available yet.</string>
+    <string name="phase13_result_general">総合結果</string>
+    <string name="phase13_result_inconclusive">判定不能</string>
+    <string name="phase13_problems_found">検出された問題</string>
+    <string name="phase13_no_blocking_problem">重大な問題は検出されませんでした。</string>
+    <string name="phase13_result_read_error">Could not read the result: %1$s</string>
+    <string name="phase13_help_content_description">Explain %1$s</string>
+    <string name="phase13_status_completed">完了</string>
+    <string name="phase13_status_blocked">ブロック</string>
+    <string name="phase13_status_paused">一時停止</string>
+    <string name="phase13_status_running">実行中</string>
+    <string name="phase13_status_ready">準備完了</string>
+    <string name="phase13_status_not_recommended">非推奨</string>
+    <string name="phase13_status_tie">技術的同等</string>
+    <string name="phase13_status_inconclusive">判定不能</string>
+    <string name="help_what_is">概要</string>
+    <string name="help_why_matters">重要な理由</string>
+    <string name="help_how_interpret">読み方</string>
+    <string name="help_p99_title">P99 GPU Frame Time</string>
+    <string name="help_p99_what">The time below which 99% of GPU frames were rendered.</string>
+    <string name="help_p99_why">It exposes stutters that an average can hide.</string>
+    <string name="help_p99_how">Lower is better. A difference below 3% is generally treated as a technical tie.</string>
+    <string name="help_performance_title">グラフィックス性能</string>
+    <string name="help_performance_what">Measures rendering time in controlled and repeatable workloads.</string>
+    <string name="help_performance_why">It shows whether a driver improves speed without sacrificing correctness.</string>
+    <string name="help_performance_how">Higher scores and lower times are better, but compatibility gates always take priority.</string>
+    <string name="help_compatibility_title">互換性指数</string>
+    <string name="help_compatibility_what">Summarizes visual correctness, formats, shaders, synchronization, memory, reliability and soak.</string>
+    <string name="help_compatibility_why">A faster driver is not useful when it corrupts rendering or fails required features.</string>
+    <string name="help_compatibility_how">100 is ideal. Any mandatory gate can block a recommendation regardless of performance.</string>
+    <string name="help_thermal_title">熱持続性</string>
+    <string name="help_thermal_what">Measures how performance and temperature behave during a sustained workload.</string>
+    <string name="help_thermal_why">Short peaks can hide throttling and unstable long sessions.</string>
+    <string name="help_thermal_how">Prefer stable performance with a controlled temperature increase under identical cooling conditions.</string>
+    <string name="phase13_quick_test_description">ここでドライバーをインポートまたは選択し、技術画面を開かずに短い推奨比較を実行します。</string>
+    <string name="phase13_compare_against">比較対象</string>
+    <string name="phase13_comparison_system_turnip">Android システムドライバー × Turnip 候補</string>
+    <string name="phase13_comparison_turnip_turnip">Turnip 参照 × Turnip 候補</string>
+    <string name="phase13_candidate_driver_label">候補ドライバー</string>
+    <string name="phase13_reference_driver_label">参照ドライバー</string>
+    <string name="phase13_import_driver">Turnip ZIP をインポート</string>
+    <string name="phase13_start_selected_test">選択した Full テストを開始</string>
+    <string name="phase13_importing_driver">ドライバーをインポートして検証中…</string>
+    <string name="phase13_import_success">インポート完了: %1$s</string>
+    <string name="phase13_import_failed">インポート失敗: %1$s</string>
+    <string name="phase13_select_candidate_error">有効な Turnip 候補を選択またはインポートしてください。</string>
+    <string name="phase13_select_reference_error">有効な Turnip 参照ドライバーを選択してください。</string>
+    <string name="phase13_same_driver_error">候補と参照には異なるドライバーを選択してください。</string>
+    <string name="phase13_open_test_log">テストログを開く</string>
+    <string name="phase13_comparison_summary_format">%1$s
+対
+%2$s</string>
+    <string name="phase13_log_title">テストログ</string>
+    <string name="phase13_log_subtitle">結果、技術的証拠、プロジェクト Issue への送信</string>
+    <string name="phase13_log_raw_title">完全な qualification.json</string>
+    <string name="phase13_send_issue">プロジェクト Issue に送信</string>
+    <string name="phase13_issue_opened">入力済み Issue をブラウザーで開きました。</string>
+    <string name="phase13_issue_created">Issue を作成しました: %1$s</string>
+    <string name="phase13_issue_failed">Issue を準備できませんでした: %1$s</string>
+    <string name="phase13_copy_log">完全なログをコピー</string>
+    <string name="phase13_log_copied">完全なログをコピーしました。</string>
+    <string name="phase13_export_log">診断 ZIP をエクスポート</string>
+    <string name="phase13_export_success">診断 ZIP をエクスポートしました。</string>
+    <string name="phase13_export_failed">エクスポート失敗: %1$s</string>
+    <string name="phase13_back_home">ホームに戻る</string>
+    <string name="phase13_log_invalid">このテストログは利用できないか無効です。</string>
+    <string name="phase13_issue_sending">Amaral Driver Lab に Issue を作成中…</string>
+    <string name="phase13_bundle_unavailable">診断パッケージはまだ利用できません。</string>
+    <string name="phase13_log_metrics_format">パフォーマンス: %1$s / 100
+互換性: %2$s / 100
+加重向上率: %3$s
+信頼度: %4$s</string>
+    <string name="phase13_log_blockers">ブロック要因と注意点:</string>
+    <string name="phase13_log_steps_format">ステップ: 完了 %1$d · 失敗 %2$d · 保留 %3$d</string>
+
+    <string-array name="legacy_ui_translation">
+        <item>Turnip/stock・正確性を優先・クリーンなプロセス・再現可能な証拠</item>
+        <item>1. ドライバー</item>
+        <item>ADRENOTOOLS ZIPをインポート</item>
+        <item>ドライバーがインポートされていません。</item>
+        <item>ドライバー未インポート</item>
+        <item>2. ワークロード</item>
+        <item>オフスクリーン正確性 v1・高速</item>
+        <item>可視シーン：ジオメトリと深度 v1</item>
+        <item>可視シーン：プロシージャル素材 v1</item>
+        <item>可視シーン：ポストプロセス v1</item>
+        <item>Vulkanトレース再生 v1</item>
+        <item>シェーダーコンパイル v1</item>
+        <item>レンダーパス / タイリング v1</item>
+        <item>算術コンピュート v1</item>
+        <item>安定フレームタイム v1</item>
+        <item>熱持続性能 v1</item>
+        <item>fill/copy転送 v1・レガシー</item>
+        <item>RGBA許容値</item>
+        <item>最大相違ブロック数</item>
+        <item>3. プロトコル</item>
+        <item>A/B・システム × 候補</item>
+        <item>候補のみ</item>
+        <item>システムのみ</item>
+        <item>ウォームアップ（秒）</item>
+        <item>測定（秒）</item>
+        <item>ラウンド</item>
+        <item>▶ テスト開始</item>
+        <item>★ 推奨フルテスト・フェーズ11 / プロファイルv3</item>
+        <item>履歴・DIFF・ランキング・BISECT</item>
+        <item>回帰キャンペーン・フェーズ6</item>
+        <item>エミュレーターテレメトリ・フェーズ9</item>
+        <item>Turnip詳細診断・フェーズ10</item>
+        <item>4. GitHub Issue</item>
+        <item>リポジトリ</item>
+        <item>完了時にIssueを自動作成</item>
+        <item>最新Issueを送信 / 開く</item>
+        <item>最新JSONをエクスポート</item>
+        <item>ステータス</item>
+        <item>準備完了。</item>
+        <item>ネイティブコードをインポート</item>
+        <item>キャンセル</item>
+        <item>ZIPを選択</item>
+        <item>meta.json、SHA-256、ライブラリを検証中…</item>
+        <item>インポート済み：</item>
+        <item>インポート拒否：</item>
+        <item>スイート完了</item>
+        <item>GitHub接続済み</item>
+        <item>維持</item>
+        <item>切断</item>
+        <item>GitHub Appなしのビルド</item>
+        <item>GitHubを承認</item>
+        <item>閉じる</item>
+        <item>GitHubを開く</item>
+        <item>GitHubへの接続に成功しました。</item>
+        <item>送信できる結果はまだありません。</item>
+        <item>GitHub Issueを作成中…</item>
+        <item>Issueを作成しました</item>
+        <item>エクスポートするJSONはまだありません。</item>
+        <item>JSONをエクスポートしました。</item>
+        <item>GITHUBに接続</item>
+        <item>GITHUB接続済み</item>
+        <item>推奨フルテスト・フェーズ11</item>
+        <item>候補ドライバー</item>
+        <item>▶ 推奨フルテスト開始</item>
+        <item>未完了のフルテストを再開</item>
+        <item>現在のステップ後に一時停止</item>
+        <item>フルログをエクスポート (.ZIP)</item>
+        <item>結果を更新</item>
+        <item>メイン画面でドライバーをインポートしてください</item>
+        <item>推奨外の条件</item>
+        <item>それでも実行</item>
+        <item>未完了のフルテストはありません。</item>
+        <item>実行中のフルテストはありません。</item>
+        <item>結果</item>
+        <item>フルパッケージはまだ利用できません。</item>
+        <item>フルログをエクスポートしました。</item>
+        <item>フェーズ6・回帰キャンペーン</item>
+        <item>1. 候補ドライバー</item>
+        <item>2. ワークロードとトレース</item>
+        <item>3. A/Bプロトコル</item>
+        <item>キャンペーンを作成して開始</item>
+        <item>未完了キャンペーンを再開</item>
+        <item>現在のジョブ後に一時停止</item>
+        <item>CAMPAIGN.JSONをエクスポート</item>
+        <item>マニフェストを更新</item>
+        <item>キャンペーンが読み込まれていません。</item>
+        <item>フェーズ4・履歴と回帰</item>
+        <item>SUITE.JSONをインポート</item>
+        <item>フィルター</item>
+        <item>最新</item>
+        <item>最大改善</item>
+        <item>ドライバー名</item>
+        <item>選択項目を比較</item>
+        <item>グループランキング</item>
+        <item>シーケンスBISECT</item>
+        <item>匿名エンベロープをエクスポート</item>
+        <item>履歴を読み込み中…</item>
+        <item>すべてのワークロード</item>
+        <item>分析完了。</item>
+        <item>フェーズ9・エミュレーターテレメトリ</item>
+        <item>SESSION.JSONをインポート</item>
+        <item>SDK v1契約を表示</item>
+        <item>選択されたセッション</item>
+        <item>セッション + 要約 + リンクをエクスポート</item>
+        <item>選択したスイートにリンク</item>
+        <item>記述的A/B比較</item>
+        <item>システム × 候補を比較</item>
+        <item>読み込み中…</item>
+        <item>セッション未インポート</item>
+        <item>Turnip詳細診断・フェーズ10</item>
+        <item>フォーマット行列、シェーダー/キャッシュ、メモリ、同期、A/B Soak Test。</item>
+        <item>Soakサイクル</item>
+        <item>メモリ上限（MiB）</item>
+        <item>▶ A/B詳細診断</item>
+        <item>♻ A/B SOAK TEST</item>
+        <item>完全パッケージをエクスポート (.ZIP)</item>
+        <item>フェーズ10契約を表示</item>
+        <item>有効なTurnipドライバーをインポートして選択してください。</item>
+        <item>フェーズ10完了。</item>
+        <item>パッケージをエクスポートしました。</item>
+        <item>保存先を利用できません</item>
+        <item>エクスポート失敗：</item>
+        <item>不明な障害</item>
+        <item>ライブラリ：</item>
+        <item>
+SHA-256：</item>
+        <item>APKはこのZIP内の.soライブラリを実行します。次のドライバーのみインポートしてください：</item>
+        <item>ウォームアップ</item>
+        <item>測定</item>
+        <item>最大相違ブロック数</item>
+        <item>・正確性 合格</item>
+        <item>・正確性 不合格</item>
+        <item>・実行失敗</item>
+        <item>・A/B参照なし</item>
+        <item>・ピクセル %.4f%%</item>
+        <item>・相違ブロック </item>
+        <item>
+拡張：+</item>
+        <item>・障害イベント </item>
+        <item>・チェックポイント 合格</item>
+        <item>・視覚的相違</item>
+        <item>・最小ピクセル %.4f%%</item>
+        <item>・不一致 </item>
+        <item>・P99中央値改善 %+.2f%%</item>
+        <item>・再現可能な出力</item>
+        <item>・出力相違</item>
+        <item>・ペア </item>
+        <item>・中央値改善 %+.2f%%</item>
+        <item>・95%%信頼区間 [%+.2f, %+.2f]</item>
+        <item>・候補 %+.2f%%</item>
+        <item>トークンはAndroid Keystoreで保護されています。</item>
+        <item>ビルドでGITHUB_CLIENT_IDを設定してください。それまではIssueボタンが</item>
+        <item>認証情報を保存せずブラウザーで下書きを開きます。</item>
+        <item>GitHubアクセスコードを要求中…</item>
+        <item>GitHubコード</item>
+        <item>コードをコピーしました：</item>
+        <item>
+
+権限は結果リポジトリに限定してください：</item>
+        <item>および Issues: write。</item>
+        <item>コードの承認待ち：</item>
+        <item>GitHub：</item>
+        <item>下書きを開けませんでした：</item>
+        <item>Issue作成：</item>
+        <item>結果は保存されましたが送信に失敗しました：</item>
+        <item>エクスポート失敗：</item>
+        <item> が無効</item>
+        <item> は次の範囲内である必要があります：</item>
+        <item> と </item>
+        <item>可視シーン、従来の全テスト、詳細診断、短時間Soak、完全なバンドルを含むFull v3を実行します。</item>
+        <item>不変プロファイル：</item>
+        <item> オーケストレーションブロック・</item>
+        <item> 自動テスト・</item>
+        <item>任意の実機証拠1件。
+詳細診断：128 MiB・短時間Soak：5サイクル。
+
+</item>
+        <item>先に有効なTurnipドライバーをインポートしてください。</item>
+        <item>診断目的で実行できますが、</item>
+        <item>ランキング対象外になります。
+
+</item>
+        <item>事前チェック失敗：</item>
+        <item>フルテスト作成失敗：</item>
+        <item>qualification.json読み取り失敗：</item>
+        <item>
+ステップ：</item>
+        <item> 完了・</item>
+        <item> 失敗・</item>
+        <item> 保留
+プロファイルSHA-256：</item>
+        <item>
+
+パフォーマンス指数：</item>
+        <item> / 100
+互換性指数：</item>
+        <item> / 100
+加重改善：</item>
+        <item>
+信頼度：</item>
+        <item>利用不可</item>
+        <item>
+勝者：</item>
+        <item>
+
+ブロッカー：</item>
+        <item>
+
+ローカルランキング：#</item>
+        <item> / </item>
+        <item>更新しましたがプレビューに失敗：</item>
+        <item>
+フルテスト完了。完全ログをエクスポートできます。</item>
+        <item>テスト完了：</item>
+        <item>クールダウン（秒）</item>
+        <item>先にメイン画面でドライバーをインポートしてください。</item>
+        <item>
+SHA-256 </item>
+        <item>クールダウン</item>
+        <item>1～</item>
+        <item> 個のドライバー</item>
+        <item> ワークロード/トレース</item>
+        <item>未完了キャンペーンはありません。</item>
+        <item>実行中のキャンペーンはありません。</item>
+        <item>campaign.json読み取り失敗：</item>
+        <item>ジョブ：</item>
+        <item> 失敗・</item>
+        <item> 実行中・</item>
+        <item> 保留・合計 </item>
+        <item>
+プランSHA-256：</item>
+        <item>campaign.jsonはありません。</item>
+        <item>campaign.jsonをエクスポートしました。</item>
+        <item>キャンペーンを更新しましたがプレビュー失敗：</item>
+        <item>
+キャンペーン完了。ランキングは比較可能グループごとに分離されます。</item>
+        <item>キャンペーン完了：</item>
+        <item>有効性がブロックされたスイートを含める</item>
+        <item>並列比較</item>
+        <item>すべての端末 / SoC / GPU</item>
+        <item>フィルターに一致するスイートはありません</item>
+        <item> スイートを索引化・</item>
+        <item> 表示</item>
+        <item>Diff利用不可：</item>
+        <item>ランキング利用不可：</item>
+        <item>フィルター済みシーケンスなし</item>
+        <item>Bisect利用不可：</item>
+        <item>整合性署名失敗</item>
+        <item>公開データセットをエクスポート</item>
+        <item>エンベロープは端末モデル、フィンガープリント、ローカルパスを削除します。</item>
+        <item>SoC、GPU、ワークロード、設定、ZIPハッシュは保持され、</item>
+        <item>相関可能です。自動送信は行われません。</item>
+        <item>エクスポート</item>
+        <item>エンベロープ拒否：</item>
+        <item>ファイル利用不可</item>
+        <item>スイートをインポート：</item>
+        <item>公開エンベロープをエクスポートし署名を検証しました。</item>
+        <item>有効なスイートを選択</item>
+        <item>・ブロック済み</item>
+        <item> スイート</item>
+        <item>suite.jsonが2 MiBを超えています</item>
+        <item>ローカルスイートへの不変リンク</item>
+        <item>ローカルスイートなし</item>
+        <item> セッション・</item>
+        <item> スイート利用可能・自動アップロードなし</item>
+        <item>プライバシー、バージョン、制限、SHA-256を検証中…</item>
+        <item>セッションをインポート：</item>
+        <item>SDKとローカルインポートの公開契約。</item>
+        <item>契約利用不可：</item>
+        <item>SDK v1が生成したsession.jsonをインポートしてください。</item>
+        <item>履歴互換の記述的比較。</item>
+        <item>比較利用不可：</item>
+        <item>リンク拒否：</item>
+        <item>エクスポート利用不可：</item>
+        <item>エクスポート完了。アップロードは行われていません。</item>
+        <item>エクスポート失敗：</item>
+        <item>ローカルスイートなし</item>
+        <item>
+モード：</item>
+        <item>
+プロファイル：</item>
+        <item>
+
+判定：</item>
+        <item>
+比較可能：</item>
+        <item>
+ブロッカー：</item>
+        <item>
+警告：</item>
+        <item>
+
+フォーマット回帰：</item>
+        <item>
+フォーマット追加：</item>
+        <item>
+コールドパイプライン：%s%%
+ウォームパイプライン：%s%%</item>
+        <item>フェーズ10パッケージはありません。</item>
+    </string-array>
+    <string name="phase13_legacy_full_title">拡張 Full v3</string>
+    <string name="phase13_legacy_full_detail">合成テスト、熱持続、詳細診断、5サイクルの soak を含む長時間の高度調査です。</string>
+    <string name="phase13_start_legacy_full">拡張 FULL v3 を開始</string>
+    <string name="phase13_hardware_target_title">最適化対象ハードウェア</string>
+    <string name="phase13_metrics_comparison_title">テスト別の絶対値と比較</string>
+</resources>

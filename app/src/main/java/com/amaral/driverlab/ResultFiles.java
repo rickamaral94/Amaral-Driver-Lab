@@ -6,6 +6,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 final class ResultFiles {
     private ResultFiles() {}
@@ -36,6 +38,27 @@ final class ResultFiles {
             }
             return output.toString(StandardCharsets.UTF_8.name());
         }
+    }
+
+    static String sha256(File file) throws IOException {
+        final MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 indisponível", error);
+        }
+        try (FileInputStream input = new FileInputStream(file)) {
+            byte[] buffer = new byte[16 * 1024];
+            int count;
+            while ((count = input.read(buffer)) >= 0) {
+                digest.update(buffer, 0, count);
+            }
+        }
+        StringBuilder output = new StringBuilder(64);
+        for (byte value : digest.digest()) {
+            output.append(String.format(java.util.Locale.US, "%02x", value & 0xff));
+        }
+        return output.toString();
     }
 
     static boolean isInside(File parent, File child) throws IOException {

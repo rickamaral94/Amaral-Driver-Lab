@@ -1,0 +1,510 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Amaral Driver Lab</string>
+    <string name="language_system">Usar idioma do sistema</string>
+    <string name="language_portuguese_brazil">Português do Brasil</string>
+    <string name="language_english">English</string>
+    <string name="language_spanish">Español</string>
+    <string name="language_french">Français</string>
+    <string name="language_german">Deutsch</string>
+    <string name="language_italian">Italiano</string>
+    <string name="language_japanese">日本語</string>
+    <string name="language_chinese_simplified">简体中文</string>
+    <string name="language_selector_title">Idioma</string>
+    <string name="language_selector_content_description">Alterar idioma do aplicativo</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="report_title">Amaral Driver Lab · Full Qualification</string>
+    <string name="report_result">Resultado</string>
+    <string name="report_driver">Driver</string>
+    <string name="report_performance">Performance</string>
+    <string name="report_compatibility">Compatibilidade</string>
+    <string name="report_weighted_gain">Ganho ponderado</string>
+    <string name="report_confidence">Confiança</string>
+    <string name="report_results_by_area">Resultados por área</string>
+    <string name="report_area">Área</string>
+    <string name="report_status">Status</string>
+    <string name="report_gain">Ganho</string>
+    <string name="report_weight">Peso</string>
+    <string name="report_compatibility_gate">Gate de compatibilidade</string>
+    <string name="report_approved">Aprovado.</string>
+    <string name="report_unavailable">indisponível</string>
+    <string name="report_unknown_driver">desconhecido</string>
+    <string name="report_candidate_driver">candidato</string>
+    <string name="phase12_label">Fase 12 · Internacionalização completa</string>
+    <!-- Phase 13 UX redesign -->
+    <string name="action_back">Voltar</string>
+    <string name="action_close">Fechar</string>
+    <string name="action_continue">Continuar</string>
+    <string name="action_finish">Concluir</string>
+    <string name="phase13_home_title">AMARAL DRIVER LAB</string>
+    <string name="phase13_home_subtitle">Evidências confiáveis para drivers de GPU no Android</string>
+    <string name="phase13_brand_logo_description">Logo do Amaral Driver Lab</string>
+    <string name="phase13_mode_basic">Modo básico</string>
+    <string name="phase13_mode_advanced">Modo avançado</string>
+    <string name="phase13_mode_content_description">Alternar entre a experiência básica e avançada</string>
+    <string name="phase13_latest_result">Resultado mais recente</string>
+    <string name="phase13_open_latest_result">Abrir resultado guiado mais recente</string>
+    <string name="phase13_result_in_progress">Uma qualificação ainda está em andamento.</string>
+    <string name="phase13_recommended_section">Teste recomendado</string>
+    <string name="phase13_status_recommended">Recomendado</string>
+    <string name="phase13_full_title">Teste Turnip recomendado</string>
+    <string name="phase13_full_description">A comparação mais completa e guiada: correção visual, performance controlada, diagnóstico profundo e soak curto.</string>
+    <string name="phase13_full_composition">8 etapas focadas · correção visual · shaders · frametime · trace misto de sincronização</string>
+    <string name="phase13_start_full">Iniciar Teste Full</string>
+    <string name="phase13_comparisons">Comparações</string>
+    <string name="phase13_system_vs_turnip">Sistema × Turnip</string>
+    <string name="phase13_system_vs_turnip_detail">Compare o driver original do Android com um candidato importado.</string>
+    <string name="phase13_turnip_vs_turnip">Turnip A × Turnip B</string>
+    <string name="phase13_turnip_vs_turnip_detail">Use execuções Full comparáveis para escolher entre dois candidatos.</string>
+    <string name="phase13_individual_tests">Testes individuais</string>
+    <string name="phase13_visual_scenes">Cenas visuais</string>
+    <string name="phase13_visual_scenes_detail">Geometria, materiais e pós-processamento com evidências capturadas.</string>
+    <string name="phase13_performance">Performance</string>
+    <string name="phase13_performance_detail">Shaders, render pass, compute, frametime, traces e transferência.</string>
+    <string name="phase13_deep_diagnostics">Diagnóstico profundo</string>
+    <string name="phase13_deep_diagnostics_detail">Formatos, corpus de shaders, pipeline cache, sincronização e memória.</string>
+    <string name="phase13_soak_test">Soak Test</string>
+    <string name="phase13_soak_test_detail">Repita de 10 a 50 ciclos para investigar estabilidade prolongada.</string>
+    <string name="phase13_results">Resultados</string>
+    <string name="phase13_history">Histórico</string>
+    <string name="phase13_history_detail">Consulte execuções anteriores e séries comparáveis.</string>
+    <string name="phase13_rankings">Rankings</string>
+    <string name="phase13_rankings_detail">Melhor geral, performance, compatibilidade, estabilidade e térmico.</string>
+    <string name="phase13_reports">Relatórios</string>
+    <string name="phase13_reports_detail">Revise e exporte JSON técnico e evidências de diagnóstico.</string>
+    <string name="phase13_telemetry">Telemetria de emuladores</string>
+    <string name="phase13_telemetry_detail">Anexe sessões reais de emuladores compatíveis.</string>
+    <string name="phase13_advanced_tools">Ferramentas avançadas</string>
+    <string name="phase13_technical_workspace">Área técnica</string>
+    <string name="phase13_technical_workspace_detail">Execute workloads individuais e configure parâmetros brutos do protocolo.</string>
+    <string name="phase13_regression_campaigns">Campanhas de regressão</string>
+    <string name="phase13_regression_campaigns_detail">Automatize campanhas repetidas, diffs e evidências de bisect.</string>
+    <string name="phase13_guided_title">Teste Full guiado</string>
+    <string name="phase13_step_format">Etapa %1$d de %2$d · %3$s</string>
+    <string name="phase13_step_driver">Driver</string>
+    <string name="phase13_step_test">Teste</string>
+    <string name="phase13_step_preparation">Preparação</string>
+    <string name="phase13_step_execution">Execução</string>
+    <string name="phase13_step_result">Resultado</string>
+    <string name="phase13_start_execution">Iniciar execução</string>
+    <string name="phase13_open_technical_workspace">Abrir área técnica</string>
+    <string name="phase13_driver_step_title">Escolha o driver</string>
+    <string name="phase13_driver_step_description">O driver do sistema é a referência fixa. Selecione o candidato Turnip importado para avaliar.</string>
+    <string name="phase13_baseline_chip">Referência</string>
+    <string name="phase13_system_driver">Driver do sistema Android</string>
+    <string name="phase13_system_driver_detail">Usado como referência original no mesmo aparelho e nas mesmas condições térmicas.</string>
+    <string name="phase13_candidate_driver">Candidato Turnip</string>
+    <string name="phase13_no_driver_imported">Nenhum driver importado</string>
+    <string name="phase13_import_driver_instruction">Importe um ZIP AdrenoTools válido diretamente na tela inicial.</string>
+    <string name="phase13_driver_details_format">SHA-256: %1$s\nImportado em: %2$s\nCompatibilidade conhecida: %3$s</string>
+    <string name="phase13_compatibility_available">disponível para esta versão do Android</string>
+    <string name="phase13_compatibility_warning">exige uma API Android mais recente</string>
+    <string name="phase13_no_driver_title">Nenhum driver candidato</string>
+    <string name="phase13_no_driver_message">Importe e valide um driver Turnip antes de iniciar a comparação guiada.</string>
+    <string name="phase13_test_step_title">Escolha o teste</string>
+    <string name="phase13_test_step_description">Para a maioria dos usuários, o Full Qualification v3 é o caminho recomendado e comparável.</string>
+    <string name="phase13_system_comparison_guidance">Esta execução compara o candidato selecionado com o driver do sistema Android.</string>
+    <string name="phase13_turnip_comparison_guidance">Conclua execuções Full comparáveis dos dois candidatos e use Histórico e Rankings para compará-los.</string>
+    <string name="phase13_preparation_title">Prepare o aparelho</string>
+    <string name="phase13_preparation_description">Confirme as mesmas condições antes de cada comparação.</string>
+    <string name="phase13_check_close_apps">Feche outros aplicativos</string>
+    <string name="phase13_check_performance_mode">Use o mesmo modo de desempenho</string>
+    <string name="phase13_check_temperature">Estabilize a temperatura do aparelho</string>
+    <string name="phase13_check_not_charging">Evite carregar durante o teste</string>
+    <string name="phase13_check_ventilation">Mantenha a ventilação constante</string>
+    <string name="phase13_checklist_note">O preflight ainda medirá bateria, temperatura, memória e elegibilidade.</string>
+    <string name="phase13_checklist_incomplete_title">Preparação incompleta</string>
+    <string name="phase13_checklist_incomplete_message">Confirme todos os itens para reduzir ruído e preservar a comparabilidade.</string>
+    <string name="phase13_execution_title">Execute a qualificação</string>
+    <string name="phase13_execution_description">O Teste Full roda em blocos controlados. Você pode pausar após a etapa atual e retomar depois.</string>
+    <string name="phase13_execution_ready">Pronto para abrir a tela técnica de execução.</string>
+    <string name="phase13_execution_progress_description">Progresso geral do Full Qualification</string>
+    <string name="phase13_progress_visual">Correção visual</string>
+    <string name="phase13_progress_performance">Performance</string>
+    <string name="phase13_progress_diagnostics">Diagnóstico profundo</string>
+    <string name="phase13_progress_soak">Soak</string>
+    <string name="phase13_progress_state_format">%1$d de %2$d etapas · %3$s</string>
+    <string name="phase13_result_title">Entenda o resultado</string>
+    <string name="phase13_result_description">A recomendação aparece primeiro. Métricas brutas e evidências continuam disponíveis abaixo.</string>
+    <string name="phase13_no_result_yet">Ainda não existe um resultado Full disponível.</string>
+    <string name="phase13_result_general">Resultado geral</string>
+    <string name="phase13_result_inconclusive">Resultado inconclusivo</string>
+    <string name="phase13_problems_found">Problemas encontrados</string>
+    <string name="phase13_no_blocking_problem">Nenhum problema bloqueante detectado.</string>
+    <string name="phase13_result_read_error">Não foi possível ler o resultado: %1$s</string>
+    <string name="phase13_help_content_description">Explicar %1$s</string>
+    <string name="phase13_status_completed">Concluído</string>
+    <string name="phase13_status_blocked">Bloqueado</string>
+    <string name="phase13_status_paused">Pausado</string>
+    <string name="phase13_status_running">Em execução</string>
+    <string name="phase13_status_ready">Pronto</string>
+    <string name="phase13_status_not_recommended">Não recomendado</string>
+    <string name="phase13_status_tie">Empate técnico</string>
+    <string name="phase13_status_inconclusive">Inconclusivo</string>
+    <string name="help_what_is">O que é</string>
+    <string name="help_why_matters">Por que importa</string>
+    <string name="help_how_interpret">Como interpretar</string>
+    <string name="help_p99_title">P99 GPU Frame Time</string>
+    <string name="help_p99_what">Tempo abaixo do qual 99% dos frames da GPU foram renderizados.</string>
+    <string name="help_p99_why">Expõe travamentos que a média pode esconder.</string>
+    <string name="help_p99_how">Menor é melhor. Uma diferença abaixo de 3% geralmente é tratada como empate técnico.</string>
+    <string name="help_performance_title">Performance gráfica</string>
+    <string name="help_performance_what">Mede o tempo de renderização em workloads controlados e repetíveis.</string>
+    <string name="help_performance_why">Mostra se o driver melhora a velocidade sem sacrificar a correção.</string>
+    <string name="help_performance_how">Scores maiores e tempos menores são melhores, mas os gates de compatibilidade sempre têm prioridade.</string>
+    <string name="help_compatibility_title">Índice de compatibilidade</string>
+    <string name="help_compatibility_what">Resume correção visual, formatos, shaders, sincronização, memória, confiabilidade e soak.</string>
+    <string name="help_compatibility_why">Um driver mais rápido não é útil quando corrompe a imagem ou falha em recursos obrigatórios.</string>
+    <string name="help_compatibility_how">100 é o ideal. Qualquer gate obrigatório pode bloquear a recomendação, independentemente da performance.</string>
+    <string name="help_thermal_title">Sustentação térmica</string>
+    <string name="help_thermal_what">Mede como a performance e a temperatura se comportam em carga prolongada.</string>
+    <string name="help_thermal_why">Picos curtos podem esconder throttling e sessões longas instáveis.</string>
+    <string name="help_thermal_how">Prefira performance estável com aumento de temperatura controlado sob as mesmas condições de refrigeração.</string>
+    <string name="phase13_quick_test_description">Importe ou selecione os drivers aqui e execute a comparação curta recomendada sem abrir a área técnica.</string>
+    <string name="phase13_compare_against">Comparar com</string>
+    <string name="phase13_comparison_system_turnip">Driver do sistema Android × Turnip candidato</string>
+    <string name="phase13_comparison_turnip_turnip">Turnip de referência × Turnip candidato</string>
+    <string name="phase13_candidate_driver_label">Driver candidato</string>
+    <string name="phase13_reference_driver_label">Driver de referência</string>
+    <string name="phase13_import_driver">Importar ZIP Turnip</string>
+    <string name="phase13_start_selected_test">Iniciar teste Full selecionado</string>
+    <string name="phase13_importing_driver">Importando e validando o driver…</string>
+    <string name="phase13_import_success">Importado: %1$s</string>
+    <string name="phase13_import_failed">Falha na importação: %1$s</string>
+    <string name="phase13_select_candidate_error">Selecione ou importe um driver Turnip candidato válido.</string>
+    <string name="phase13_select_reference_error">Selecione um driver Turnip de referência válido.</string>
+    <string name="phase13_same_driver_error">O candidato e a referência devem ser drivers diferentes.</string>
+    <string name="phase13_open_test_log">Abrir log do teste</string>
+    <string name="phase13_comparison_summary_format">%1$s
+contra
+%2$s</string>
+    <string name="phase13_log_title">Log do teste</string>
+    <string name="phase13_log_subtitle">Resultado, evidências técnicas e envio para a issue do projeto</string>
+    <string name="phase13_log_raw_title">qualification.json completo</string>
+    <string name="phase13_send_issue">Enviar para a issue do projeto</string>
+    <string name="phase13_issue_opened">Uma issue preenchida do projeto foi aberta no navegador.</string>
+    <string name="phase13_issue_created">Issue criada: %1$s</string>
+    <string name="phase13_issue_failed">Não foi possível preparar a issue: %1$s</string>
+    <string name="phase13_copy_log">Copiar log completo</string>
+    <string name="phase13_log_copied">Log completo copiado.</string>
+    <string name="phase13_export_log">Exportar ZIP de diagnóstico</string>
+    <string name="phase13_export_success">ZIP de diagnóstico exportado.</string>
+    <string name="phase13_export_failed">Falha na exportação: %1$s</string>
+    <string name="phase13_back_home">Voltar ao início</string>
+    <string name="phase13_log_invalid">Este log de teste está indisponível ou inválido.</string>
+    <string name="phase13_issue_sending">Criando issue no projeto Amaral Driver Lab…</string>
+    <string name="phase13_bundle_unavailable">O pacote de diagnóstico ainda não está disponível.</string>
+    <string name="phase13_log_metrics_format">Performance: %1$s / 100
+Compatibilidade: %2$s / 100
+Ganho ponderado: %3$s
+Confiança: %4$s</string>
+    <string name="phase13_log_blockers">Bloqueios e ressalvas:</string>
+    <string name="phase13_log_steps_format">Etapas: %1$d concluídas · %2$d falhas · %3$d pendentes</string>
+
+    <string-array name="legacy_ui_translation">
+        <item>Turnip/stock · correção primeiro · processo limpo · evidência reproduzível</item>
+        <item>1. Driver</item>
+        <item>IMPORTAR ZIP ADRENOTOOLS</item>
+        <item>Nenhum driver importado.</item>
+        <item>Nenhum driver importado</item>
+        <item>2. Workload</item>
+        <item>Correção offscreen v1 · rápido</item>
+        <item>Cena visível: geometria e depth v1</item>
+        <item>Cena visível: materiais procedurais v1</item>
+        <item>Cena visível: pós-processamento v1</item>
+        <item>Trace replay Vulkan v1</item>
+        <item>Compilação de shaders v1</item>
+        <item>Render pass / tiling v1</item>
+        <item>Compute aritmético v1</item>
+        <item>Frametime estável v1</item>
+        <item>Sustentação térmica v1</item>
+        <item>Transferência fill/copy v1 · legado</item>
+        <item>Tolerância RGBA</item>
+        <item>Máx. blocos divergentes</item>
+        <item>3. Protocolo</item>
+        <item>A/B · sistema × candidato</item>
+        <item>Somente candidato</item>
+        <item>Somente sistema</item>
+        <item>Warm-up (s)</item>
+        <item>Medição (s)</item>
+        <item>Rodadas</item>
+        <item>▶ INICIAR TESTE</item>
+        <item>★ TESTE FULL RECOMENDADO · FASE 11 / PERFIL v3</item>
+        <item>HISTÓRICO · DIFF · RANKING · BISECT</item>
+        <item>CAMPANHAS DE REGRESSÃO · FASE 6</item>
+        <item>TELEMETRIA DE EMULADORES · FASE 9</item>
+        <item>DIAGNÓSTICO PROFUNDO TURNIP · FASE 10</item>
+        <item>4. GitHub Issues</item>
+        <item>Repositório</item>
+        <item>Criar issue automaticamente ao concluir</item>
+        <item>ENVIAR / ABRIR ÚLTIMA ISSUE</item>
+        <item>EXPORTAR ÚLTIMO JSON</item>
+        <item>Status</item>
+        <item>Pronto.</item>
+        <item>Importar código nativo</item>
+        <item>Cancelar</item>
+        <item>Selecionar ZIP</item>
+        <item>Validando meta.json, SHA-256 e bibliotecas…</item>
+        <item>Importado: </item>
+        <item>Importação recusada: </item>
+        <item>Suíte concluída</item>
+        <item>GitHub conectado</item>
+        <item>Manter</item>
+        <item>Desconectar</item>
+        <item>Build sem GitHub App</item>
+        <item>Autorizar GitHub</item>
+        <item>Fechar</item>
+        <item>Abrir GitHub</item>
+        <item>GitHub conectado com sucesso.</item>
+        <item>Ainda não há resultado para enviar.</item>
+        <item>Criando issue no GitHub…</item>
+        <item>Issue criada</item>
+        <item>Ainda não há JSON para exportar.</item>
+        <item>JSON exportado.</item>
+        <item>CONECTAR GITHUB</item>
+        <item>GITHUB CONECTADO</item>
+        <item>Teste Full Recomendado · Fase 11</item>
+        <item>Driver candidato</item>
+        <item>▶ INICIAR TESTE FULL RECOMENDADO</item>
+        <item>RETOMAR TESTE FULL INCOMPLETO</item>
+        <item>PAUSAR APÓS A ETAPA ATUAL</item>
+        <item>EXPORTAR LOG FULL (.ZIP)</item>
+        <item>ATUALIZAR RESULTADO</item>
+        <item>Importe um driver na tela principal</item>
+        <item>Condições fora do recomendado</item>
+        <item>Executar mesmo assim</item>
+        <item>Nenhum teste Full incompleto encontrado.</item>
+        <item>Nenhum teste Full está em execução.</item>
+        <item>Resultado</item>
+        <item>O pacote Full ainda não está disponível.</item>
+        <item>Log Full exportado com sucesso.</item>
+        <item>Fase 6 · Campanhas de regressão</item>
+        <item>1. Drivers candidatos</item>
+        <item>2. Workloads e traces</item>
+        <item>3. Protocolo A/B</item>
+        <item>CRIAR E INICIAR CAMPANHA</item>
+        <item>RETOMAR CAMPANHA INCOMPLETA</item>
+        <item>PAUSAR APÓS O JOB ATUAL</item>
+        <item>EXPORTAR CAMPAIGN.JSON</item>
+        <item>ATUALIZAR MANIFESTO</item>
+        <item>Nenhuma campanha carregada.</item>
+        <item>Fase 4 · Histórico e regressões</item>
+        <item>IMPORTAR SUITE.JSON</item>
+        <item>Filtros</item>
+        <item>Mais recentes</item>
+        <item>Maior melhoria</item>
+        <item>Nome do driver</item>
+        <item>COMPARAR SELECIONADAS</item>
+        <item>RANKING DO GRUPO</item>
+        <item>BISECT DA SEQUÊNCIA</item>
+        <item>EXPORTAR ENVELOPE ANÔNIMO</item>
+        <item>Carregando histórico…</item>
+        <item>Todos os workloads</item>
+        <item>Análise concluída.</item>
+        <item>Fase 9 · Telemetria de emuladores</item>
+        <item>IMPORTAR SESSION.JSON</item>
+        <item>VER CONTRATO DO SDK v1</item>
+        <item>Sessão selecionada</item>
+        <item>EXPORTAR SESSÃO + RESUMO + LINK</item>
+        <item>VINCULAR À SUÍTE SELECIONADA</item>
+        <item>Comparação A/B descritiva</item>
+        <item>COMPARAR SISTEMA × CANDIDATO</item>
+        <item>Carregando…</item>
+        <item>Nenhuma sessão importada</item>
+        <item>Diagnóstico Profundo Turnip · Fase 10</item>
+        <item>Matriz de formatos, shaders/cache, memória, sincronização e Soak Test A/B.</item>
+        <item>Ciclos do Soak</item>
+        <item>Limite de memória (MiB)</item>
+        <item>▶ DIAGNÓSTICO PROFUNDO A/B</item>
+        <item>♻ SOAK TEST A/B</item>
+        <item>EXPORTAR PACOTE COMPLETO (.ZIP)</item>
+        <item>VER CONTRATO DA FASE 10</item>
+        <item>Importe e selecione um driver Turnip válido.</item>
+        <item>Fase 10 concluída.</item>
+        <item>Pacote exportado com sucesso.</item>
+        <item>Destino indisponível</item>
+        <item>Falha ao exportar: </item>
+        <item>falha desconhecida</item>
+        <item>Biblioteca: </item>
+        <item>
+SHA-256: </item>
+        <item>O APK executará as bibliotecas .so deste ZIP. Importe apenas drivers </item>
+        <item>Warm-up</item>
+        <item>Medição</item>
+        <item>Máximo de blocos divergentes</item>
+        <item> · CORREÇÃO APROVADA</item>
+        <item> · CORREÇÃO REPROVADA</item>
+        <item> · FALHA DE EXECUÇÃO</item>
+        <item> · SEM REFERÊNCIA A/B</item>
+        <item> · pixels %.4f%%</item>
+        <item> · blocos divergentes </item>
+        <item>
+Extensões: +</item>
+        <item> · eventos de falha </item>
+        <item> · CHECKPOINTS APROVADOS</item>
+        <item> · DIVERGÊNCIA VISUAL</item>
+        <item> · pixels mín. %.4f%%</item>
+        <item> · mismatches </item>
+        <item> · melhora P99 mediana %+.2f%%</item>
+        <item> · SAÍDA REPRODUZÍVEL</item>
+        <item> · DIVERGÊNCIA DE SAÍDA</item>
+        <item> · pares </item>
+        <item> · melhora mediana %+.2f%%</item>
+        <item> · IC95%% [%+.2f, %+.2f]</item>
+        <item> · candidato %+.2f%%</item>
+        <item>O token está protegido pelo Android Keystore.</item>
+        <item>Configure GITHUB_CLIENT_ID no build. Até lá, o botão de issue </item>
+        <item>abre um rascunho no navegador sem armazenar credenciais.</item>
+        <item>Solicitando código de acesso ao GitHub…</item>
+        <item>GitHub code</item>
+        <item>Código copiado: </item>
+        <item>
+
+A permissão deve ficar limitada ao repositório de resultados </item>
+        <item>e a Issues: write.</item>
+        <item>Aguardando autorização do código </item>
+        <item>GitHub: </item>
+        <item>Não foi possível abrir o rascunho: </item>
+        <item>Issue criada: </item>
+        <item>Resultado salvo, mas o envio falhou: </item>
+        <item>Exportação falhou: </item>
+        <item> inválido</item>
+        <item> deve ficar entre </item>
+        <item> e </item>
+        <item>Executa o Full v3 com cenas visíveis, todos os testes anteriores, diagnóstico profundo, soak curto e bundle completo.</item>
+        <item>Perfil imutável: </item>
+        <item> blocos orquestrados · </item>
+        <item> testes automáticos · </item>
+        <item>1 evidência real opcional.
+Diagnóstico profundo: 128 MiB · soak curto: 5 ciclos.
+
+</item>
+        <item>Importe um driver Turnip válido primeiro.</item>
+        <item>O teste pode ser executado para diagnóstico, mas ficará </item>
+        <item>bloqueado para ranking.
+
+</item>
+        <item>Falha no preflight: </item>
+        <item>Falha ao criar o teste Full: </item>
+        <item>Falha ao ler qualification.json: </item>
+        <item>
+Etapas: </item>
+        <item> concluídas · </item>
+        <item> falhas · </item>
+        <item> pendentes
+Perfil SHA-256: </item>
+        <item>
+
+Índice de performance: </item>
+        <item> / 100
+Índice de compatibilidade: </item>
+        <item> / 100
+Ganho ponderado: </item>
+        <item>
+Confiança: </item>
+        <item>indisponível</item>
+        <item>
+Vencedor: </item>
+        <item>
+
+Bloqueios:</item>
+        <item>
+
+Ranking local: #</item>
+        <item> de </item>
+        <item>Atualizado, mas a prévia falhou: </item>
+        <item>
+Teste Full concluído. O log completo está pronto para exportação.</item>
+        <item>Teste concluído: </item>
+        <item>Cooldown (s)</item>
+        <item>Importe drivers na tela principal primeiro.</item>
+        <item>
+SHA-256 </item>
+        <item>Cooldown</item>
+        <item>Selecione de 1 a </item>
+        <item> drivers</item>
+        <item> workloads/traces</item>
+        <item>Nenhuma campanha incompleta encontrada.</item>
+        <item>Nenhuma campanha está em execução.</item>
+        <item>Falha ao ler campaign.json: </item>
+        <item>Jobs: </item>
+        <item> falhos · </item>
+        <item> executando · </item>
+        <item> pendentes · total </item>
+        <item>
+Plano SHA-256: </item>
+        <item>Nenhum campaign.json disponível.</item>
+        <item>campaign.json exportado.</item>
+        <item>Campanha atualizada, mas a prévia falhou: </item>
+        <item>
+Campanha finalizada. Rankings permanecem separados por grupo comparável.</item>
+        <item>Campanha concluída: </item>
+        <item>Incluir suítes com validade bloqueada</item>
+        <item>Comparação lado a lado</item>
+        <item>Todos os aparelhos / SoCs / GPUs</item>
+        <item>Nenhuma suíte compatível com os filtros</item>
+        <item> suíte(s) indexada(s) · </item>
+        <item> visível(is)</item>
+        <item>Diff indisponível: </item>
+        <item>Ranking indisponível: </item>
+        <item>Sem sequência filtrada</item>
+        <item>Bisect indisponível: </item>
+        <item>Falha na assinatura de integridade</item>
+        <item>Exportar conjunto público</item>
+        <item>O envelope remove modelo do aparelho, fingerprint e caminhos locais. </item>
+        <item>Ele mantém SoC, GPU, workload, configuração e hash do ZIP, que podem </item>
+        <item>ser correlacionáveis. Nenhum envio ocorre automaticamente.</item>
+        <item>Exportar</item>
+        <item>Envelope recusado: </item>
+        <item>Arquivo indisponível</item>
+        <item>Suite importada: </item>
+        <item>Envelope público exportado e assinatura verificada.</item>
+        <item>Selecione uma suíte válida</item>
+        <item> · BLOQUEADA</item>
+        <item> suíte(s)</item>
+        <item>suite.json excede 2 MiB</item>
+        <item>Vínculo imutável com uma suíte local</item>
+        <item>Nenhuma suíte local disponível</item>
+        <item> sessão(ões) · </item>
+        <item> suíte(s) disponíveis · nenhum envio automático</item>
+        <item>Validando privacidade, versões, limites e SHA-256…</item>
+        <item>Sessão importada: </item>
+        <item>Contrato público do SDK e da importação local.</item>
+        <item>Contrato indisponível: </item>
+        <item>Importe um session.json produzido pelo SDK v1.</item>
+        <item>Comparação descritiva historicamente compatível.</item>
+        <item>Comparação indisponível: </item>
+        <item>Vínculo recusado: </item>
+        <item>Exportação indisponível: </item>
+        <item>Exportação concluída. Nenhum upload foi realizado.</item>
+        <item>Falha na exportação: </item>
+        <item>Nenhuma suíte local</item>
+        <item>
+Modo: </item>
+        <item>
+Perfil: </item>
+        <item>
+
+Veredito: </item>
+        <item>
+Comparável: </item>
+        <item>
+Bloqueios: </item>
+        <item>
+Avisos: </item>
+        <item>
+
+Regressões de formato: </item>
+        <item>
+Ganhos de formato: </item>
+        <item>
+Pipeline cold: %s%%
+Pipeline warm: %s%%</item>
+        <item>Nenhum pacote da Fase 10 disponível.</item>
+    </string-array>
+    <string name="phase13_legacy_full_title">Full v3 estendido</string>
+    <string name="phase13_legacy_full_detail">Investigação avançada longa com testes sintéticos, sustentação térmica, diagnóstico profundo e soak de cinco ciclos.</string>
+    <string name="phase13_start_legacy_full">INICIAR FULL v3 ESTENDIDO</string>
+    <string name="phase13_hardware_target_title">Alvo de hardware para otimização</string>
+    <string name="phase13_metrics_comparison_title">Valores absolutos e comparação por teste</string>
+</resources>

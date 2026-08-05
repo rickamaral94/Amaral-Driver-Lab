@@ -1,4 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#000000</color>
+    <color name="ic_launcher_background">#060814</color>
+    <color name="amaral_background">#060814</color>
+    <color name="amaral_surface">#101427</color>
+    <color name="amaral_surface_elevated">#181D35</color>
+    <color name="amaral_surface_highlight">#212746</color>
+    <color name="amaral_primary">#8B4CFF</color>
+    <color name="amaral_primary_dark">#5B2DB5</color>
+    <color name="amaral_secondary">#00B8FF</color>
+    <color name="amaral_text_primary">#F6F7FF</color>
+    <color name="amaral_text_secondary">#B7BED6</color>
+    <color name="amaral_success">#35D399</color>
+    <color name="amaral_warning">#FBBF24</color>
+    <color name="amaral_error">#F87171</color>
+    <color name="amaral_info">#38BDF8</color>
 </resources>

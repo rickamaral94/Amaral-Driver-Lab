@@ -1,0 +1,9 @@
+#version 450
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0, std430) buffer Values { uint data[]; } values;
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    uint value = values.data[index + 1u] ^ (index * 2246822519u);
+    atomicAdd(values.data[0], (value & 255u) + index);
+    values.data[index + 1u] = value * 3266489917u + 374761393u;
+}

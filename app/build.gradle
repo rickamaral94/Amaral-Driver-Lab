@@ -17,8 +17,8 @@ android {
         applicationId 'com.amaral.driverlab'
         minSdk 28
         targetSdk 35
-        versionCode 2
-        versionName '0.1.1-mvp'
+        versionCode 19
+        versionName '0.13.0-alpha6'
 
         buildConfigField 'String', 'GITHUB_CLIENT_ID', '"' + configuredClientId + '"'
 
@@ -54,6 +54,10 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
     buildTypes {
         debug {
             debuggable true
@@ -66,4 +70,7 @@ android {
 }
 
 dependencies {
+    implementation project(':telemetry-sdk')
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
 }
