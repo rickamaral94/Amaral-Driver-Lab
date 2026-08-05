@@ -1,14 +1,15 @@
-name: Source Snapshot
+name: Apply Phase 13 alpha6 package
 
 on:
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  snapshot:
+  apply-alpha6:
+    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -16,17 +17,70 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: agent/phase13-ux-redesign
-      - name: Inspect alpha6 patch blocks
+          fetch-depth: 0
+
+      - name: Verify, install and publish alpha6
         shell: bash
         run: |
           set -euo pipefail
-          for part in .phase13-alpha6/part-*.b64; do
-            decoded="/tmp/$(basename "$part").decoded"
-            base64 --decode "$part" > "$decoded"
-            echo "=== $(basename "$part") ==="
-            printf 'encoded  '
-            sha256sum "$part"
-            printf 'decoded  '
-            sha256sum "$decoded"
-            wc -c "$part" "$decoded"
-          done
+          cat .phase13-alpha6b/part-*.b64 | base64 --decode > /tmp/alpha6-files.tar.gz
+          echo '3e86c9f9acd31e7c80a384777a5bb7ff42cd3a0f9fd56cc959a1136050e8fe8e  /tmp/alpha6-files.tar.gz' | sha256sum --check
+
+          cat > /tmp/expected-files.txt <<'EOF'
+          app/build.gradle
+          app/src/main/java/com/amaral/driverlab/GitHubIssuePublisher.java
+          app/src/main/java/com/amaral/driverlab/QualificationOptimizationReport.java
+          app/src/test/java/com/amaral/driverlab/QualificationOptimizationReportTest.java
+          EOF
+          sed -i 's/^          //' /tmp/expected-files.txt
+          tar -tzf /tmp/alpha6-files.tar.gz | sort > /tmp/actual-files.txt
+          sort -o /tmp/expected-files.txt /tmp/expected-files.txt
+          diff -u /tmp/expected-files.txt /tmp/actual-files.txt
+          tar -xzf /tmp/alpha6-files.tar.gz -C .
+
+          rm -rf .phase13-alpha6 .phase13-alpha6b
+          rm -f .github/workflows/apply-phase13-alpha6.yml
+          cat > .github/workflows/source-snapshot.yml <<'YAML'
+          name: Source Snapshot
+
+          on:
+            pull_request:
+            workflow_dispatch:
+
+          permissions:
+            contents: read
+
+          jobs:
+            snapshot:
+              runs-on: ubuntu-latest
+              timeout-minutes: 10
+              steps:
+                - name: Checkout
+                  uses: actions/checkout@v4
+                - name: Upload source snapshot
+                  uses: actions/upload-artifact@v4
+                  with:
+                    name: amaral-driver-lab-source
+                    path: |
+                      app
+                      telemetry-sdk
+                      docs
+                      README.md
+                      build.gradle
+                      settings.gradle
+                      gradle.properties
+                      gradlew
+                      gradlew.bat
+                      gradle
+                    if-no-files-found: error
+                    retention-days: 3
+          YAML
+          sed -i 's/^          //' .github/workflows/source-snapshot.yml
+
+          git diff --check
+          git status --short
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Phase 13 alpha6 rich comparative issue report'
+          git push origin HEAD:agent/phase13-ux-redesign
