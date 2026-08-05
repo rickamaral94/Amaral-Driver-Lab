@@ -17,8 +17,8 @@ android {
         applicationId 'com.amaral.driverlab'
         minSdk 28
         targetSdk 35
-        versionCode 20
-        versionName '0.13.0-alpha7'
+        versionCode 21
+        versionName '0.13.0-alpha8'
 
         buildConfigField 'String', 'GITHUB_CLIENT_ID', '"' + configuredClientId + '"'
 
