@@ -507,4 +507,5 @@ Pipeline warm: %s%%</item>
     <string name="phase13_start_legacy_full">INICIAR FULL v3 ESTENDIDO</string>
     <string name="phase13_hardware_target_title">Alvo de hardware para otimização</string>
     <string name="phase13_metrics_comparison_title">Valores absolutos e comparação por teste</string>
+    <string name="github_draft_body_copied">O relatório completo foi copiado. Cole-o na descrição da issue do GitHub.</string>
 </resources>

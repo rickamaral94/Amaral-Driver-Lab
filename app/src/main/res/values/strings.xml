@@ -507,4 +507,5 @@ Warm pipeline: %s%%</item>
     <string name="phase13_start_legacy_full">START EXTENDED FULL v3</string>
     <string name="phase13_hardware_target_title">Hardware optimization target</string>
     <string name="phase13_metrics_comparison_title">Absolute values and comparison by test</string>
+    <string name="github_draft_body_copied">The full report was copied. Paste it into the GitHub issue description.</string>
 </resources>
