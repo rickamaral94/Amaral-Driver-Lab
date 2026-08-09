@@ -26,9 +26,14 @@
 
 namespace {
 
-constexpr uint32_t kWidth = 960;
-constexpr uint32_t kHeight = 540;
-constexpr uint32_t kInstanceCount = 16 * 9;
+constexpr uint32_t kLegacyWidth = 960;
+constexpr uint32_t kLegacyHeight = 540;
+constexpr uint32_t kLegacyInstanceCount = 16 * 9;
+constexpr uint32_t kLegacyVertexCount = 6;
+constexpr uint32_t kStressWidth = 1280;
+constexpr uint32_t kStressHeight = 720;
+constexpr uint32_t kStressInstanceCount = 12 * 8 * 8;
+constexpr uint32_t kStressVertexCount = 36;
 constexpr VkFormat kOffscreenFormat = VK_FORMAT_R8G8B8A8_UNORM;
 constexpr std::array<uint32_t, 3> kCheckpointFrames{{30, 90, 150}};
 
@@ -43,6 +48,15 @@ static const uint32_t kPostVertexSpirv[] =
 ;
 static const uint32_t kPostFragmentSpirv[] =
 #include "visual_post_frag.inc"
+;
+static const uint32_t kStressVertexSpirv[] =
+#include "visual_stress_vert.inc"
+;
+static const uint32_t kStressFragmentSpirv[] =
+#include "visual_stress_frag.inc"
+;
+static const uint32_t kStressPostFragmentSpirv[] =
+#include "visual_stress_post_frag.inc"
 ;
 
 class UtfString {
@@ -174,6 +188,13 @@ public:
         if (sceneId == "visual_scene_geometry") sceneKind = 0;
         else if (sceneId == "visual_scene_materials") sceneKind = 1;
         else if (sceneId == "visual_scene_postprocess") sceneKind = 2;
+        else if (sceneId == "visual_scene_gpu_stress") {
+            sceneKind = 3;
+            renderWidth = kStressWidth;
+            renderHeight = kStressHeight;
+            instanceCount = kStressInstanceCount;
+            vertexCount = kStressVertexCount;
+        }
         else throw std::runtime_error("Unknown visual scene: " + sceneId);
 
         stage = "open_loader";
@@ -367,8 +388,10 @@ public:
              << ",\"vendor_id\":" << properties.vendorID
              << ",\"device_id\":" << properties.deviceID
              << ",\"driver_version_raw\":" << properties.driverVersion
-             << ",\"image_width\":" << kWidth
-             << ",\"image_height\":" << kHeight
+             << ",\"image_width\":" << renderWidth
+             << ",\"image_height\":" << renderHeight
+             << ",\"vertices_per_instance\":" << vertexCount
+             << ",\"instance_count\":" << instanceCount
              << ",\"surface_width\":" << surfaceExtent.width
              << ",\"surface_height\":" << surfaceExtent.height
              << ",\"swapchain_format\":" << static_cast<int>(surfaceFormat.format)
@@ -630,7 +653,7 @@ private:
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
         imageInfo.format = format;
-        imageInfo.extent = {kWidth, kHeight, 1};
+        imageInfo.extent = {renderWidth, renderHeight, 1};
         imageInfo.mipLevels = 1;
         imageInfo.arrayLayers = 1;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -678,7 +701,7 @@ private:
                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                     VK_IMAGE_ASPECT_COLOR_BIT);
 
-        const VkDeviceSize bytes = static_cast<VkDeviceSize>(kWidth) * kHeight * 4;
+        const VkDeviceSize bytes = static_cast<VkDeviceSize>(renderWidth) * renderHeight * 4;
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = bytes;
@@ -803,8 +826,8 @@ private:
         framebufferInfo.renderPass = sceneRenderPass;
         framebufferInfo.attachmentCount = static_cast<uint32_t>(sceneViews.size());
         framebufferInfo.pAttachments = sceneViews.data();
-        framebufferInfo.width = kWidth;
-        framebufferInfo.height = kHeight;
+        framebufferInfo.width = renderWidth;
+        framebufferInfo.height = renderHeight;
         framebufferInfo.layers = 1;
         check(vkCreateFramebuffer(device, &framebufferInfo, nullptr, &sceneFramebuffer),
               "vkCreateFramebuffer(scene)");
@@ -892,9 +915,10 @@ private:
         VkPipelineInputAssemblyStateCreateInfo assembly{};
         assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        VkViewport viewport{0.0F, 0.0F, static_cast<float>(kWidth), static_cast<float>(kHeight),
+        VkViewport viewport{0.0F, 0.0F, static_cast<float>(renderWidth),
+                            static_cast<float>(renderHeight),
                             0.0F, 1.0F};
-        VkRect2D scissor{{0, 0}, {kWidth, kHeight}};
+        VkRect2D scissor{{0, 0}, {renderWidth, renderHeight}};
         VkPipelineViewportStateCreateInfo viewportState{};
         viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportState.viewportCount = 1;
@@ -959,10 +983,17 @@ private:
         finalLayoutInfo.pSetLayouts = &descriptorSetLayout;
         check(vkCreatePipelineLayout(device, &finalLayoutInfo, nullptr, &finalPipelineLayout),
               "vkCreatePipelineLayout(final)");
-        VkShaderModule sceneVertex = shader(kSceneVertexSpirv, sizeof(kSceneVertexSpirv));
-        VkShaderModule sceneFragment = shader(kSceneFragmentSpirv, sizeof(kSceneFragmentSpirv));
+        const bool stressScene = sceneKind == 3;
+        VkShaderModule sceneVertex = stressScene
+                ? shader(kStressVertexSpirv, sizeof(kStressVertexSpirv))
+                : shader(kSceneVertexSpirv, sizeof(kSceneVertexSpirv));
+        VkShaderModule sceneFragment = stressScene
+                ? shader(kStressFragmentSpirv, sizeof(kStressFragmentSpirv))
+                : shader(kSceneFragmentSpirv, sizeof(kSceneFragmentSpirv));
         VkShaderModule postVertex = shader(kPostVertexSpirv, sizeof(kPostVertexSpirv));
-        VkShaderModule postFragment = shader(kPostFragmentSpirv, sizeof(kPostFragmentSpirv));
+        VkShaderModule postFragment = stressScene
+                ? shader(kStressPostFragmentSpirv, sizeof(kStressPostFragmentSpirv))
+                : shader(kPostFragmentSpirv, sizeof(kPostFragmentSpirv));
         try {
             scenePipeline = createPipeline(sceneRenderPass, scenePipelineLayout,
                                            sceneVertex, sceneFragment, true);
@@ -1043,8 +1074,8 @@ private:
         PushConstants push{};
         push.timeSeconds = static_cast<float>(frame) / 60.0F;
         push.sceneKind = static_cast<uint32_t>(sceneKind);
-        push.resolution[0] = static_cast<float>(kWidth);
-        push.resolution[1] = static_cast<float>(kHeight);
+        push.resolution[0] = static_cast<float>(renderWidth);
+        push.resolution[1] = static_cast<float>(renderHeight);
         VkClearValue sceneClears[2]{};
         sceneClears[0].color = {{0.018F, 0.026F, 0.045F, 1.0F}};
         sceneClears[1].depthStencil = {1.0F, 0};
@@ -1052,7 +1083,7 @@ private:
         sceneBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         sceneBegin.renderPass = sceneRenderPass;
         sceneBegin.framebuffer = sceneFramebuffer;
-        sceneBegin.renderArea.extent = {kWidth, kHeight};
+        sceneBegin.renderArea.extent = {renderWidth, renderHeight};
         sceneBegin.clearValueCount = 2;
         sceneBegin.pClearValues = sceneClears;
         vkCmdBeginRenderPass(commandBuffer, &sceneBegin, VK_SUBPASS_CONTENTS_INLINE);
@@ -1060,7 +1091,7 @@ private:
         vkCmdPushConstants(commandBuffer, scenePipelineLayout,
                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(push), &push);
-        vkCmdDraw(commandBuffer, 6, kInstanceCount, 0, 0);
+        vkCmdDraw(commandBuffer, vertexCount, instanceCount, 0, 0);
         vkCmdEndRenderPass(commandBuffer);
 
         VkClearValue finalClear{};
@@ -1069,7 +1100,7 @@ private:
         finalBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         finalBegin.renderPass = finalRenderPass;
         finalBegin.framebuffer = finalFramebuffer;
-        finalBegin.renderArea.extent = {kWidth, kHeight};
+        finalBegin.renderArea.extent = {renderWidth, renderHeight};
         finalBegin.clearValueCount = 1;
         finalBegin.pClearValues = &finalClear;
         vkCmdBeginRenderPass(commandBuffer, &finalBegin, VK_SUBPASS_CONTENTS_INLINE);
@@ -1086,7 +1117,7 @@ private:
             VkBufferImageCopy copy{};
             copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             copy.imageSubresource.layerCount = 1;
-            copy.imageExtent = {kWidth, kHeight, 1};
+            copy.imageExtent = {renderWidth, renderHeight, 1};
             vkCmdCopyImageToBuffer(commandBuffer, finalImage.image,
                                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                    readbackBuffer, 1, &copy);
@@ -1110,7 +1141,8 @@ private:
         VkImageBlit blit{};
         blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.srcSubresource.layerCount = 1;
-        blit.srcOffsets[1] = {static_cast<int32_t>(kWidth), static_cast<int32_t>(kHeight), 1};
+        blit.srcOffsets[1] = {static_cast<int32_t>(renderWidth),
+                              static_cast<int32_t>(renderHeight), 1};
         blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.dstSubresource.layerCount = 1;
         blit.dstOffsets[1] = {static_cast<int32_t>(surfaceExtent.width),
@@ -1169,7 +1201,7 @@ private:
 
     void writeCheckpoint(const std::string &path) {
         if (path.empty()) throw std::runtime_error("Checkpoint path is empty");
-        const VkDeviceSize bytes = static_cast<VkDeviceSize>(kWidth) * kHeight * 4;
+        const VkDeviceSize bytes = static_cast<VkDeviceSize>(renderWidth) * renderHeight * 4;
         if (!readbackCoherent) {
             VkMappedMemoryRange range{};
             range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
@@ -1249,6 +1281,10 @@ private:
 
     std::string sceneId;
     int sceneKind = -1;
+    uint32_t renderWidth = kLegacyWidth;
+    uint32_t renderHeight = kLegacyHeight;
+    uint32_t instanceCount = kLegacyInstanceCount;
+    uint32_t vertexCount = kLegacyVertexCount;
     std::string stage = "not_started";
     bool customDriver = false;
     void *library = nullptr;

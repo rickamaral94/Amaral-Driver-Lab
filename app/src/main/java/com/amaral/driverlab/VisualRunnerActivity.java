@@ -111,7 +111,8 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             armLabel += " · " + displayName;
         }
         overlay.setText("Amaral Driver Lab · cena Vulkan visível\n"
-                + VisualSceneContract.labelFor(workloadId) + " · " + armLabel
+                + LanguageManager.translateLegacy(
+                        this, VisualSceneContract.labelFor(workloadId)) + " · " + armLabel
                 + "\nCheckpoints: frames 30, 90 e 150");
         FrameLayout.LayoutParams overlayParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -257,7 +258,8 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             result.put("native", nativeResult);
             boolean success = nativeResult.optBoolean("success", false);
             if (success) {
-                result.put("evidence", finalizeCheckpoints(resultFile, rawPrefix, nativeResult));
+                result.put("evidence", finalizeCheckpoints(
+                        resultFile, rawPrefix, workloadId, nativeResult));
             }
             result.put("success", success);
             if (!success) {
@@ -322,11 +324,12 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         }
     }
 
-    private JSONObject finalizeCheckpoints(File resultFile, String prefix,
+    private JSONObject finalizeCheckpoints(File resultFile, String prefix, String workloadId,
                                            JSONObject nativeResult) throws Exception {
         int width = nativeResult.optInt("image_width", -1);
         int height = nativeResult.optInt("image_height", -1);
-        if (width != VisualSceneContract.WIDTH || height != VisualSceneContract.HEIGHT) {
+        if (width != VisualSceneContract.widthFor(workloadId)
+                || height != VisualSceneContract.heightFor(workloadId)) {
             throw new IllegalStateException("Dimensões inesperadas da cena visual");
         }
         int expectedBytes = Math.multiplyExact(Math.multiplyExact(width, height), 4);

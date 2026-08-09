@@ -86,6 +86,8 @@ As três cenas são gates de compatibilidade e representam 50% do índice v2. O 
 
 Não há redefinição de séries anteriores. Os três workloads visuais começam novas séries v1. Alterar shaders, resolução, instâncias, clock de animação, checkpoints, passes, formatos, tolerâncias padrão ou métrica primária exige uma nova `workload_version` ou uma nova versão do perfil Full.
 
+O workload posterior `visual_scene_gpu_stress/v1` é uma série independente. Ele não redefine estas três cenas nem faz parte dos perfis Full v2, v3 ou Recommended Validation v1/v4. Ele passa a integrar somente o Recommended Validation v2, perfil v5. Consulte [ADVANCED_VISUAL_BENCHMARK.md](ADVANCED_VISUAL_BENCHMARK.md).
+
 ## Limitações
 
 As cenas não são capturas de jogos e não reproduzem CPU de emuladores, I/O, áudio, compilação dinâmica de aplicações nem todos os formatos de textura. Exigir superfície Android e blit para swapchain também pode excluir implementações Vulkan incompletas; essa falha deve ser reportada como compatibilidade, não transformada em zero de performance.

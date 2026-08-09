@@ -48,8 +48,8 @@
     <string name="phase13_recommended_section">Prueba recomendada</string>
     <string name="phase13_status_recommended">Recomendado</string>
     <string name="phase13_full_title">Prueba Turnip recomendada</string>
-    <string name="phase13_full_description">La comparación más completa y guiada: corrección visual, rendimiento controlado, diagnóstico profundo y soak corto.</string>
-    <string name="phase13_full_composition">8 etapas enfocadas · corrección visual · shaders · frametime · trace mixto de sincronización</string>
+    <string name="phase13_full_description">Comparación guiada de drivers con cuatro escenas visuales, incluida la nueva prueba GPU Stress 3D a 720p.</string>
+    <string name="phase13_full_composition">9 etapas enfocadas · 4 escenas visuales · GPU Stress 3D · shaders · frametime · trace mixto</string>
     <string name="phase13_start_full">Iniciar prueba Full</string>
     <string name="phase13_comparisons">Comparaciones</string>
     <string name="phase13_system_vs_turnip">System × Turnip</string>
@@ -58,7 +58,7 @@
     <string name="phase13_turnip_vs_turnip_detail">Usa ejecuciones Full comparables para elegir entre dos candidatos.</string>
     <string name="phase13_individual_tests">Pruebas individuales</string>
     <string name="phase13_visual_scenes">Escenas visuales</string>
-    <string name="phase13_visual_scenes_detail">Geometría, materiales y posprocesado con evidencias capturadas.</string>
+    <string name="phase13_visual_scenes_detail">Geometría, materiales, posprocesado y GPU Stress 3D a 720p con evidencias capturadas.</string>
     <string name="phase13_performance">Performance</string>
     <string name="phase13_performance_detail">Shaders, render pass, compute, frametime, trazas y transferencia.</string>
     <string name="phase13_deep_diagnostics">Diagnóstico profundo</string>
@@ -501,6 +501,7 @@ Mejoras de formato: </item>
 Pipeline cold: %s%%
 Pipeline warm: %s%%</item>
         <item>No hay paquete de Fase 10 disponible.</item>
+        <item>Escena avanzada: GPU Stress 3D v1</item>
     </string-array>
     <string name="phase13_legacy_full_title">Full v3 extendido</string>
     <string name="phase13_legacy_full_detail">Investigación avanzada larga con pruebas sintéticas, sostenimiento térmico, diagnóstico profundo y soak de cinco ciclos.</string>

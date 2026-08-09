@@ -94,7 +94,8 @@ final class QualificationReport {
         int reportVersion = profileVersion >= 3 ? Phase11Contract.REPORT_VERSION
                 : profileVersion >= 2 ? Phase8Contract.CURRENT_QUALIFICATION_REPORT_VERSION
                 : Phase7Contract.REPORT_VERSION;
-        String limitation = profileVersion >= 4 ? Phase13ValidationContract.LIMITATION
+        String limitation = profileVersion >= 4
+                ? Phase13ValidationContract.limitationForVersion(profileVersion)
                 : profileVersion >= 3 ? Phase11Contract.LIMITATION
                 : profileVersion >= 2 ? Phase8Contract.LIMITATION : Phase7Contract.LIMITATION;
         return new JSONObject()
@@ -113,7 +114,7 @@ final class QualificationReport {
                         ? Phase11Contract.contractJson() : JSONObject.NULL)
                 .put("phase12_contract", Phase12Contract.contractJson())
                 .put("phase13_validation_contract", profileVersion >= 4
-                        ? Phase13ValidationContract.contractJson() : JSONObject.NULL)
+                        ? Phase13ValidationContract.contractJson(profileVersion) : JSONObject.NULL)
                 .put("profile_id", Phase7Contract.PROFILE_ID)
                 .put("profile_version", profileVersion)
                 .put("profile_sha256", manifest.getString("profile_sha256"))

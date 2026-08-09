@@ -370,7 +370,7 @@ final class RunCoordinator {
                             traceReplay, statisticalAnalysis, mode);
                 } else if (VisualSceneContract.isVisualScene(workloadId)) {
                     visualScene = VisualSceneAnalysis.analyze(
-                            phaseResults, suiteDirectory, rounds, mode,
+                            phaseResults, suiteDirectory, workloadId, rounds, mode,
                             pixelTolerance, maximumDivergentBlocks);
                     appendVisualFailures(failureCatalog, visualScene);
                     verdict = VisualSceneAnalysis.verdictFor(

@@ -74,6 +74,7 @@ final class WorkloadContract {
     static final String VISUAL_GEOMETRY_ID = VisualSceneContract.GEOMETRY_ID;
     static final String VISUAL_MATERIALS_ID = VisualSceneContract.MATERIALS_ID;
     static final String VISUAL_POSTPROCESS_ID = VisualSceneContract.POSTPROCESS_ID;
+    static final String VISUAL_GPU_STRESS_ID = VisualSceneContract.GPU_STRESS_ID;
     static final int VISUAL_SCENE_VERSION = VisualSceneContract.VERSION;
     static final String VISUAL_SCENE_METRIC = VisualSceneContract.PRIMARY_METRIC;
 

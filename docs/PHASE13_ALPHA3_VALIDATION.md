@@ -12,22 +12,23 @@ The first app screen now exposes the complete practical setup before any technic
 
 Selections persist locally. The technical workspace remains optional and the legacy Full Qualification v3 is available only under advanced tools.
 
-## Recommended profile v4
+## Recommended profile v5
 
-The daily recommendation profile contains eight decision-relevant stages:
+The daily recommendation profile contains nine decision-relevant stages:
 
 1. offscreen correctness before load;
 2. visible geometry and depth;
 3. visible materials and sampling;
 4. visible post-processing;
-5. shader compilation;
-6. stable-scene frametime;
-7. mixed graphics, compute and synchronization trace;
-8. offscreen correctness after load.
+5. 720p GPU Stress 3D with a mandatory visual gate;
+6. shader compilation;
+7. stable-scene frametime;
+8. mixed graphics, compute and synchronization trace;
+9. offscreen correctness after load.
 
 The following remain in Extended Full v3 rather than the daily test: isolated renderpass/tiling, arithmetic compute, transfer, isolated compute trace, 30-second thermal sustain, deep diagnostics and five-cycle soak.
 
-Profile v4 has its own immutable definition and SHA-256. Results are grouped by profile, hardware, comparison mode and reference-driver SHA, so they are not mixed with Full v1, v2 or v3 series.
+Profile v5 has its own immutable definition and SHA-256. The GPU Stress stage carries 20% of the performance weight, while the complete profile remains normalized to 100%. Results are grouped by profile, hardware, comparison mode and reference-driver SHA, so they are not mixed with Full v1–v3 or Recommended v4 series. Profile v4 remains verifiable and importable with its original definition and scoring thresholds.
 
 ## Completion flow
 

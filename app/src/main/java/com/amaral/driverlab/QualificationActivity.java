@@ -105,11 +105,12 @@ public final class QualificationActivity extends LocalizedActivity
         root.addView(comparisonSummary, margins(0, 0, 0, 14));
 
         TextView note = text("Perfil imutável: " + (legacyFull
-                ? Phase11Contract.PROFILE_LABEL : Phase13ValidationContract.PROFILE_LABEL)
+                ? Phase11Contract.PROFILE_LABEL
+                : Phase13ValidationContract.profileLabelForVersion(profileVersion))
                 + "\n" + QualificationProfile.stepsForVersion(profileVersion).size()
                 + " etapas orquestradas.\n\n"
                 + (legacyFull ? Phase11Contract.LIMITATION
-                : Phase13ValidationContract.LIMITATION), 13, false);
+                : Phase13ValidationContract.limitationForVersion(profileVersion)), 13, false);
         note.setTextColor(AmaralColors.TEXT_SECONDARY);
         if (!guidedLaunch) root.addView(note, margins(0, 0, 0, 16));
 

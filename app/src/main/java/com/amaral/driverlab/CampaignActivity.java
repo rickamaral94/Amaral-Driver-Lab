@@ -77,6 +77,8 @@ public final class CampaignActivity extends LocalizedActivity implements Campaig
         workloadOptions.add(new WorkloadOption(new CampaignWorkload(
                 WorkloadContract.VISUAL_POSTPROCESS_ID, ""), true));
         workloadOptions.add(new WorkloadOption(new CampaignWorkload(
+                WorkloadContract.VISUAL_GPU_STRESS_ID, ""), false));
+        workloadOptions.add(new WorkloadOption(new CampaignWorkload(
                 WorkloadContract.TRACE_REPLAY_ID, TraceReplayContract.MIXED_TRACE_ID), true));
         workloadOptions.add(new WorkloadOption(new CampaignWorkload(
                 WorkloadContract.TRACE_REPLAY_ID,

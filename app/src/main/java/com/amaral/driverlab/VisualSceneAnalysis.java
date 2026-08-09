@@ -18,8 +18,11 @@ import java.util.Set;
 final class VisualSceneAnalysis {
     private VisualSceneAnalysis() {}
 
-    static JSONObject analyze(JSONArray phases, File suiteDirectory, int expectedRounds, int mode,
-                              int pixelTolerance, int maximumDivergentBlocks) throws Exception {
+    static JSONObject analyze(JSONArray phases, File suiteDirectory, String workloadId,
+                              int expectedRounds, int mode, int pixelTolerance,
+                              int maximumDivergentBlocks) throws Exception {
+        int width = VisualSceneContract.widthFor(workloadId);
+        int height = VisualSceneContract.heightFor(workloadId);
         int failedPhases = 0;
         int completeComparisons = 0;
         int mismatchCount = 0;
@@ -40,7 +43,7 @@ final class VisualSceneAnalysis {
                 continue;
             }
             JSONObject evidence = phase.optJSONObject("evidence");
-            if (!validEvidence(evidence)) {
+            if (!validEvidence(evidence, width, height)) {
                 failedPhases++;
                 continue;
             }
@@ -63,18 +66,19 @@ final class VisualSceneAnalysis {
                 if (system == null || candidate == null) continue;
                 JSONObject systemEvidence = system.optJSONObject("evidence");
                 JSONObject candidateEvidence = candidate.optJSONObject("evidence");
-                if (!validEvidence(systemEvidence) || !validEvidence(candidateEvidence)) continue;
+                if (!validEvidence(systemEvidence, width, height)
+                        || !validEvidence(candidateEvidence, width, height)) continue;
                 for (int frame : VisualSceneContract.CHECKPOINT_FRAMES) {
                     JSONObject systemCheckpoint = checkpoint(systemEvidence, frame);
                     JSONObject candidateCheckpoint = checkpoint(candidateEvidence, frame);
                     if (systemCheckpoint == null || candidateCheckpoint == null) continue;
                     int[] reference = loadPixels(suiteDirectory,
-                            systemCheckpoint.getString("relative_path"));
+                            systemCheckpoint.getString("relative_path"), width, height);
                     int[] output = loadPixels(suiteDirectory,
-                            candidateCheckpoint.getString("relative_path"));
+                            candidateCheckpoint.getString("relative_path"), width, height);
                     RenderComparator.Result comparison = RenderComparator.compare(
                             reference, output,
-                            VisualSceneContract.WIDTH, VisualSceneContract.HEIGHT,
+                            width, height,
                             pixelTolerance, VisualSceneContract.BLOCK_SIZE,
                             VisualSceneContract.MINIMUM_BLOCK_MATCH_PERCENT);
                     JSONObject encoded = comparison.toJson(maximumDivergentBlocks)
@@ -88,7 +92,7 @@ final class VisualSceneAnalysis {
                     if (!comparison.passes(maximumDivergentBlocks)) {
                         mismatchCount++;
                         File heatmap = writeHeatmap(suiteDirectory, round, frame,
-                                reference, output, pixelTolerance);
+                                reference, output, width, height, pixelTolerance);
                         encoded.put("heatmap_relative_path", heatmap.getName());
                     } else {
                         encoded.put("heatmap_relative_path", JSONObject.NULL);
@@ -119,6 +123,9 @@ final class VisualSceneAnalysis {
         return new JSONObject()
                 .put("checkpoint_analysis_version",
                         Phase8Contract.CHECKPOINT_ANALYSIS_VERSION)
+                .put("scene_id", workloadId)
+                .put("image_width", width)
+                .put("image_height", height)
                 .put("comparison_available", available)
                 .put("expected_comparison_count", expectedComparisons)
                 .put("complete_comparison_count", completeComparisons)
@@ -157,11 +164,11 @@ final class VisualSceneAnalysis {
         return StatisticalComparison.verdictFor(statistics, 0);
     }
 
-    private static boolean validEvidence(JSONObject evidence) {
+    private static boolean validEvidence(JSONObject evidence, int width, int height) {
         return evidence != null
                 && "visible_vulkan_scene_checkpoints".equals(evidence.optString("kind"))
-                && evidence.optInt("width", -1) == VisualSceneContract.WIDTH
-                && evidence.optInt("height", -1) == VisualSceneContract.HEIGHT
+                && evidence.optInt("width", -1) == width
+                && evidence.optInt("height", -1) == height
                 && evidence.optJSONArray("checkpoints") != null;
     }
 
@@ -188,27 +195,27 @@ final class VisualSceneAnalysis {
         return null;
     }
 
-    private static int[] loadPixels(File suiteDirectory, String relativePath) throws Exception {
+    private static int[] loadPixels(File suiteDirectory, String relativePath,
+                                    int width, int height) throws Exception {
         File file = new File(suiteDirectory, relativePath);
         if (!ResultFiles.isInside(suiteDirectory, file) || !file.isFile()) {
             throw new IllegalArgumentException("Checkpoint visual fora da suíte");
         }
         Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath());
-        if (bitmap == null || bitmap.getWidth() != VisualSceneContract.WIDTH
-                || bitmap.getHeight() != VisualSceneContract.HEIGHT) {
+        if (bitmap == null || bitmap.getWidth() != width
+                || bitmap.getHeight() != height) {
             if (bitmap != null) bitmap.recycle();
             throw new IllegalArgumentException("Checkpoint visual inválido");
         }
-        int[] pixels = new int[VisualSceneContract.WIDTH * VisualSceneContract.HEIGHT];
-        bitmap.getPixels(pixels, 0, VisualSceneContract.WIDTH, 0, 0,
-                VisualSceneContract.WIDTH, VisualSceneContract.HEIGHT);
+        int[] pixels = new int[Math.multiplyExact(width, height)];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
         bitmap.recycle();
         return pixels;
     }
 
     private static File writeHeatmap(File suiteDirectory, int round, int frame,
                                      int[] reference, int[] candidate,
-                                     int tolerance) throws Exception {
+                                     int width, int height, int tolerance) throws Exception {
         int[] heatmap = new int[reference.length];
         for (int index = 0; index < reference.length; ++index) {
             int delta = maximumChannelDelta(reference[index], candidate[index]);
@@ -222,8 +229,7 @@ final class VisualSceneAnalysis {
         }
         File output = new File(suiteDirectory,
                 String.format(Locale.US, "visual-diff-r%02d-f%04d.png", round, frame));
-        Bitmap bitmap = Bitmap.createBitmap(heatmap, VisualSceneContract.WIDTH,
-                VisualSceneContract.HEIGHT, Bitmap.Config.ARGB_8888);
+        Bitmap bitmap = Bitmap.createBitmap(heatmap, width, height, Bitmap.Config.ARGB_8888);
         try (FileOutputStream stream = new FileOutputStream(output, false)) {
             if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) {
                 throw new IllegalStateException("Falha ao codificar heatmap visual");

@@ -87,16 +87,18 @@ public final class WorkloadContractTest {
     }
 
     @Test
-    public void phaseEightAddsVisibleScenesWithoutRedefiningEarlierSeries() {
+    public void visibleScenesRemainIndependentWithoutRedefiningEarlierSeries() {
         assertEquals(1, Phase8Contract.VISUAL_SCENE_CONTRACT_VERSION);
         assertEquals(1, Phase8Contract.CHECKPOINT_ANALYSIS_VERSION);
         assertEquals(2, Phase8Contract.CURRENT_FULL_PROFILE_VERSION);
-        assertEquals(3, VisualSceneContract.IDS.size());
+        assertEquals(4, VisualSceneContract.IDS.size());
         for (String workloadId : VisualSceneContract.IDS) {
             assertEquals(1, WorkloadContract.versionFor(workloadId));
             assertEquals("p99_gpu_frame_ms", WorkloadContract.primaryMetricFor(workloadId));
             assertTrue(WorkloadContract.lowerIsBetter(workloadId));
         }
+        assertEquals("visual_scene_gpu_stress_v1",
+                WorkloadContract.nativeNameFor(VisualSceneContract.GPU_STRESS_ID));
         assertEquals(1, WorkloadContract.RENDER_CORRECTNESS_VERSION);
         assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
     }

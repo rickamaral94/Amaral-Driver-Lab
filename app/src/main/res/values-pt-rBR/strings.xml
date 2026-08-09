@@ -48,8 +48,8 @@
     <string name="phase13_recommended_section">Teste recomendado</string>
     <string name="phase13_status_recommended">Recomendado</string>
     <string name="phase13_full_title">Teste Turnip recomendado</string>
-    <string name="phase13_full_description">A comparação mais completa e guiada: correção visual, performance controlada, diagnóstico profundo e soak curto.</string>
-    <string name="phase13_full_composition">8 etapas focadas · correção visual · shaders · frametime · trace misto de sincronização</string>
+    <string name="phase13_full_description">Comparação guiada de drivers com quatro cenas visuais, incluindo o novo GPU Stress 3D em 720p.</string>
+    <string name="phase13_full_composition">9 etapas focadas · 4 cenas visuais · GPU Stress 3D · shaders · frametime · trace misto</string>
     <string name="phase13_start_full">Iniciar Teste Full</string>
     <string name="phase13_comparisons">Comparações</string>
     <string name="phase13_system_vs_turnip">Sistema × Turnip</string>
@@ -58,7 +58,7 @@
     <string name="phase13_turnip_vs_turnip_detail">Use execuções Full comparáveis para escolher entre dois candidatos.</string>
     <string name="phase13_individual_tests">Testes individuais</string>
     <string name="phase13_visual_scenes">Cenas visuais</string>
-    <string name="phase13_visual_scenes_detail">Geometria, materiais e pós-processamento com evidências capturadas.</string>
+    <string name="phase13_visual_scenes_detail">Geometria, materiais, pós-processamento e GPU Stress 3D em 720p com evidências capturadas.</string>
     <string name="phase13_performance">Performance</string>
     <string name="phase13_performance_detail">Shaders, render pass, compute, frametime, traces e transferência.</string>
     <string name="phase13_deep_diagnostics">Diagnóstico profundo</string>
@@ -501,6 +501,7 @@ Ganhos de formato: </item>
 Pipeline cold: %s%%
 Pipeline warm: %s%%</item>
         <item>Nenhum pacote da Fase 10 disponível.</item>
+        <item>Cena avançada: GPU Stress 3D v1</item>
     </string-array>
     <string name="phase13_legacy_full_title">Full v3 estendido</string>
     <string name="phase13_legacy_full_detail">Investigação avançada longa com testes sintéticos, sustentação térmica, diagnóstico profundo e soak de cinco ciclos.</string>

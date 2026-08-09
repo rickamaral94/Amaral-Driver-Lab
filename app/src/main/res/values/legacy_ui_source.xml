@@ -300,5 +300,6 @@ Ganhos de formato: </item>
 Pipeline cold: %s%%
 Pipeline warm: %s%%</item>
         <item>Nenhum pacote da Fase 10 disponível.</item>
+        <item>Cena avançada: GPU Stress 3D v1</item>
     </string-array>
 </resources>

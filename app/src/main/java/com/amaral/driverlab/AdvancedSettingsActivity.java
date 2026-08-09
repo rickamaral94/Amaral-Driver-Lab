@@ -51,7 +51,8 @@ public final class AdvancedSettingsActivity extends LocalizedActivity implements
             WorkloadContract.COMPUTE_ARITHMETIC_ID,
             WorkloadContract.STABLE_SCENE_ID,
             WorkloadContract.THERMAL_SUSTAIN_ID,
-            WorkloadContract.TRANSFER_ID
+            WorkloadContract.TRANSFER_ID,
+            WorkloadContract.VISUAL_GPU_STRESS_ID
     };
 
     private final List<DriverPackage> drivers = new ArrayList<>();
@@ -153,7 +154,8 @@ public final class AdvancedSettingsActivity extends LocalizedActivity implements
                         "Compute aritmético v1",
                         "Frametime estável v1",
                         "Sustentação térmica v1",
-                        "Transferência fill/copy v1 · legado"
+                        "Transferência fill/copy v1 · legado",
+                        "Cena avançada: GPU Stress 3D v1"
                 }));
         int requestedWorkload = getIntent().hasExtra(EXTRA_WORKLOAD_POSITION)
                 ? getIntent().getIntExtra(EXTRA_WORKLOAD_POSITION, 0)
