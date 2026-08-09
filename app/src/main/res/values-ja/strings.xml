@@ -48,8 +48,8 @@
     <string name="phase13_recommended_section">推奨テスト</string>
     <string name="phase13_status_recommended">推奨</string>
     <string name="phase13_full_title">推奨 Turnip テスト</string>
-    <string name="phase13_full_description">The most complete and guided comparison: visual correctness, controlled performance, deep diagnostics and short soak.</string>
-    <string name="phase13_full_composition">8つの重点ステップ・描画正確性・シェーダー・フレームタイム・混合同期トレース</string>
+    <string name="phase13_full_description">新しい720p GPU Stress 3Dを含む4つのビジュアルシーンでドライバーを比較します。</string>
+    <string name="phase13_full_composition">9つの重点ステップ・4つのビジュアルシーン・GPU Stress 3D・シェーダー・フレームタイム・混合トレース</string>
     <string name="phase13_start_full">Fullテストを開始</string>
     <string name="phase13_comparisons">比較</string>
     <string name="phase13_system_vs_turnip">System × Turnip</string>
@@ -58,7 +58,7 @@
     <string name="phase13_turnip_vs_turnip_detail">Use comparable Full runs to choose between two candidates.</string>
     <string name="phase13_individual_tests">個別テスト</string>
     <string name="phase13_visual_scenes">ビジュアルシーン</string>
-    <string name="phase13_visual_scenes_detail">Geometry, materials and post-processing with captured evidence.</string>
+    <string name="phase13_visual_scenes_detail">ジオメトリ、マテリアル、ポスト処理、720p GPU Stress 3Dの証拠を記録します。</string>
     <string name="phase13_performance">パフォーマンス</string>
     <string name="phase13_performance_detail">Shaders, render pass, compute, frametime, traces and transfer.</string>
     <string name="phase13_deep_diagnostics">詳細診断</string>
@@ -501,6 +501,7 @@ SHA-256 </item>
 コールドパイプライン：%s%%
 ウォームパイプライン：%s%%</item>
         <item>フェーズ10パッケージはありません。</item>
+        <item>高度なシーン：GPU Stress 3D v1</item>
     </string-array>
     <string name="phase13_legacy_full_title">拡張 Full v3</string>
     <string name="phase13_legacy_full_detail">合成テスト、熱持続、詳細診断、5サイクルの soak を含む長時間の高度調査です。</string>

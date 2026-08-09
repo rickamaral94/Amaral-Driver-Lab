@@ -66,7 +66,7 @@ final class QualificationStore {
                 .put("phase10_contract", Phase10Contract.contractJson())
                 .put("phase11_contract", Phase11Contract.contractJson())
                 .put("phase13_validation_contract", profileVersion >= 4
-                        ? Phase13ValidationContract.contractJson() : JSONObject.NULL)
+                        ? Phase13ValidationContract.contractJson(profileVersion) : JSONObject.NULL)
                 .put("profile", profile)
                 .put("profile_sha256", profile.getString("profile_sha256"))
                 .put("driver", driver.toJson())
@@ -86,7 +86,8 @@ final class QualificationStore {
                 .put("report", JSONObject.NULL)
                 .put("diagnostic_bundle", JSONObject.NULL)
                 .put("limitations", profile.optInt("profile_version", 1) >= 4
-                        ? Phase13ValidationContract.LIMITATION
+                        ? Phase13ValidationContract.limitationForVersion(
+                                profile.optInt("profile_version", 1))
                         : profile.optInt("profile_version", 1) >= 3
                         ? Phase11Contract.LIMITATION
                         : profile.optInt("profile_version", 1) >= 2

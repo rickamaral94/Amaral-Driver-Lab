@@ -21,6 +21,7 @@ APK Android arm64, sem root, para comparar o driver Vulkan do sistema com pacote
 - campanhas automatizadas de até 64 suítes, com ordem termicamente balanceada, retomada e manifesto auditável;
 - SDK Android de telemetria opt-in para emuladores, importação local, resumo de frame pacing, comparação descritiva e vínculo imutável com suítes;
 - diagnóstico profundo A/B de formatos, corpus de shaders, pipeline cache, memória, sincronização e Soak Test.
+- benchmark visual avançado com 768 cubos 3D em 1280×720, iluminação procedural e pós-processamento de 19 amostras, integrado ao Recommended v5.
 
 A correção offscreen valida somente a cena fixa incluída no APK. Ela **não prova ganho em jogos** nem correção em todos os shaders, APIs ou emuladores.
 
@@ -201,6 +202,12 @@ As cenas são exibidas em tela cheia, renderizadas internamente em 960×540 e ca
 
 O Teste Full Recomendado atual passa a usar `turnip_full_qualification/v2` com 13 etapas. Resultados v1 permanecem válidos, mas não entram no ranking v2. Veja [docs/PHASE8_VISIBLE_VULKAN_SCENES.md](docs/PHASE8_VISIBLE_VULKAN_SCENES.md).
 
+### Benchmark visual avançado · GPU Stress 3D
+
+Em **Ferramentas avançadas → Workload**, selecione **Cena avançada: GPU Stress 3D v1** para executar `visual_scene_gpu_stress/v1`. Essa série independente renderiza 768 cubos procedurais em 1280×720, com depth, quatro luzes, materiais multi-oitava e um passe final de 19 amostras.
+
+O teste mantém a comparação A/B, os checkpoints determinísticos nos frames 30, 90 e 150 e o gate de correção antes do veredito de performance. Ele não redefine os três workloads visuais v1. A partir do **Turnip Recommended Validation v2** (`turnip_full_qualification/v5`), o GPU Stress integra o Teste Full Recomendado como a nona etapa, com peso de 20% e gate visual obrigatório; os perfis v1–v4 permanecem históricos e separados. Veja [docs/ADVANCED_VISUAL_BENCHMARK.md](docs/ADVANCED_VISUAL_BENCHMARK.md).
+
 
 ## Fase 9: SDK de telemetria para emuladores
 
@@ -249,4 +256,4 @@ O card principal permite selecionar **Sistema × Turnip** ou **Turnip × Turnip*
 
 ### Refinamento do teste recomendado (alpha3)
 
-A home agora começa pela importação e seleção do candidato, da referência e do modo Sistema × Turnip ou Turnip × Turnip. O teste recomendado usa o perfil **Turnip Recommended Validation v1** de oito etapas, focado em correção visual, compatibilidade, shaders, frametime e sincronização. O Full Qualification v3 longo permanece em Ferramentas avançadas.
+A home agora começa pela importação e seleção do candidato, da referência e do modo Sistema × Turnip ou Turnip × Turnip. O teste recomendado usa o perfil **Turnip Recommended Validation v2** de nove etapas, focado em correção visual, compatibilidade, shaders, frametime e sincronização. A quarta cena é o GPU Stress 3D em 1280×720, com peso de 20% e gate visual obrigatório. O Full Qualification v3 longo permanece em Ferramentas avançadas, e o Recommended v1/v4 continua preservado como série histórica.

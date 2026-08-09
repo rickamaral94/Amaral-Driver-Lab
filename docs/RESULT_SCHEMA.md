@@ -460,6 +460,32 @@ O perfil `turnip_full_qualification/v2` possui 13 etapas e inclui as três cenas
 
 Limitação: as cenas são cargas Vulkan próprias, não capturas de jogos. A superfície Android e o swapchain fazem parte do caminho medido, mas CPU de emulador, I/O, compositor do jogo e shaders reais não são reproduzidos. Veja [PHASE8_VISIBLE_VULKAN_SCENES.md](PHASE8_VISIBLE_VULKAN_SCENES.md).
 
+### Série visual avançada aditiva
+
+`visual_scene_gpu_stress/v1` reutiliza o envelope de resultado visual e a análise de checkpoints da Fase 8, mas inicia uma chave histórica independente:
+
+```json
+{
+  "workload_id": "visual_scene_gpu_stress",
+  "workload_version": 1,
+  "workload_config": {
+    "primary_metric": "p99_gpu_frame_ms",
+    "scene": {
+      "scene_version": 1,
+      "internal_width": 1280,
+      "internal_height": 720,
+      "instance_count": 768,
+      "vertices_per_instance": 36,
+      "postprocess_sample_count": 19,
+      "benchmark_tier": "advanced_gpu_stress",
+      "definition_sha256": "<64 hex>"
+    }
+  }
+}
+```
+
+A série permanece executável isoladamente e não altera hashes, pesos ou etapas dos perfis v1–v4. O novo perfil v5 a inclui com hash, pesos e definição próprios. Resultados só são comparáveis quando perfil, hardware, workload, versão, configuração e condições térmicas coincidem.
+
 ## Fase 9: `schema_version = 10`
 
 A versão 10 não redefine workloads, traces, cenas visuais ou análise estatística. Ela adiciona a novas suítes somente o contrato informativo da telemetria de emuladores:
@@ -623,3 +649,9 @@ A preferência de modo é local e não é exportada como chave de comparabilidad
 ### Comparações selecionadas na home (Fase 13 alpha2)
 
 O manifesto e o relatório Full adicionam `comparison_mode` (`system_vs_turnip` ou `turnip_vs_turnip`) e `reference_driver`. Esses campos são aditivos; `schema_version` permanece 13. O baseline continua ocupando a função técnica `system` nas métricas e no score para preservar a análise existente, enquanto `reference_driver` identifica quando esse baseline foi executado por outro pacote Turnip. Rankings exigem o mesmo modo de comparação e, no modo Turnip × Turnip, o mesmo SHA-256 de referência.
+
+### Recommended Validation v2 · profile v5
+
+O schema permanece 13. O perfil `turnip_full_qualification/v5` adiciona `visual_scene_gpu_stress/v1` como a nona etapa do Teste Full Recomendado. A etapa usa `step_id = visual_gpu_stress`, peso 20 e `compatibility_gate = true`. Os pesos do perfil somam 100; seis das sete categorias de performance precisam ser válidas para uma recomendação.
+
+O perfil v4 continua verificável com sua definição, hash, oito etapas e limiares originais. Resultados v4 e v5 nunca entram no mesmo ranking. Full v1–v3 também permanecem séries históricas independentes.
