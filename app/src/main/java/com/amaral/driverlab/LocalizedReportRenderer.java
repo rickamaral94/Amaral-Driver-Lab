@@ -9,6 +9,6 @@ final class LocalizedReportRenderer {
     private LocalizedReportRenderer() {}
 
     static String render(Context context, JSONObject report) {
-        return HtmlReportRenderer.render(LanguageManager.wrap(context), report);
+        return HtmlReportRenderer.render(ReportLanguage.wrap(context), report);
     }
 }
