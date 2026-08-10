@@ -729,7 +729,8 @@ public final class AdvancedSettingsActivity extends LocalizedActivity implements
         String repository = repositoryInput.getText().toString().trim();
         new Thread(() -> {
             try {
-                String issueUrl = GitHubIssuePublisher.publish(token, owner, repository, lastReport);
+                String issueUrl = GitHubIssuePublisher.publish(this, token,
+                        owner, repository, lastReport);
                 runOnUiThread(() -> {
                     status.setText("Issue criada: " + issueUrl);
                     setBusy(false);

@@ -235,7 +235,7 @@ Historical Full v1 and v2 profiles remain immutable and separate from v3.
 
 ## Fase 12 — internacionalização completa
 
-O botão de bandeira no canto superior direito permite escolher **Português do Brasil, Inglês, Espanhol, Francês, Alemão, Italiano, Japonês, Chinês simplificado** ou voltar ao idioma do sistema. A preferência é local, persiste após reiniciar o app e também é aplicada aos processos isolados de execução.
+O botão de bandeira no canto superior direito permite escolher **Português do Brasil, Inglês, Espanhol, Francês, Alemão, Italiano, Japonês, Chinês simplificado** ou voltar ao idioma do sistema. A preferência é local, persiste após reiniciar o app e também é aplicada aos processos isolados de execução. Os resultados humanos, logs Full, relatórios HTML e issues usam português quando o locale efetivo do app é `pt`; para qualquer outro locale, usam inglês. IDs, métricas e contratos JSON permanecem independentes de idioma.
 
 A interface herdada das Fases 1–11, dialogs, spinners, mensagens e o `summary.html` usam o idioma selecionado. O JSON permanece técnico e estável: nomes de campos, enums, códigos Vulkan, hashes, métricas e IDs de workload não são traduzidos. A mudança eleva o resultado para `schema_version = 13`, sem redefinir workloads nem os perfis Full v1, v2 ou v3.
 

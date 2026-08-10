@@ -347,7 +347,7 @@ public final class QualificationActivity extends LocalizedActivity
             text.append("\n\nRanking local: #").append(leaderboard.optInt("current_rank"))
                     .append(" de ").append(leaderboard.optInt("eligible_entry_count"));
         }
-        preview.setText(text.toString());
+        preview.setText(ReportLanguage.humanText(this, text.toString()));
     }
 
     private void chooseExport() {

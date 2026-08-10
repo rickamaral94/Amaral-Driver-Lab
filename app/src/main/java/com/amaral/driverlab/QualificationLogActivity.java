@@ -104,10 +104,12 @@ public final class QualificationLogActivity extends LocalizedActivity {
 
         root.addView(summaryCard(), AppTheme.matchWrap(this, 0, 14));
         root.addView(diagnosticCard(getString(R.string.phase13_hardware_target_title),
-                QualificationOptimizationReport.hardwareDisplay(manifest)),
+                ReportLanguage.humanText(this,
+                        QualificationOptimizationReport.hardwareDisplay(manifest))),
                 AppTheme.matchWrap(this, 0, 14));
         root.addView(diagnosticCard(getString(R.string.phase13_metrics_comparison_title),
-                QualificationOptimizationReport.metricsDisplay(manifest)),
+                ReportLanguage.humanText(this,
+                        QualificationOptimizationReport.metricsDisplay(manifest))),
                 AppTheme.matchWrap(this, 0, 14));
 
         issueButton = AppTheme.primaryButton(this, getString(R.string.phase13_send_issue),
@@ -149,9 +151,11 @@ public final class QualificationLogActivity extends LocalizedActivity {
                         LinearLayout.LayoutParams.WRAP_CONTENT));
         card.addView(AppTheme.heading(this, human == null
                         ? getString(R.string.phase13_result_in_progress)
-                        : human.optString("headline", getString(R.string.phase13_log_title)), 20),
+                        : ReportLanguage.humanText(this,
+                        human.optString("headline", getString(R.string.phase13_log_title))), 20),
                 AppTheme.matchWrap(this, 14, 6));
-        if (human != null) card.addView(AppTheme.body(this, human.optString("detail", "")));
+        if (human != null) card.addView(AppTheme.body(this,
+                ReportLanguage.humanText(this, human.optString("detail", ""))));
 
         JSONObject candidate = manifest.optJSONObject("driver");
         JSONObject reference = manifest.optJSONObject("reference_driver");
@@ -219,7 +223,7 @@ public final class QualificationLogActivity extends LocalizedActivity {
         setStatus(getString(R.string.phase13_issue_sending));
         new Thread(() -> {
             try {
-                String url = GitHubIssuePublisher.publishQualification(token,
+                String url = GitHubIssuePublisher.publishQualification(this, token,
                         ISSUE_OWNER, ISSUE_REPOSITORY, manifest);
                 runOnUiThread(() -> {
                     issueButton.setEnabled(true);
