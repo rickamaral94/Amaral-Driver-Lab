@@ -16,7 +16,7 @@ final class HtmlReportRenderer {
         JSONObject driver = report.optJSONObject("driver");
         StringBuilder html = new StringBuilder();
         html.append("<!doctype html><html lang=\"")
-                .append(escape(LanguageManager.effectiveLanguageTag(context)))
+                .append(escape(ReportLanguage.languageTag(context)))
                 .append("\"><head><meta charset=\"utf-8\">")
                 .append("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">")
                 .append("<title>").append(escape(context.getString(R.string.report_title)))
@@ -86,14 +86,14 @@ final class HtmlReportRenderer {
             html.append("</ul>");
         }
         html.append("</div><p class=\"muted\">")
-                .append(escape(localized(context,
+                .append(escape(ReportLanguage.limitation(context,
                         report.optString("limitations", Phase7Contract.LIMITATION))))
                 .append("</p></body></html>");
         return html.toString();
     }
 
     private static String localized(Context context, String value) {
-        return LanguageManager.translateLegacy(context, value).toString();
+        return ReportLanguage.humanText(context, value);
     }
 
     private static String driverLabel(Context context, JSONObject driver) {
@@ -114,7 +114,7 @@ final class HtmlReportRenderer {
     }
 
     private static Locale reportLocale(Context context) {
-        Locale locale = Locale.forLanguageTag(LanguageManager.effectiveLanguageTag(context));
+        Locale locale = Locale.forLanguageTag(ReportLanguage.languageTag(context));
         return locale.getLanguage().isEmpty() ? Locale.ENGLISH : locale;
     }
 
