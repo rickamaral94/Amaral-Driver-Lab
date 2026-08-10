@@ -16,7 +16,7 @@ public final class ReportLanguageTest {
         assertFalse(ReportLanguage.isPortuguese("en-US"));
         assertFalse(ReportLanguage.isPortuguese("es"));
         assertFalse(ReportLanguage.isPortuguese("de-DE"));
-        assertFalse(ReportLanguage.isPortuguese(null));
+        assertFalse(ReportLanguage.isPortuguese((String) null));
     }
 
     @Test
