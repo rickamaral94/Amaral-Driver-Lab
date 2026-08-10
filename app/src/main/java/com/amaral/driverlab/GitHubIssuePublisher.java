@@ -3,6 +3,7 @@ package com.amaral.driverlab;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -27,12 +28,12 @@ final class GitHubIssuePublisher {
 
     private GitHubIssuePublisher() {}
 
-    static String publish(String token, String owner, String repository,
+    static String publish(Context context, String token, String owner, String repository,
                           JSONObject report) throws Exception {
         validateRepository(owner, repository);
         JSONObject payload = new JSONObject();
         payload.put("title", issueTitle(report));
-        payload.put("body", issueBody(report, true));
+        payload.put("body", issueBody(context, report, true));
 
         return postIssue(token, owner, repository, payload);
     }
@@ -41,16 +42,16 @@ final class GitHubIssuePublisher {
                           JSONObject report) throws Exception {
         validateRepository(owner, repository);
         openIssueDraft(activity, owner, repository,
-                issueTitle(report), issueBody(report, false));
+                issueTitle(report), issueBody(activity, report, false));
     }
 
 
-    static String publishQualification(String token, String owner, String repository,
+    static String publishQualification(Context context, String token, String owner, String repository,
                                        JSONObject manifest) throws Exception {
         validateRepository(owner, repository);
         JSONObject payload = new JSONObject()
-                .put("title", qualificationIssueTitle(manifest))
-                .put("body", qualificationIssueBody(manifest, true));
+                .put("title", qualificationIssueTitle(context, manifest))
+                .put("body", qualificationIssueBody(context, manifest, true));
         return postIssue(token, owner, repository, payload);
     }
 
@@ -58,7 +59,8 @@ final class GitHubIssuePublisher {
                                        JSONObject manifest) throws Exception {
         validateRepository(owner, repository);
         openIssueDraft(activity, owner, repository,
-                qualificationIssueTitle(manifest), qualificationIssueBody(manifest, false));
+                qualificationIssueTitle(activity, manifest),
+                qualificationIssueBody(activity, manifest, false));
     }
 
     static void openPreparedDraft(Activity activity, String owner, String repository,
@@ -149,7 +151,22 @@ final class GitHubIssuePublisher {
         return title.length() > 240 ? title.substring(0, 240) : title;
     }
 
+    static String qualificationIssueTitle(Context context, JSONObject manifest) {
+        return ReportLanguage.humanText(context, qualificationIssueTitle(manifest));
+    }
+
     static String qualificationIssueBody(JSONObject manifest, boolean includeJson) {
+        return qualificationIssueBody("pt-BR", manifest, includeJson);
+    }
+
+    static String qualificationIssueBody(Context context, JSONObject manifest,
+                                         boolean includeJson) {
+        return qualificationIssueBody(LanguageManager.effectiveLanguageTag(context),
+                manifest, includeJson);
+    }
+
+    static String qualificationIssueBody(String languageTag, JSONObject manifest,
+                                         boolean includeJson) {
         JSONObject report = manifest.optJSONObject("report");
         JSONObject score = report == null ? null : report.optJSONObject("score");
         JSONObject human = report == null ? null : report.optJSONObject("human_summary");
@@ -217,6 +234,7 @@ final class GitHubIssuePublisher {
             if (!any) body.append("- Nenhuma.\n");
             body.append("\n");
         }
+        body = new StringBuilder(ReportLanguage.humanText(languageTag, body.toString()));
         if (includeJson) {
             String encoded;
             try { encoded = manifest.toString(2); }
@@ -224,12 +242,13 @@ final class GitHubIssuePublisher {
             boolean truncated = encoded.length() > 45_000;
             if (truncated) encoded = encoded.substring(0, 45_000);
             body.append("<details><summary>qualification.json")
-                    .append(truncated ? " (parcial)" : "")
+                    .append(ReportLanguage.humanText(languageTag,
+                            truncated ? " (parcial)" : ""))
                     .append("</summary>\n\n```json\n")
                     .append(encoded).append("\n```\n</details>\n");
         }
-        body.append("\n_Gerado por Amaral Driver Lab ")
-                .append(BuildConfig.VERSION_NAME).append("._");
+        body.append(ReportLanguage.humanText(languageTag,
+                "\n_Gerado por Amaral Driver Lab " + BuildConfig.VERSION_NAME + "._"));
         return body.toString();
     }
 
@@ -294,6 +313,14 @@ final class GitHubIssuePublisher {
     }
 
     static String issueBody(JSONObject report, boolean includeJson) {
+        return issueBody("pt-BR", report, includeJson);
+    }
+
+    static String issueBody(Context context, JSONObject report, boolean includeJson) {
+        return issueBody(LanguageManager.effectiveLanguageTag(context), report, includeJson);
+    }
+
+    static String issueBody(String languageTag, JSONObject report, boolean includeJson) {
         StringBuilder body = new StringBuilder();
         JSONObject host = report.optJSONObject("host_device");
         JSONObject candidate = report.optJSONObject("candidate");
@@ -355,8 +382,9 @@ final class GitHubIssuePublisher {
                 body.append("- ").append(warnings.optString(index)).append("\n");
             }
         }
-        body.append("\n> ").append(report.optString("metric_limitations",
-                WorkloadContract.limitationFor(workloadId))).append("\n");
+        body.append("\n> ").append(ReportLanguage.limitation(languageTag,
+                report.optString("metric_limitations",
+                        WorkloadContract.limitationFor(workloadId)))).append("\n");
         if (capabilityDiff != null) {
             body.append("\n### Diff de capacidades\n\n");
             body.append("- ").append(capabilityDiff.optString("summary", "Sem resumo.")).append("\n");
@@ -365,6 +393,7 @@ final class GitHubIssuePublisher {
             appendArray(body, "Features ganhas", capabilityDiff.optJSONArray("features_gained"));
             appendArray(body, "Features perdidas", capabilityDiff.optJSONArray("features_lost"));
         }
+        body = new StringBuilder(ReportLanguage.humanText(languageTag, body.toString()));
         if (includeJson) {
             String encoded;
             try {
@@ -374,13 +403,16 @@ final class GitHubIssuePublisher {
             }
             boolean truncated = encoded.length() > 45_000;
             if (truncated) encoded = encoded.substring(0, 45_000);
-            body.append("\n<details><summary>Resultado JSON")
-                    .append(truncated ? " (parcial)" : "")
+            body.append(ReportLanguage.humanText(languageTag,
+                            "\n<details><summary>Resultado JSON"))
+                    .append(ReportLanguage.humanText(languageTag,
+                            truncated ? " (parcial)" : ""))
                     .append("</summary>\n\n```json\n")
                     .append(encoded)
                     .append("\n```\n</details>\n");
         }
-        body.append("\n_Gerado por Amaral Driver Lab ").append(BuildConfig.VERSION_NAME).append("._");
+        body.append(ReportLanguage.humanText(languageTag,
+                "\n_Gerado por Amaral Driver Lab " + BuildConfig.VERSION_NAME + "._"));
         return body.toString();
     }
 
