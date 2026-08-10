@@ -62,7 +62,7 @@ jobs:
 
         The Advanced Full crash reported for RedMagic 11 Pro remains under investigation and still requires a reproducible diagnostic bundle or stack trace.
 
-  steps:
+    steps:
     - name: Promote and update release
       run: |
         gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
