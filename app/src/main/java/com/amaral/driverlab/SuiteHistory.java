@@ -100,7 +100,9 @@ final class SuiteHistory {
         Map<String, String> labels = new HashMap<>();
         Map<String, Integer> blocked = new HashMap<>();
         Map<String, Integer> excludedByIdentity = new HashMap<>();
+        Map<String, Integer> excludedByWorkloadVersion = new HashMap<>();
         int excludedIdentityTotal = 0;
+        int excludedWorkloadVersionTotal = 0;
         for (SuiteRecord item : records) {
             if (!reference.comparisonKey().equals(item.comparisonKey())) continue;
             labels.put(item.candidateSha256, item.candidateLabel);
@@ -108,6 +110,13 @@ final class SuiteHistory {
                 excludedIdentityTotal++;
                 String reason = item.driverIdentityConfidence;
                 excludedByIdentity.put(reason, excludedByIdentity.getOrDefault(reason, 0) + 1);
+                continue;
+            }
+            if (!item.workloadVersionEligibleForAggregation) {
+                excludedWorkloadVersionTotal++;
+                String reason = item.workloadVersionAuditStatus;
+                excludedByWorkloadVersion.put(reason,
+                        excludedByWorkloadVersion.getOrDefault(reason, 0) + 1);
                 continue;
             }
             if (item.blockingValidity || !Double.isFinite(item.rankingScorePercent)) {
@@ -142,11 +151,21 @@ final class SuiteHistory {
         output.put("available", !entries.isEmpty());
         output.put("excluded_by_identity_count", excludedIdentityTotal);
         output.put("excluded_by_identity", new JSONObject(excludedByIdentity));
+        output.put("excluded_by_workload_version_count", excludedWorkloadVersionTotal);
+        output.put("excluded_by_workload_version",
+                new JSONObject(excludedByWorkloadVersion));
+        output.put("workload_version_eligibility_criterion",
+                "Every native runtime workload_version must match the profile and suite declaration.");
         if (!reference.identityEligibleForAggregation) {
             output.put("available", false);
             output.put("reason", "reference_identity_not_runtime_confirmed");
+        } else if (!reference.workloadVersionEligibleForAggregation) {
+            output.put("available", false);
+            output.put("reason", "reference_workload_version_not_confirmed");
         } else if (entries.isEmpty() && excludedIdentityTotal > 0) {
             output.put("reason", "all_matching_results_excluded_by_identity");
+        } else if (entries.isEmpty() && excludedWorkloadVersionTotal > 0) {
+            output.put("reason", "all_matching_results_excluded_by_workload_version");
         }
         output.put("entries", encoded);
         return output;

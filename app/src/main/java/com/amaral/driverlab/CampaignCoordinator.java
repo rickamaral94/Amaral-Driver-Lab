@@ -114,11 +114,12 @@ final class CampaignCoordinator {
                     .put("thermal_position", job.optInt("thermal_position", 0))
                     .put("plan_sha256", campaign.getString("plan_sha256"));
 
-            currentRun = new RunCoordinator(activity, driver, RunCoordinator.MODE_AB,
+            currentRun = new RunCoordinator(activity, driver, null, RunCoordinator.MODE_AB,
                     protocol.getInt("rounds"), protocol.getInt("warmup_seconds"),
-                    protocol.getInt("measure_seconds"), workload.workloadId, workload.traceId,
+                    protocol.getInt("measure_seconds"), workload.workloadId,
+                    workload.workloadVersion, workload.traceId,
                     protocol.getInt("pixel_tolerance"),
-                    protocol.getInt("maximum_divergent_blocks"), context,
+                    protocol.getInt("maximum_divergent_blocks"), context, null,
                     new RunCoordinator.Listener() {
                         @Override
                         public void onStatus(String message) {

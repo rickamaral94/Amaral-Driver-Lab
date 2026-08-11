@@ -45,6 +45,8 @@ public final class RunnerActivity extends LocalizedActivity {
     static final String EXTRA_PIXEL_TOLERANCE = "pixel_tolerance";
     static final String EXTRA_MAX_DIVERGENT_BLOCKS = "max_divergent_blocks";
     static final String EXTRA_TRACE_ID = "trace_id";
+    static final String EXTRA_REPETITIONS_PER_SAMPLE = "repetitions_per_sample";
+    static final String EXTRA_EFFECT_INJECTION_PERCENT = "effect_injection_percent";
 
     private static native String runNativeBenchmark(
             String driverDirectory,
@@ -63,6 +65,9 @@ public final class RunnerActivity extends LocalizedActivity {
 
     private static native String runNativePhase2Workload(
             String workloadId,
+            int workloadVersion,
+            int repetitionsPerSample,
+            int effectInjectionPercent,
             String driverDirectory,
             String driverName,
             String nativeLibraryDirectory,
@@ -72,6 +77,9 @@ public final class RunnerActivity extends LocalizedActivity {
 
     private static native String runNativeTraceReplay(
             String traceId,
+            int workloadVersion,
+            int repetitionsPerSample,
+            int effectInjectionPercent,
             String driverDirectory,
             String driverName,
             String nativeLibraryDirectory,
@@ -143,8 +151,17 @@ public final class RunnerActivity extends LocalizedActivity {
             } else {
                 traceId = TraceReplayContract.MIXED_TRACE_ID;
             }
-            if (workloadVersion != WorkloadContract.versionFor(workloadId)) {
+            if (!WorkloadContract.isSupportedVersion(workloadId, workloadVersion)) {
                 throw new IllegalArgumentException("Versão de workload incompatível");
+            }
+            int repetitionsPerSample = Math.max(1, Math.min(
+                    BenchmarkCalibrationContract.MAX_REPETITIONS,
+                    getIntent().getIntExtra(EXTRA_REPETITIONS_PER_SAMPLE, 1)));
+            int effectInjectionPercent = Math.max(0, Math.min(10,
+                    getIntent().getIntExtra(EXTRA_EFFECT_INJECTION_PERCENT, 0)));
+            if (workloadVersion < 2 && (repetitionsPerSample != 1
+                    || effectInjectionPercent != 0)) {
+                throw new IllegalArgumentException("Workload v1 não aceita repetição calibrada");
             }
             int round = getIntent().getIntExtra(EXTRA_ROUND, 1);
             int warmup = getIntent().getIntExtra(EXTRA_WARMUP_SECONDS, 3);
@@ -181,12 +198,19 @@ public final class RunnerActivity extends LocalizedActivity {
             } else if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
                 workloadConfig.put("warmup_seconds", warmup);
                 workloadConfig.put("measure_seconds", measure);
-                workloadConfig.put("trace", TraceReplayContract.definition(traceId));
+                workloadConfig.put("trace", TraceReplayContract.definition(
+                        traceId, workloadVersion));
                 result.put("trace_id", traceId);
-                result.put("trace_version", TraceReplayContract.TRACE_VERSION);
+                result.put("trace_version", workloadVersion);
             } else {
                 workloadConfig.put("warmup_seconds", warmup);
                 workloadConfig.put("measure_seconds", measure);
+            }
+            if (BenchmarkCalibrationContract.requiresCalibration(workloadId, workloadVersion)) {
+                workloadConfig.put("repetition_unit",
+                        BenchmarkCalibrationContract.repetitionUnit(workloadId));
+                workloadConfig.put("repetitions_per_sample", repetitionsPerSample);
+                workloadConfig.put("effect_injection_percent", effectInjectionPercent);
             }
             result.put("workload_config", workloadConfig);
             String driverMode = "system".equals(driverModeOverride)
@@ -235,6 +259,9 @@ public final class RunnerActivity extends LocalizedActivity {
                 rawEvidence = siblingEvidence(resultFile, ".trace.raw");
                 nativeJson = runNativeTraceReplay(
                         traceId,
+                        workloadVersion,
+                        repetitionsPerSample,
+                        effectInjectionPercent,
                         driverDir == null ? "" : driverDir,
                         driverName == null ? "" : driverName,
                         getApplicationInfo().nativeLibraryDir,
@@ -245,6 +272,9 @@ public final class RunnerActivity extends LocalizedActivity {
             } else if (WorkloadContract.isPhase2(workloadId)) {
                 nativeJson = runNativePhase2Workload(
                         workloadId,
+                        workloadVersion,
+                        repetitionsPerSample,
+                        effectInjectionPercent,
                         driverDir == null ? "" : driverDir,
                         driverName == null ? "" : driverName,
                         getApplicationInfo().nativeLibraryDir,

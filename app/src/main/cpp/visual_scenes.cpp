@@ -201,11 +201,29 @@ public:
     void initialize(JNIEnv *environment,
                     jobject surfaceObject,
                     const std::string &sceneIdValue,
+                    uint32_t workloadVersionValue,
+                    uint32_t repetitionsValue,
+                    uint32_t effectPercentValue,
                     const std::string &driverDirectory,
                     const std::string &driverName,
                     const std::string &nativeLibraryDirectory,
                     const std::string &temporaryDirectory) {
         sceneId = sceneIdValue;
+        if (workloadVersionValue != 1U && workloadVersionValue != 2U) {
+            throw std::runtime_error("Unsupported visual workload version");
+        }
+        if (workloadVersionValue == 1U
+                && (repetitionsValue != 1U || effectPercentValue != 0U)) {
+            throw std::runtime_error("Visual workload v1 does not accept calibrated repetition");
+        }
+        workloadVersion = workloadVersionValue;
+        requestedRepetitions = std::clamp(repetitionsValue, 1U, 512U);
+        effectPercent = std::min(effectPercentValue, 10U);
+        const uint32_t injected = static_cast<uint32_t>(std::ceil(
+                static_cast<double>(requestedRepetitions)
+                * static_cast<double>(effectPercent) / 100.0));
+        effectiveRepetitions = workloadVersion >= 2U
+                ? requestedRepetitions + injected : 1U;
         if (sceneId == "visual_scene_geometry") sceneKind = 0;
         else if (sceneId == "visual_scene_materials") sceneKind = 1;
         else if (sceneId == "visual_scene_postprocess") sceneKind = 2;
@@ -413,9 +431,22 @@ public:
         std::ostringstream json;
         json << std::fixed << std::setprecision(6)
              << "{\"success\":true"
-             << ",\"workload\":\"" << jsonEscape(sceneId) << "_v1\""
+             << ",\"workload\":\"" << jsonEscape(sceneId) << "_v"
+             << workloadVersion << "\""
+             << ",\"workload_id\":\"" << jsonEscape(sceneId) << "\""
+             << ",\"workload_version\":" << workloadVersion
              << ",\"visual_scene_id\":\"" << jsonEscape(sceneId) << "\""
-             << ",\"visual_scene_version\":1"
+             << ",\"visual_scene_version\":" << workloadVersion
+             << ",\"repetition_unit\":\"renderpass\""
+             << ",\"repetitions_per_sample\":" << requestedRepetitions
+             << ",\"effective_repetitions_per_sample\":" << effectiveRepetitions
+             << ",\"effect_injection_percent\":" << effectPercent
+             << ",\"effect_injection_domain\":\"gpu_workload\""
+             << ",\"realized_workload_effect_percent\":"
+             << (static_cast<double>(effectiveRepetitions)
+                     / static_cast<double>(requestedRepetitions) - 1.0) * 100.0
+             << ",\"renderpasses_per_repetition\":2"
+             << ",\"presentation_per_sample\":1"
              << ",\"custom_driver\":" << (customDriver ? "true" : "false")
              << ",\"gpu_name\":\"" << jsonEscape(properties.deviceName) << "\""
              << ",\"vendor_id\":" << properties.vendorID
@@ -436,6 +467,7 @@ public:
              << ",\"timed_frame_count\":" << measuredFrameTimes.size()
              << ",\"gpu_timestamps_used\":" << (timestampsSupported ? "true" : "false")
              << ",\"p50_gpu_frame_ms\":" << p50
+             << ",\"median_batch_us\":" << p50 * 1000.0
              << ",\"p95_gpu_frame_ms\":" << p95
              << ",\"p99_gpu_frame_ms\":" << p99
              << ",\"mean_gpu_frame_ms\":" << mean
@@ -455,6 +487,8 @@ public:
         json << "{\"success\":false"
              << ",\"failure_type\":\"visual_scene_failure\""
              << ",\"failure_stage\":\"" << jsonEscape(stage) << "\""
+             << ",\"workload_id\":\"" << jsonEscape(sceneId) << "\""
+             << ",\"workload_version\":" << workloadVersion
              << ",\"visual_scene_id\":\"" << jsonEscape(sceneId) << "\""
              << ",\"error\":\"" << jsonEscape(error.what()) << "\"";
         const auto *vulkan = dynamic_cast<const VulkanFailure *>(&error);
@@ -1161,14 +1195,6 @@ private:
         sceneBegin.renderArea.extent = {renderWidth, renderHeight};
         sceneBegin.clearValueCount = 2;
         sceneBegin.pClearValues = sceneClears;
-        vkCmdBeginRenderPass(commandBuffer, &sceneBegin, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, scenePipeline);
-        vkCmdPushConstants(commandBuffer, scenePipelineLayout,
-                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, sizeof(push), &push);
-        vkCmdDraw(commandBuffer, vertexCount, instanceCount, 0, 0);
-        vkCmdEndRenderPass(commandBuffer);
-
         VkClearValue finalClear{};
         finalClear.color = {{0.0F, 0.0F, 0.0F, 1.0F}};
         VkRenderPassBeginInfo finalBegin{};
@@ -1178,15 +1204,27 @@ private:
         finalBegin.renderArea.extent = {renderWidth, renderHeight};
         finalBegin.clearValueCount = 1;
         finalBegin.pClearValues = &finalClear;
-        vkCmdBeginRenderPass(commandBuffer, &finalBegin, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, finalPipeline);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                finalPipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-        vkCmdPushConstants(commandBuffer, finalPipelineLayout,
-                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, sizeof(push), &push);
-        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-        vkCmdEndRenderPass(commandBuffer);
+        for (uint32_t repetition = 0; repetition < effectiveRepetitions; ++repetition) {
+            // The calibrated repetition unit is a complete render pass. Load/store, depth
+            // clear and driver binning decisions are paid on every repetition.
+            vkCmdBeginRenderPass(commandBuffer, &sceneBegin, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, scenePipeline);
+            vkCmdPushConstants(commandBuffer, scenePipelineLayout,
+                               VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(push), &push);
+            vkCmdDraw(commandBuffer, vertexCount, instanceCount, 0, 0);
+            vkCmdEndRenderPass(commandBuffer);
+
+            vkCmdBeginRenderPass(commandBuffer, &finalBegin, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, finalPipeline);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    finalPipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+            vkCmdPushConstants(commandBuffer, finalPipelineLayout,
+                               VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(push), &push);
+            vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+            vkCmdEndRenderPass(commandBuffer);
+        }
 
         if (checkpoint) {
             VkBufferImageCopy copy{};
@@ -1356,6 +1394,10 @@ private:
 
     std::string sceneId;
     int sceneKind = -1;
+    uint32_t workloadVersion = 1U;
+    uint32_t requestedRepetitions = 1U;
+    uint32_t effectiveRepetitions = 1U;
+    uint32_t effectPercent = 0U;
     uint32_t renderWidth = kLegacyWidth;
     uint32_t renderHeight = kLegacyHeight;
     uint32_t instanceCount = kLegacyInstanceCount;
@@ -1508,6 +1550,9 @@ Java_com_amaral_driverlab_VisualRunnerActivity_runNativeVisualScene(
         jclass,
         jobject surface,
         jstring sceneId,
+        jint workloadVersion,
+        jint repetitionsPerSample,
+        jint effectInjectionPercent,
         jstring driverDirectory,
         jstring driverName,
         jstring nativeLibraryDirectory,
@@ -1519,6 +1564,9 @@ Java_com_amaral_driverlab_VisualRunnerActivity_runNativeVisualScene(
     try {
         renderer.initialize(environment, surface,
                             UtfString(environment, sceneId).string(),
+                            static_cast<uint32_t>(workloadVersion),
+                            static_cast<uint32_t>(repetitionsPerSample),
+                            static_cast<uint32_t>(effectInjectionPercent),
                             UtfString(environment, driverDirectory).string(),
                             UtfString(environment, driverName).string(),
                             UtfString(environment, nativeLibraryDirectory).string(),

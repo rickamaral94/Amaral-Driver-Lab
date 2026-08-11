@@ -2,13 +2,15 @@
 
 Cada suíte grava `files/runs/suite-<timestamp>/suite.json`. Cada processo isolado grava um `phase-*.json`; workloads de correção também preservam um `phase-*.png` lossless como evidência visual.
 
-## Versão atual: `schema_version = 14`
+## Versão atual: `schema_version = 15`
 
-A versão 14 adiciona a auditoria de identidade runtime. Workloads e métricas permanecem nas mesmas versões, mas rankings, scores e datasets públicos passam a excluir resultados sem identidade confirmada. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
+A versão 15 adiciona calibração de faixa dinâmica e auditoria da versão realmente observada no
+runtime. A versão 14 já havia tornado a identidade do driver um gate. Leitores novos devem
+selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
 
 | Campo | Significado |
 |---|---|
-| `schema_version` | Versão do formato do resultado; atualmente `14` |
+| `schema_version` | Versão do formato do resultado; atualmente `15` |
 | `suite_id` | Identificador local imutável da suíte |
 | `app_version` | Versão do APK que gerou o resultado |
 | `mode` | `system_only`, `candidate_only` ou `ab_system_vs_candidate` |
@@ -29,6 +31,9 @@ A versão 14 adiciona a auditoria de identidade runtime. Workloads e métricas p
 | `driver_identity_audit` | Reconciliação do pacote solicitado com propriedades Vulkan observadas por processo |
 | `identity_observation_coverage` | Quantidade de processos esperados, observados e ausentes |
 | `loader_isolation_verified` | `true`, `false` ou `not_determinable` |
+| `dynamic_range_calibration` | Multiplicador, linearidade, unidade de repetição e gates de deriva |
+| `sample_size_plan` | Piloto independente, n planejado e `completed_paired_rounds` |
+| `workload_version_audit` | Igualdade entre versão declarada e cada observação nativa |
 
 ## Contrato do workload legado de transferência
 
@@ -807,3 +812,95 @@ critério, evitando que o ranking encolha silenciosamente.
 O Full Recomendado permanece `profile_version = 5`; `workload_version`, comandos, shaders,
 resoluções, amostras e fórmulas permanecem inalterados. Esta fase não recalibra workloads nem
 corrige a estatística das fases seguintes.
+
+## Fase 15 — faixa dinâmica e identidade de workload
+
+O `suite.json` passa para schema 15. Perfis Full v1–v5 continuam a declarar e executar workloads
+v1. O Recommended v6 fixa `workload_version` por passo e usa v2 nas etapas de performance; correção
+continua v1. O runner recusa combinação incompatível em vez de selecionar a versão mais recente.
+
+```json
+{
+  "schema_version": 15,
+  "workload_id": "renderpass_tiling_gmem",
+  "workload_version": 2,
+  "dynamic_range_calibration": {
+    "repetition_unit": "renderpass",
+    "repetitions_per_sample": 22,
+    "linearity": {
+      "observed_time_ratio": 2.01,
+      "status": "linear",
+      "normalized_duration_allowed": true
+    },
+    "sample_duration_gate": {
+      "median_batch_us": 12040.0,
+      "classification": "within_target",
+      "ranking_eligible": true
+    },
+    "post_run_validation": {"calibration_drift": false},
+    "thermal_drift": {"thermal_drift_detected": false},
+    "ranking_eligible": true
+  },
+  "sample_size_plan": {
+    "pilot_samples_reused": false,
+    "required_paired_rounds": 8,
+    "planned_paired_rounds": 8,
+    "completed_paired_rounds": 8,
+    "optional_stopping_prohibited": true
+  },
+  "workload_version_audit": {
+    "status": "confirmed",
+    "eligible_for_aggregation": true
+  }
+}
+```
+
+### Tabela-verdade de duração
+
+| Mediana em `m` | Razão `2m/m` | Estado | Tempo normalizado | Ranking |
+|---|---:|---|---|---|
+| < 2 ms | válida | `invalid_below_floor` | proibido | não |
+| 2–8 ms | válida | `valid_below_target` | permitido | sim, com aviso |
+| 8–16 ms | válida | `within_target` | permitido | sim |
+| > 16 ms | válida | `valid_above_target` | permitido | sim, com aviso |
+| qualquer | fora de [1,8; 2,2] | `nonlinear_scaling` | proibido (`null`) | não |
+| ausente/inválida | qualquer | `not_calibrated` | proibido (`null`) | não |
+
+Visual e tiling repetem render passes completos, incluindo load/store e setup de bin. Compute usa
+`dispatch`; cena estável e trace usam `frame`; shader compile usa `draw_batch`. Shader cold v2 cria
+variantes distintas, começa com `VkPipelineCache` vazio e desativa o cache de disco do Mesa antes do
+loader. Injeção de 1%/3%/10% adiciona unidades GPU dentro do timestamp original; shader compile
+adiciona pipelines dentro de seu tempo nativo de criação. CPU sleep/busy-wait é inválido.
+
+O multiplicador é persistido por modelo/SoC/GPU, workload/versão/configuração, fonte de timestamp e
+perfil térmico. É único para ambos os braços. Calibração fria não vale automaticamente a quente;
+uma referência que começou em 8–16 ms e sai da faixa gera `calibration_drift`. Se `m=1` já excedia
+16 ms, aplica-se o baseline registrado com tolerância relativa de 20%. Deriva >5% entre primeiro e
+último terço gera `thermal_drift_detected`. O teto operacional padrão é 2.700 s.
+
+O n é fixado depois de três pares piloto independentes. O piloto não entra na estimativa final e o
+delta parcial nunca reabre o dimensionamento. `statistical_analysis.analysis_version` permanece 1:
+o estimador não mudou. Consumidores devem ler `completed_paired_rounds`, pois n não é mais
+constante.
+
+Com multiplicadores diferentes por `hardware_key`, A740 e A825 só são comparáveis por tamanho de
+efeito pareado; tempo absoluto normalizado entre aparelhos é proibido.
+
+### Versionamento da Fase 15
+
+| Contrato | Antes → agora | Motivo |
+|---|---:|---|
+| `suite.json schema_version` | 14 → 15 | formato: calibração, repetição e auditoria de workload |
+| `workload_version` performance | 1 → 2 | significado: unidade repetida e domínio medido mudaram |
+| `qualification_profile_version` | 5 → 6 | significado: passos fixam v1/v2 e n adaptativo |
+| `qualification_schema_version` | 4 → 5 | formato: versão por passo e novos blocos |
+| `qualification_report_version` | 4 → 5 | significado: novos gates bloqueiam recomendação |
+| `qualification_score_version` | 4 → 5 | significado: faixa dinâmica e identidade bloqueiam score |
+| `ranking_version` | 2 → 3 | significado: versão indeterminável/mismatch é excluída |
+| `public_dataset_schema_version` | 2 → 3 | significado: publicação exige versão confirmada |
+| `statistical_analysis.analysis_version` | 1 → 1 | sem bump: estimador igual; ler `completed_paired_rounds` |
+| `optimization_report.format_version` | 2 → 2 | sem bump: somente campos aditivos |
+
+O estado da implementação e o protocolo físico A740 estão separados em
+`docs/PHASE15_DYNAMIC_RANGE.md`. O histórico publicado está em
+`docs/WORKLOAD_VERSION_AUDIT.md`; resultados `undeterminable` não entram em ranking ou bisect.

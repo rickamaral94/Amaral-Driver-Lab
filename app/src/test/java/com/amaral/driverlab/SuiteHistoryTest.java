@@ -48,4 +48,24 @@ public final class SuiteHistoryTest {
         assertTrue(ranking.getString("identity_eligibility_criterion")
                 .contains("RESULT_SCHEMA.md"));
     }
+
+    @Test
+    public void rankingExcludesUndeterminableWorkloadVersion() throws Exception {
+        JSONObject historical = Phase4TestData.report("historical", Phase4TestData.sha('a'),
+                "driver-a", 4.0, "candidate_better", 1L);
+        historical.remove("workload_version_audit");
+        historical.getJSONArray("phases").getJSONObject(0)
+                .getJSONObject("native").remove("workload_version");
+        SuiteRecord historicalRecord = SuiteRecord.parse(null, historical);
+        SuiteRecord currentRecord = SuiteRecord.parse(null, Phase4TestData.report(
+                "current", Phase4TestData.sha('b'), "driver-b", 5.0,
+                "candidate_better", 2L));
+
+        JSONObject ranking = SuiteHistory.ranking(
+                java.util.Arrays.asList(historicalRecord, currentRecord), currentRecord);
+
+        assertEquals(1, ranking.getInt("excluded_by_workload_version_count"));
+        assertEquals(1, ranking.getJSONObject("excluded_by_workload_version")
+                .getInt(WorkloadVersionIdentity.UNDETERMINABLE));
+    }
 }

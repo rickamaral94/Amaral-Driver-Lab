@@ -12,7 +12,9 @@ public final class TraceReplayContractTest {
     public void traceFormatAndWorkloadAreVersionedIndependently() throws Exception {
         assertEquals(1, TraceReplayContract.TRACE_FORMAT_VERSION);
         assertEquals(1, TraceReplayContract.TRACE_ANALYSIS_VERSION);
-        assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
+        assertEquals(2, WorkloadContract.TRACE_REPLAY_VERSION);
+        assertTrue(WorkloadContract.isSupportedVersion(
+                WorkloadContract.TRACE_REPLAY_ID, 1));
         assertEquals("median_replay_ms",
                 WorkloadContract.primaryMetricFor(WorkloadContract.TRACE_REPLAY_ID));
         assertTrue(WorkloadContract.isPerformance(WorkloadContract.TRACE_REPLAY_ID));

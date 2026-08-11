@@ -30,6 +30,8 @@ final class SuiteRecord {
     final boolean blockingValidity;
     final String driverIdentityConfidence;
     final boolean identityEligibleForAggregation;
+    final String workloadVersionAuditStatus;
+    final boolean workloadVersionEligibleForAggregation;
     final List<String> warnings;
 
     private SuiteRecord(File file, JSONObject report, JSONObject hardware,
@@ -68,7 +70,24 @@ final class SuiteRecord {
         identityEligibleForAggregation = identityAudit != null
                 && identityAudit.optBoolean("eligible_for_aggregation", false)
                 && DriverIdentityPolicy.RUNTIME_CONFIRMED.equals(driverIdentityConfidence);
-        this.blockingValidity = blockingValidity;
+        JSONObject versionAudit = report.optJSONObject("workload_version_audit");
+        try {
+            if (versionAudit == null) versionAudit = WorkloadVersionIdentity.audit(report);
+        } catch (Exception ignored) {
+            versionAudit = null;
+        }
+        workloadVersionAuditStatus = versionAudit == null
+                ? WorkloadVersionIdentity.UNDETERMINABLE
+                : versionAudit.optString("status", WorkloadVersionIdentity.UNDETERMINABLE);
+        workloadVersionEligibleForAggregation = versionAudit != null
+                && versionAudit.optBoolean("eligible_for_aggregation", false);
+        JSONObject dynamicRange = report.optJSONObject("dynamic_range_calibration");
+        boolean dynamicRangeBlocked = workloadVersion >= 2
+                && WorkloadContract.isPerformance(workloadId)
+                && !WorkloadContract.TRANSFER_ID.equals(workloadId)
+                && (dynamicRange == null || !dynamicRange.optBoolean("ranking_eligible", false));
+        this.blockingValidity = blockingValidity || !workloadVersionEligibleForAggregation
+                || dynamicRangeBlocked;
         this.warnings = warnings;
     }
 
@@ -114,13 +133,16 @@ final class SuiteRecord {
         output.put("blocking_validity", blockingValidity);
         output.put("driver_identity_confidence", driverIdentityConfidence);
         output.put("identity_eligible_for_aggregation", identityEligibleForAggregation);
+        output.put("workload_version_audit_status", workloadVersionAuditStatus);
+        output.put("workload_version_eligible_for_aggregation",
+                workloadVersionEligibleForAggregation);
         return output;
     }
 
     String displayLabel() {
         String score = Double.isFinite(rankingScorePercent)
                 ? String.format(Locale.US, "%+.2f%%", rankingScorePercent) : "sem score";
-        return candidateLabel + " · " + WorkloadContract.labelFor(workloadId)
+        return candidateLabel + " · " + WorkloadContract.labelFor(workloadId, workloadVersion)
                 + " · " + score + " · " + suiteId;
     }
 
@@ -133,7 +155,8 @@ final class SuiteRecord {
         if (!WorkloadContract.isSupported(workloadId)) {
             throw new IllegalArgumentException("workload_id não suportado: " + workloadId);
         }
-        if (report.optInt("workload_version", -1) <= 0) {
+        int workloadVersion = report.optInt("workload_version", -1);
+        if (!WorkloadContract.isSupportedVersion(workloadId, workloadVersion)) {
             throw new IllegalArgumentException("workload_version ausente");
         }
     }

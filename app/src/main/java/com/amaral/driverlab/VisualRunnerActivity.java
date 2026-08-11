@@ -48,6 +48,9 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
     private static native String runNativeVisualScene(
             Surface surface,
             String sceneId,
+            int workloadVersion,
+            int repetitionsPerSample,
+            int effectInjectionPercent,
             String driverDirectory,
             String driverName,
             String nativeLibraryDirectory,
@@ -89,6 +92,9 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         overlay.setBackgroundColor(0x99000000);
         overlay.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         String workloadId = getIntent().getStringExtra(RunnerActivity.EXTRA_WORKLOAD_ID);
+        int displayedWorkloadVersion = getIntent().getIntExtra(
+                RunnerActivity.EXTRA_WORKLOAD_VERSION,
+                WorkloadContract.versionFor(workloadId));
         String phase = getIntent().getStringExtra(RunnerActivity.EXTRA_PHASE_LABEL);
         String role = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_ROLE);
         String displayName = getIntent().getStringExtra(
@@ -112,7 +118,8 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         }
         overlay.setText("Amaral Driver Lab · cena Vulkan visível\n"
                 + LanguageManager.translateLegacy(
-                        this, VisualSceneContract.labelFor(workloadId)) + " · " + armLabel
+                        this, VisualSceneContract.labelFor(
+                                workloadId, displayedWorkloadVersion)) + " · " + armLabel
                 + "\nCheckpoints: frames 30, 90 e 150");
         FrameLayout.LayoutParams overlayParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -183,8 +190,19 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             int workloadVersion = getIntent().getIntExtra(
                     RunnerActivity.EXTRA_WORKLOAD_VERSION,
                     WorkloadContract.versionFor(workloadId));
-            if (workloadVersion != WorkloadContract.versionFor(workloadId)) {
+            if (!WorkloadContract.isSupportedVersion(workloadId, workloadVersion)) {
                 throw new IllegalArgumentException("Versão da cena visual incompatível");
+            }
+            int repetitionsPerSample = Math.max(1, Math.min(
+                    BenchmarkCalibrationContract.MAX_REPETITIONS,
+                    getIntent().getIntExtra(
+                            RunnerActivity.EXTRA_REPETITIONS_PER_SAMPLE, 1)));
+            int effectInjectionPercent = Math.max(0, Math.min(10,
+                    getIntent().getIntExtra(
+                            RunnerActivity.EXTRA_EFFECT_INJECTION_PERCENT, 0)));
+            if (workloadVersion < 2 && (repetitionsPerSample != 1
+                    || effectInjectionPercent != 0)) {
+                throw new IllegalArgumentException("Cena v1 não aceita repetição calibrada");
             }
             String phase = getIntent().getStringExtra(RunnerActivity.EXTRA_PHASE_LABEL);
             String driverDir = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_DIR);
@@ -215,8 +233,13 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                     .put("workload_version", workloadVersion)
                     .put("metric_limitations", WorkloadContract.limitationFor(workloadId))
                     .put("workload_config", VisualSceneContract.workloadConfig(
-                            workloadId, warmup, measure, pixelTolerance,
-                            maximumDivergentBlocks))
+                            workloadId, workloadVersion, warmup, measure, pixelTolerance,
+                            maximumDivergentBlocks)
+                            .put("repetition_unit", workloadVersion >= 2
+                                    ? BenchmarkCalibrationContract.repetitionUnit(workloadId)
+                                    : JSONObject.NULL)
+                            .put("repetitions_per_sample", repetitionsPerSample)
+                            .put("effect_injection_percent", effectInjectionPercent))
                     .put("driver_mode", "system".equals(driverModeOverride)
                             || "custom".equals(driverModeOverride)
                             ? driverModeOverride
@@ -250,6 +273,9 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             String nativeJson = runNativeVisualScene(
                     surface,
                     workloadId,
+                    workloadVersion,
+                    repetitionsPerSample,
+                    effectInjectionPercent,
                     driverDir == null ? "" : driverDir,
                     driverName == null ? "" : driverName,
                     getApplicationInfo().nativeLibraryDir,

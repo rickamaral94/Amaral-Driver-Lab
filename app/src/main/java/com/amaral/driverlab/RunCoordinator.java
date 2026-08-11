@@ -59,10 +59,11 @@ final class RunCoordinator {
     private final DriverPackage candidate;
     private final DriverPackage reference;
     private final int mode;
-    private final int rounds;
+    private int rounds;
     private final int warmupSeconds;
     private final int measureSeconds;
     private final String workloadId;
+    private final int workloadVersion;
     private final String traceId;
     private final int pixelTolerance;
     private final int maximumDivergentBlocks;
@@ -71,6 +72,9 @@ final class RunCoordinator {
     private final JSONObject qualificationContext;
     private final List<Phase> phases = new ArrayList<>();
     private final JSONArray phaseResults = new JSONArray();
+    private final JSONArray calibrationObservations = new JSONArray();
+    private final JSONArray sampleSizePilotResults = new JSONArray();
+    private final JSONArray effectInjectionObservations = new JSONArray();
 
     private File suiteDirectory;
     private long suiteStartedAt;
@@ -78,6 +82,22 @@ final class RunCoordinator {
     private long phaseDeadlineElapsed;
     private long phaseLaunchedElapsed;
     private File currentResultFile;
+    private boolean calibrationProbeActive;
+    private boolean sampleSizePilotActive;
+    private boolean finalPlanBuilt;
+    private boolean postCalibrationValidationComplete;
+    private String calibrationStage = "none";
+    private int calibrationRepetitions = 1;
+    private int calibrationEffectPercent;
+    private double calibratedMedianUs = Double.NaN;
+    private double doubledMedianUs = Double.NaN;
+    private double postValidationMedianUs = Double.NaN;
+    private JSONObject calibrationKey;
+    private JSONObject calibrationDevice;
+    private String calibrationThermalProfile;
+    private JSONObject linearity;
+    private JSONObject sampleSizePlan;
+    private boolean operationalBudgetExhausted;
 
     RunCoordinator(Activity activity, DriverPackage candidate, int mode, int rounds,
                    int warmupSeconds, int measureSeconds, String workloadId, String traceId,
@@ -108,17 +128,33 @@ final class RunCoordinator {
                    String traceId, int pixelTolerance, int maximumDivergentBlocks,
                    JSONObject campaignContext, JSONObject qualificationContext,
                    Listener listener) {
+        this(activity, candidate, reference, mode, rounds, warmupSeconds, measureSeconds,
+                workloadId, WorkloadContract.versionFor(workloadId), traceId, pixelTolerance,
+                maximumDivergentBlocks, campaignContext, qualificationContext, listener);
+    }
+
+    RunCoordinator(Activity activity, DriverPackage candidate, DriverPackage reference, int mode,
+                   int rounds, int warmupSeconds, int measureSeconds, String workloadId,
+                   int workloadVersion, String traceId, int pixelTolerance,
+                   int maximumDivergentBlocks, JSONObject campaignContext,
+                   JSONObject qualificationContext, Listener listener) {
         this.activity = activity;
         this.candidate = candidate;
         this.reference = reference;
         this.mode = mode;
-        this.rounds = Math.max(1, Math.min(rounds, 10));
+        this.rounds = Math.max(1, Math.min(rounds,
+                BenchmarkCalibrationContract.MAXIMUM_FINAL_PAIRED_ROUNDS));
         this.warmupSeconds = Math.max(0, Math.min(warmupSeconds, 30));
         this.measureSeconds = Math.max(1, Math.min(measureSeconds, 120));
         if (!WorkloadContract.isSupported(workloadId)) {
             throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
         }
         this.workloadId = workloadId;
+        if (!WorkloadContract.isSupportedVersion(workloadId, workloadVersion)) {
+            throw new IllegalArgumentException("Versão de workload incompatível: "
+                    + workloadId + "/v" + workloadVersion);
+        }
+        this.workloadVersion = workloadVersion;
         this.traceId = WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)
                 ? (TraceReplayContract.isSupported(traceId) ? traceId
                 : TraceReplayContract.MIXED_TRACE_ID) : TraceReplayContract.MIXED_TRACE_ID;
@@ -157,14 +193,31 @@ final class RunCoordinator {
             if (!suiteDirectory.mkdirs()) {
                 throw new IllegalStateException("Não foi possível criar a pasta da suíte");
             }
-            buildPlan();
-            launchNext();
+            if (BenchmarkCalibrationContract.requiresCalibration(
+                    workloadId, workloadVersion) && mode == MODE_AB) {
+                startCalibration();
+            } else {
+                finalPlanBuilt = true;
+                buildPlan();
+                launchNext();
+            }
         } catch (Throwable error) {
             listener.onFailure("Não foi possível iniciar a suíte", error);
         }
     }
 
+    private void startCalibration() throws Exception {
+        calibrationDevice = DeviceSnapshot.capture(activity);
+        calibrationThermalProfile = thermalProfile(calibrationDevice);
+        // Vulkan is initialized in the isolated runner, so one unscaled identity probe is
+        // required before an exact hardware_key can be constructed. A cache hit reuses m;
+        // this probe never changes the persisted multiplier.
+        calibrationStage = "identify_hardware";
+        launchCalibrationProbe(1, calibrationStage);
+    }
+
     private void buildPlan() {
+        phases.clear();
         if (mode == MODE_SYSTEM) {
             for (int round = 1; round <= rounds; ++round) {
                 phases.add(new Phase(false, round, reference));
@@ -189,16 +242,265 @@ final class RunCoordinator {
         }
     }
 
-    private void launchNext() {
-        if (phaseIndex >= phases.size()) {
+    private void launchCalibrationProbe(int repetitions, String stage) {
+        launchCalibrationProbe(repetitions, 0, stage);
+    }
+
+    private void launchCalibrationProbe(int repetitions, int effectPercent, String stage) {
+        try {
+            Phase phase = new Phase(false, 0, reference);
+            currentResultFile = new File(suiteDirectory,
+                    "calibration-" + stage.replaceAll("[^a-z0-9_-]", "-") + ".json");
+            listener.onStatus("Calibração " + stage + " · " + repetitions
+                    + " repetição(ões) · injeção GPU " + effectPercent
+                    + "% · braço de referência");
+            Intent intent = new Intent(activity, VisualSceneContract.isVisualScene(workloadId)
+                    ? VisualRunnerActivity.class : RunnerActivity.class);
+            intent.putExtra(RunnerActivity.EXTRA_RESULT_PATH,
+                    currentResultFile.getAbsolutePath());
+            intent.putExtra(RunnerActivity.EXTRA_PHASE_LABEL, "calibration_reference");
+            intent.putExtra(RunnerActivity.EXTRA_ROUND, 0);
+            intent.putExtra(RunnerActivity.EXTRA_WARMUP_SECONDS, Math.max(1, warmupSeconds));
+            intent.putExtra(RunnerActivity.EXTRA_MEASURE_SECONDS, Math.max(2, measureSeconds));
+            intent.putExtra(RunnerActivity.EXTRA_WORKLOAD_ID, workloadId);
+            intent.putExtra(RunnerActivity.EXTRA_TRACE_ID, traceId);
+            intent.putExtra(RunnerActivity.EXTRA_WORKLOAD_VERSION, workloadVersion);
+            intent.putExtra(RunnerActivity.EXTRA_REPETITIONS_PER_SAMPLE, repetitions);
+            intent.putExtra(RunnerActivity.EXTRA_EFFECT_INJECTION_PERCENT, effectPercent);
+            intent.putExtra(RunnerActivity.EXTRA_PIXEL_TOLERANCE, pixelTolerance);
+            intent.putExtra(RunnerActivity.EXTRA_MAX_DIVERGENT_BLOCKS,
+                    maximumDivergentBlocks);
+            intent.putExtra(RunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE,
+                    DriverExecutionIdentity.mode(phase.usesCustomDriver()));
+            intent.putExtra(RunnerActivity.EXTRA_DRIVER_ROLE, phase.executionRole());
+            intent.putExtra(RunnerActivity.EXTRA_DRIVER_DISPLAY_NAME,
+                    phase.driver == null ? "" : phase.driver.displayName());
+            if (phase.driver != null) {
+                intent.putExtra(RunnerActivity.EXTRA_DRIVER_DIR,
+                        phase.driver.directory.getAbsolutePath());
+                intent.putExtra(RunnerActivity.EXTRA_DRIVER_NAME, phase.driver.libraryName);
+                intent.putExtra(RunnerActivity.EXTRA_DRIVER_META,
+                        phase.driver.metadata.toString());
+                intent.putExtra(RunnerActivity.EXTRA_DRIVER_SHA, phase.driver.sha256);
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            calibrationProbeActive = true;
+            calibrationEffectPercent = effectPercent;
+            phaseLaunchedElapsed = SystemClock.elapsedRealtime();
+            phaseDeadlineElapsed = phaseLaunchedElapsed + WorkloadContract.timeoutSeconds(
+                    workloadId, Math.max(1, warmupSeconds), Math.max(2, measureSeconds)) * 1000L;
+            activity.startActivity(intent);
+            handler.postDelayed(this::pollCurrent, 500);
+        } catch (Throwable error) {
+            calibrationProbeActive = false;
+            listener.onFailure("Não foi possível iniciar a calibração", error);
+        }
+    }
+
+    private void handleCalibrationProbe(JSONObject result) throws Exception {
+        double medianUs = extractMedianBatchUs(result);
+        if (!result.optBoolean("success", false) || !Double.isFinite(medianUs)
+                || medianUs <= 0.0) {
+            throw new IllegalStateException("Probe de calibração sem mediana válida");
+        }
+        JSONObject nativeResult = result.optJSONObject("native");
+        calibrationObservations.put(new JSONObject()
+                .put("stage", calibrationStage)
+                .put("repetitions_per_sample", nativeResult == null ? 1
+                        : nativeResult.optInt("repetitions_per_sample", 1))
+                .put("effect_injection_percent", calibrationEffectPercent)
+                .put("median_batch_us", medianUs)
+                .put("runtime_driver_identity", result.opt("runtime_driver_identity")));
+        if ("identify_hardware".equals(calibrationStage)) {
+            JSONObject capabilities = nativeResult == null ? null
+                    : nativeResult.optJSONObject("capabilities");
+            String gpuName = capabilities == null ? "unknown"
+                    : capabilities.optString("gpu_name", "unknown");
+            calibrationKey = BenchmarkCalibrationStore.key(
+                    calibrationDevice, gpuName, workloadId, workloadVersion, workloadConfig(),
+                    timestampSource(nativeResult),
+                    calibrationThermalProfile);
+            JSONObject cached = BenchmarkCalibrationStore.find(
+                    activity.getFilesDir(), calibrationKey);
+            if (cached != null && cached.optInt("repetitions_per_sample", 0) > 0) {
+                calibrationRepetitions = cached.getInt("repetitions_per_sample");
+                calibrationStage = "validate_cached_m";
+            } else {
+                calibrationRepetitions = BenchmarkCalibrationContract.selectMultiplier(medianUs);
+                calibrationStage = "calibrated_m";
+            }
+            launchCalibrationProbe(calibrationRepetitions, calibrationStage);
+            return;
+        }
+        if ("pilot_base".equals(calibrationStage)) {
+            calibrationRepetitions = BenchmarkCalibrationContract.selectMultiplier(medianUs);
+            calibrationStage = "calibrated_m";
+            launchCalibrationProbe(calibrationRepetitions, calibrationStage);
+            return;
+        }
+        if ("validate_cached_m".equals(calibrationStage)
+                || "calibrated_m".equals(calibrationStage)) {
+            calibratedMedianUs = medianUs;
+            calibrationStage = "linearity_2m";
+            launchCalibrationProbe(Math.min(BenchmarkCalibrationContract.MAX_REPETITIONS,
+                    calibrationRepetitions * 2), calibrationStage);
+            return;
+        }
+        if ("linearity_2m".equals(calibrationStage)) {
+            doubledMedianUs = medianUs;
+            linearity = BenchmarkCalibrationContract.linearity(
+                    calibratedMedianUs, doubledMedianUs);
+            if ("linear".equals(linearity.optString("status"))
+                    && calibratedMedianUs >= BenchmarkCalibrationContract.VALIDITY_FLOOR_US) {
+                BenchmarkCalibrationStore.put(activity.getFilesDir(), calibrationKey,
+                        calibrationRepetitions, calibratedMedianUs, linearity);
+            }
+            calibrationStage = "effect_injection_1";
+            launchCalibrationProbe(calibrationRepetitions, 1, calibrationStage);
+            return;
+        }
+        if (calibrationStage.startsWith("effect_injection_")) {
+            int nominal = calibrationEffectPercent;
+            double realized = nativeResult == null ? Double.NaN
+                    : nativeResult.optDouble(
+                            "realized_workload_effect_percent", Double.NaN);
+            String domain = nativeResult == null ? "unknown"
+                    : nativeResult.optString("effect_injection_domain", "unknown");
+            effectInjectionObservations.put(
+                    BenchmarkCalibrationContract.effectInjectionObservation(
+                            nominal, realized, calibratedMedianUs, medianUs, domain));
+            if (nominal == 1) {
+                calibrationStage = "effect_injection_3";
+                launchCalibrationProbe(calibrationRepetitions, 3, calibrationStage);
+            } else if (nominal == 3) {
+                calibrationStage = "effect_injection_10";
+                launchCalibrationProbe(calibrationRepetitions, 10, calibrationStage);
+            } else {
+                startSampleSizePilot();
+            }
+            return;
+        }
+        if ("post_run_reference_validation".equals(calibrationStage)) {
+            postValidationMedianUs = medianUs;
+            postCalibrationValidationComplete = true;
             finishSuite();
             return;
         }
+        throw new IllegalStateException("Estado de calibração desconhecido: " + calibrationStage);
+    }
+
+    private static String thermalProfile(JSONObject device) {
+        int status = device == null ? -1 : device.optInt("thermal_status", -1);
+        double temperature = device == null ? Double.NaN
+                : device.optDouble("battery_temperature_c", Double.NaN);
+        String bucket = !Double.isFinite(temperature) ? "unknown"
+                : temperature < 30.0 ? "cold"
+                : temperature < 38.0 ? "nominal"
+                : temperature < 43.0 ? "warm" : "hot";
+        return "android_status_" + status + "/battery_" + bucket;
+    }
+
+    private String timestampSource(JSONObject nativeResult) {
+        if (WorkloadContract.SHADER_COMPILE_ID.equals(workloadId)) {
+            return "cpu_monotonic_pipeline_creation";
+        }
+        return nativeResult != null && nativeResult.optBoolean("gpu_timestamps_used", false)
+                ? "gpu_timestamp_query" : "cpu_monotonic_submission_fallback";
+    }
+
+    private void startSampleSizePilot() {
+        sampleSizePilotActive = true;
+        finalPlanBuilt = false;
+        rounds = BenchmarkCalibrationContract.PILOT_PAIRED_ROUNDS;
+        phaseIndex = 0;
+        buildPlan();
+        listener.onStatus("Piloto pareado independente · " + rounds
+                + " pares; amostras não entram na estimativa final");
+        launchNext();
+    }
+
+    private void finishSampleSizePilot() {
+        try {
+            JSONArray ratios = new JSONArray();
+            for (int round = 1; round <= BenchmarkCalibrationContract.PILOT_PAIRED_ROUNDS;
+                 ++round) {
+                JSONObject referencePhase = findSuccessfulPhase(
+                        sampleSizePilotResults, round, false);
+                JSONObject candidatePhase = findSuccessfulPhase(
+                        sampleSizePilotResults, round, true);
+                double referenceValue = extractPrimaryMetric(referencePhase);
+                double candidateValue = extractPrimaryMetric(candidatePhase);
+                if (Double.isFinite(referenceValue) && Double.isFinite(candidateValue)
+                        && referenceValue > 0.0 && candidateValue > 0.0) {
+                    ratios.put(candidateValue / referenceValue);
+                }
+            }
+            sampleSizePlan = BenchmarkCalibrationContract.fixedSampleSizePlan(
+                    ratios, BenchmarkCalibrationContract.DEFAULT_OPERATIONAL_BUDGET_SECONDS);
+            rounds = sampleSizePlan.getInt("planned_paired_rounds");
+            sampleSizePilotActive = false;
+            finalPlanBuilt = true;
+            phaseIndex = 0;
+            buildPlan();
+            listener.onStatus("Tamanho final fixado após o piloto: " + rounds + " pares");
+            launchNext();
+        } catch (Throwable error) {
+            listener.onFailure("Falha ao fixar o tamanho amostral", error);
+        }
+    }
+
+    private double extractMedianBatchUs(JSONObject phase) {
+        JSONObject nativeResult = phase == null ? null : phase.optJSONObject("native");
+        return nativeResult == null ? Double.NaN
+                : nativeResult.optDouble("median_batch_us", Double.NaN);
+    }
+
+    private double extractPrimaryMetric(JSONObject phase) {
+        JSONObject nativeResult = phase == null ? null : phase.optJSONObject("native");
+        return nativeResult == null ? Double.NaN : nativeResult.optDouble(
+                WorkloadContract.primaryMetricFor(workloadId), Double.NaN);
+    }
+
+    private JSONObject findSuccessfulPhase(JSONArray source, int round, boolean candidateArm) {
+        for (int index = 0; index < source.length(); ++index) {
+            JSONObject phase = source.optJSONObject(index);
+            if (phase == null || !phase.optBoolean("success", false)
+                    || phase.optInt("round", -1) != round) continue;
+            if (candidateArm == DriverExecutionIdentity.isCandidateArm(phase)) return phase;
+        }
+        return null;
+    }
+
+    private void launchNext() {
+        if (phaseIndex >= phases.size()) {
+            if (sampleSizePilotActive) {
+                finishSampleSizePilot();
+                return;
+            }
+            if (finalPlanBuilt
+                    && BenchmarkCalibrationContract.requiresCalibration(
+                    workloadId, workloadVersion)
+                    && !postCalibrationValidationComplete) {
+                calibrationStage = "post_run_reference_validation";
+                launchCalibrationProbe(calibrationRepetitions, calibrationStage);
+                return;
+            }
+            finishSuite();
+            return;
+        }
+        if (finalPlanBuilt && System.currentTimeMillis() - suiteStartedAt
+                >= BenchmarkCalibrationContract.DEFAULT_OPERATIONAL_BUDGET_SECONDS * 1000L) {
+            operationalBudgetExhausted = true;
+            phases.subList(phaseIndex, phases.size()).clear();
+            launchNext();
+            return;
+        }
         Phase phase = phases.get(phaseIndex);
-        String fileName = String.format(Locale.US, "phase-%02d-%s-r%d.json",
+        String fileName = String.format(Locale.US, "%s-%02d-%s-r%d.json",
+                sampleSizePilotActive ? "sample-pilot" : "phase",
                 phaseIndex + 1, phase.label, phase.round);
         currentResultFile = new File(suiteDirectory, fileName);
-        String workloadLabel = WorkloadContract.labelFor(workloadId);
+        String workloadLabel = WorkloadContract.labelFor(workloadId, workloadVersion);
         listener.onStatus("Executando " + (phaseIndex + 1) + "/" + phases.size()
                 + " · " + workloadLabel + " · rodada " + phase.round + " · "
                 + (phase.driver == null ? "driver do sistema" : phase.driver.displayName()));
@@ -212,8 +514,10 @@ final class RunCoordinator {
         intent.putExtra(RunnerActivity.EXTRA_MEASURE_SECONDS, measureSeconds);
         intent.putExtra(RunnerActivity.EXTRA_WORKLOAD_ID, workloadId);
         intent.putExtra(RunnerActivity.EXTRA_TRACE_ID, traceId);
-        intent.putExtra(RunnerActivity.EXTRA_WORKLOAD_VERSION,
-                WorkloadContract.versionFor(workloadId));
+        intent.putExtra(RunnerActivity.EXTRA_WORKLOAD_VERSION, workloadVersion);
+        intent.putExtra(RunnerActivity.EXTRA_REPETITIONS_PER_SAMPLE,
+                workloadVersion >= 2 ? calibrationRepetitions : 1);
+        intent.putExtra(RunnerActivity.EXTRA_EFFECT_INJECTION_PERCENT, 0);
         intent.putExtra(RunnerActivity.EXTRA_PIXEL_TOLERANCE, pixelTolerance);
         intent.putExtra(RunnerActivity.EXTRA_MAX_DIVERGENT_BLOCKS, maximumDivergentBlocks);
         intent.putExtra(RunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE,
@@ -240,13 +544,25 @@ final class RunCoordinator {
     private void pollCurrent() {
         try {
             if (currentResultFile.isFile()) {
-                phaseResults.put(new JSONObject(ResultFiles.readUtf8(currentResultFile)));
+                JSONObject completed = new JSONObject(ResultFiles.readUtf8(currentResultFile));
+                if (calibrationProbeActive) {
+                    calibrationProbeActive = false;
+                    handleCalibrationProbe(completed);
+                    return;
+                }
+                if (sampleSizePilotActive) sampleSizePilotResults.put(completed);
+                else phaseResults.put(completed);
                 phaseIndex++;
                 handler.postDelayed(this::launchNext, 1200);
                 return;
             }
             if (runnerExitedUnexpectedly()) {
                 killTimedOutRunner();
+                if (calibrationProbeActive) {
+                    calibrationProbeActive = false;
+                    listener.onFailure("Falha no probe de calibração", null);
+                    return;
+                }
                 recordSyntheticFailure("crash", "runner_crash");
                 phaseIndex++;
                 handler.postDelayed(this::launchNext, 1200);
@@ -254,6 +570,11 @@ final class RunCoordinator {
             }
             if (SystemClock.elapsedRealtime() >= phaseDeadlineElapsed) {
                 killTimedOutRunner();
+                if (calibrationProbeActive) {
+                    calibrationProbeActive = false;
+                    listener.onFailure("Timeout no probe de calibração", null);
+                    return;
+                }
                 recordSyntheticFailure("timeout", "runner_timeout");
                 phaseIndex++;
                 handler.postDelayed(this::launchNext, 1200);
@@ -294,14 +615,15 @@ final class RunCoordinator {
                 ? JSONObject.NULL : phase.driver.sha256);
         failure.put("round", phase.round);
         failure.put("workload_id", workloadId);
-        failure.put("workload_version", WorkloadContract.versionFor(workloadId));
+        failure.put("workload_version", workloadVersion);
         if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) failure.put("trace_id", traceId);
         failure.put("failure_type", failureType);
         failure.put("failure_stage", "runner_process");
         failure.put("error", error);
         failure.put("finished_at_ms", System.currentTimeMillis());
         ResultFiles.writeAtomic(currentResultFile, failure.toString(2));
-        phaseResults.put(failure);
+        if (sampleSizePilotActive) sampleSizePilotResults.put(failure);
+        else phaseResults.put(failure);
     }
 
     private void killTimedOutRunner() {
@@ -331,10 +653,25 @@ final class RunCoordinator {
             report.put("rounds", rounds);
             report.put("order_policy", mode == MODE_AB ? "AB/BA alternating" : "single driver");
             report.put("workload_id", workloadId);
-            report.put("workload_version", WorkloadContract.versionFor(workloadId));
+            report.put("workload_version", workloadVersion);
             report.put("workload", compatibilityWorkloadName());
             report.put("metric_limitations", WorkloadContract.limitationFor(workloadId));
-            report.put("workload_config", workloadConfig());
+            report.put("workload_config", reportedWorkloadConfig());
+            JSONObject dynamicRange = dynamicRangeReport();
+            report.put("dynamic_range_calibration", dynamicRange == null
+                    ? JSONObject.NULL : dynamicRange);
+            report.put("sample_duration_gate", dynamicRange == null
+                    ? JSONObject.NULL : dynamicRange.opt("sample_duration_gate"));
+            report.put("sample_size_plan", sampleSizePlan == null
+                    ? JSONObject.NULL : finalizedSampleSizePlan());
+            report.put("thermal_drift", dynamicRange == null
+                    ? JSONObject.NULL : dynamicRange.opt("thermal_drift"));
+            report.put("operational_duration", new JSONObject()
+                    .put("budget_seconds",
+                            BenchmarkCalibrationContract.DEFAULT_OPERATIONAL_BUDGET_SECONDS)
+                    .put("elapsed_seconds", Math.max(0L,
+                            (System.currentTimeMillis() - suiteStartedAt) / 1000L))
+                    .put("budget_exhausted", operationalBudgetExhausted));
             if (WorkloadContract.TRANSFER_ID.equals(workloadId)
                     || VisualSceneContract.isVisualScene(workloadId)) {
                 report.put("warmup_seconds", warmupSeconds);
@@ -346,6 +683,7 @@ final class RunCoordinator {
             report.put("comparison_mode", reference == null
                     ? "system_vs_turnip" : "turnip_vs_turnip");
             report.put("phases", phaseResults);
+            report.put("workload_version_audit", WorkloadVersionIdentity.audit(report));
             report.put("driver_identity_audit", driverIdentityAudit);
             report.put("driver_identity_confidence",
                     driverIdentityAudit.getString("driver_identity_confidence"));
@@ -403,12 +741,14 @@ final class RunCoordinator {
             report.put("render_correctness",
                     renderCorrectness == null ? JSONObject.NULL : renderCorrectness);
             report.put("trace_contract", WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)
-                    ? TraceReplayContract.contractJson(traceId) : JSONObject.NULL);
+                    ? TraceReplayContract.contractJson(traceId, workloadVersion)
+                    : JSONObject.NULL);
             report.put("trace_replay",
                     traceReplay == null ? JSONObject.NULL : traceReplay);
             report.put("visual_scene_contract",
                     VisualSceneContract.isVisualScene(workloadId)
-                            ? VisualSceneContract.definition(workloadId) : JSONObject.NULL);
+                            ? VisualSceneContract.definition(workloadId, workloadVersion)
+                            : JSONObject.NULL);
             report.put("visual_scene",
                     visualScene == null ? JSONObject.NULL : visualScene);
             report.put("capability_diff",
@@ -422,6 +762,15 @@ final class RunCoordinator {
                 validityWarnings.put("driver_identity_not_runtime_confirmed:"
                         + driverIdentityAudit.optString("driver_identity_confidence",
                         DriverIdentityPolicy.INFERRED));
+            }
+            if (dynamicRange != null
+                    && !dynamicRange.optBoolean("ranking_eligible", false)) {
+                validityWarnings.put("dynamic_range_not_eligible:"
+                        + dynamicRange.optString("status",
+                        BenchmarkCalibrationContract.STATUS_NOT_CALIBRATED));
+            }
+            if (operationalBudgetExhausted) {
+                validityWarnings.put("operational_duration_budget_exhausted");
             }
             report.put("validity_warnings", validityWarnings);
             report.put("phase4_contract", Phase4Contract.contractJson());
@@ -467,13 +816,13 @@ final class RunCoordinator {
             config.put("maximum_divergent_blocks", maximumDivergentBlocks);
         } else if (VisualSceneContract.isVisualScene(workloadId)) {
             return VisualSceneContract.workloadConfig(
-                    workloadId, warmupSeconds, measureSeconds,
+                    workloadId, workloadVersion, warmupSeconds, measureSeconds,
                     pixelTolerance, maximumDivergentBlocks);
         } else if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
             config.put("warmup_seconds", warmupSeconds);
             config.put("measure_seconds", measureSeconds);
             config.put("primary_metric", WorkloadContract.TRACE_REPLAY_METRIC);
-            config.put("trace", TraceReplayContract.definition(traceId));
+            config.put("trace", TraceReplayContract.definition(traceId, workloadVersion));
         } else {
             config.put("warmup_seconds", warmupSeconds);
             config.put("measure_seconds", measureSeconds);
@@ -482,8 +831,105 @@ final class RunCoordinator {
         return config;
     }
 
+    private JSONObject reportedWorkloadConfig() throws Exception {
+        JSONObject config = new JSONObject(workloadConfig().toString());
+        if (BenchmarkCalibrationContract.requiresCalibration(workloadId, workloadVersion)) {
+            config.put("repetition_unit",
+                            BenchmarkCalibrationContract.repetitionUnit(workloadId))
+                    .put("repetitions_per_sample", calibrationRepetitions)
+                    .put("calibration_key_sha256", calibrationKey == null
+                            ? JSONObject.NULL
+                            : calibrationKey.opt("calibration_key_sha256"))
+                    .put("calibration_thermal_profile", calibrationThermalProfile);
+        }
+        return config;
+    }
+
+    private JSONObject dynamicRangeReport() throws Exception {
+        if (!BenchmarkCalibrationContract.requiresCalibration(workloadId, workloadVersion)) {
+            return null;
+        }
+        JSONObject linearityResult = linearity == null
+                ? BenchmarkCalibrationContract.linearity(Double.NaN, Double.NaN)
+                : linearity;
+        JSONObject gate = BenchmarkCalibrationContract.sampleDurationGate(
+                calibratedMedianUs, linearityResult);
+        JSONArray orderedReference = new JSONArray();
+        for (int index = 0; index < phaseResults.length(); ++index) {
+            JSONObject phase = phaseResults.optJSONObject(index);
+            if (phase == null || DriverExecutionIdentity.isCandidateArm(phase)) continue;
+            double value = extractMedianBatchUs(phase);
+            if (Double.isFinite(value) && value > 0.0) orderedReference.put(value);
+        }
+        JSONObject thermal = BenchmarkCalibrationContract.thermalDrift(orderedReference);
+        JSONObject drift = BenchmarkCalibrationContract.calibrationDrift(
+                calibratedMedianUs, postValidationMedianUs);
+        boolean eligible = gate.optBoolean("ranking_eligible", false)
+                && !Boolean.TRUE.equals(thermal.opt("thermal_drift_detected"))
+                && !drift.optBoolean("calibration_drift", true)
+                && !operationalBudgetExhausted;
+        String status = eligible ? "valid"
+                : operationalBudgetExhausted ? "operational_budget_exhausted"
+                : drift.optBoolean("calibration_drift", true) ? "calibration_drift"
+                : Boolean.TRUE.equals(thermal.opt("thermal_drift_detected"))
+                ? "thermal_drift_detected" : gate.optString("classification");
+        JSONObject output = new JSONObject()
+                .put("calibration_policy_version", BenchmarkCalibrationContract.POLICY_VERSION)
+                .put("calibration_key", calibrationKey)
+                .put("target_min_us", BenchmarkCalibrationContract.TARGET_MIN_US)
+                .put("target_max_us", BenchmarkCalibrationContract.TARGET_MAX_US)
+                .put("target_center_us", BenchmarkCalibrationContract.TARGET_CENTER_US)
+                .put("validity_floor_us", BenchmarkCalibrationContract.VALIDITY_FLOOR_US)
+                .put("repetition_unit",
+                        BenchmarkCalibrationContract.repetitionUnit(workloadId))
+                .put("repetitions_per_sample", calibrationRepetitions)
+                .put("calibrated_median_us", finiteOrNull(calibratedMedianUs))
+                .put("linearity", linearityResult)
+                .put("sample_duration_gate", gate)
+                .put("calibration_observations", calibrationObservations)
+                .put("effect_injection_validation", effectInjectionObservations)
+                .put("post_run_validation", drift)
+                .put("thermal_drift", thermal)
+                .put("cold_calibration_not_valid_when_hot", true)
+                .put("cross_hardware_comparison",
+                        "effect_size_only; absolute_normalized_time_forbidden")
+                .put("status", status)
+                .put("ranking_eligible", eligible);
+        if (gate.optBoolean("normalized_duration_allowed", false)) {
+            output.put("normalized_duration_per_repetition_us",
+                    calibratedMedianUs / calibrationRepetitions);
+        } else {
+            output.put("normalized_duration_per_repetition_us", JSONObject.NULL);
+        }
+        return output;
+    }
+
+    private JSONObject finalizedSampleSizePlan() throws Exception {
+        JSONObject output = new JSONObject(sampleSizePlan.toString());
+        int completed = completedPairCount(phaseResults);
+        output.put("completed_paired_rounds", completed);
+        if (operationalBudgetExhausted
+                || completed < output.optInt("planned_paired_rounds", 0)) {
+            output.put("sample_size_status", "insufficient_sensitivity");
+        }
+        return output;
+    }
+
+    private int completedPairCount(JSONArray source) {
+        int completed = 0;
+        for (int round = 1; round <= rounds; ++round) {
+            if (findSuccessfulPhase(source, round, false) != null
+                    && findSuccessfulPhase(source, round, true) != null) completed++;
+        }
+        return completed;
+    }
+
+    private static Object finiteOrNull(double value) {
+        return Double.isFinite(value) ? value : JSONObject.NULL;
+    }
+
     private String compatibilityWorkloadName() {
-        return WorkloadContract.nativeNameFor(workloadId);
+        return WorkloadContract.nativeNameFor(workloadId, workloadVersion);
     }
 
     private JSONObject summarizeTransfer() throws Exception {

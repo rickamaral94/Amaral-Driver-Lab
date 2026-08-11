@@ -54,6 +54,17 @@ public final class CampaignPlanTest {
         assertFalse(CampaignPlan.verify(campaign));
     }
 
+    @Test
+    public void serializedCampaignKeepsItsExactWorkloadVersion() throws Exception {
+        CampaignWorkload historical = new CampaignWorkload(
+                WorkloadContract.COMPUTE_ARITHMETIC_ID, 1, "");
+        JSONObject encoded = historical.toJson();
+        CampaignWorkload restored = CampaignWorkload.fromJson(encoded);
+        assertEquals(1, restored.workloadVersion);
+        assertEquals(historical, restored);
+        assertEquals("compute_arithmetic|v1", restored.key());
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void duplicateWorkloadSpecsAreRejected() throws Exception {
         JSONObject workload = new CampaignWorkload(

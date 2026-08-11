@@ -92,6 +92,7 @@ public final class QualificationScoreTest {
                         .put("name", "A"))
                 .put("failure_catalog", new JSONArray())
                 .put("validity_warnings", new JSONArray())
+                .put("workload_version_audit", confirmedWorkloadVersionAudit())
                 .put("statistical_analysis", new JSONObject()
                         .put("available", true)
                         .put("paired_sample_count", 5)
@@ -125,11 +126,18 @@ public final class QualificationScoreTest {
                 .put("failure_catalog", pass ? new JSONArray()
                         : new JSONArray().put(new JSONObject().put("failure_type", "render_mismatch")))
                 .put("validity_warnings", new JSONArray())
+                .put("workload_version_audit", confirmedWorkloadVersionAudit())
                 .put("render_correctness", new JSONObject()
                         .put("passed", pass)
                         .put("comparison_available", true))
                 .put("verdict", pass ? "passed_render_correctness"
                         : "failed_render_correctness");
+    }
+
+    private static JSONObject confirmedWorkloadVersionAudit() throws Exception {
+        return new JSONObject()
+                .put("status", WorkloadVersionIdentity.CONFIRMED)
+                .put("eligible_for_aggregation", true);
     }
 
     private static JSONObject preflight() throws Exception {

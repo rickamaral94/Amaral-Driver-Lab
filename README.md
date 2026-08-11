@@ -22,6 +22,7 @@ APK Android arm64, sem root, para comparar o driver Vulkan do sistema com pacote
 - SDK Android de telemetria opt-in para emuladores, importação local, resumo de frame pacing, comparação descritiva e vínculo imutável com suítes;
 - diagnóstico profundo A/B de formatos, corpus de shaders, pipeline cache, memória, sincronização e Soak Test.
 - benchmark visual avançado com 768 cubos 3D em 1280×720, iluminação procedural e pós-processamento de 19 amostras, integrado ao Recommended v5.
+- workloads v2 com faixa dinâmica calibrada, multiplicador persistente por hardware/configuração, linearidade `m`/`2m`, piloto amostral independente e gates de deriva térmica.
 
 A correção offscreen valida somente a cena fixa incluída no APK. Ela **não prova ganho em jogos** nem correção em todos os shaders, APIs ou emuladores.
 
@@ -106,11 +107,11 @@ O APK executa código nativo do ZIP. Use somente pacotes próprios ou hashes ver
 
 ## Esquema de resultados
 
-A versão atual usa `schema_version = 14`. A auditoria de identidade runtime é aditiva aos resultados; o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados. Rankings e datasets novos aceitam somente identidade `runtime_confirmed` e informam quantos resultados históricos `unaudited` foram excluídos.
+A versão atual usa `schema_version = 15`. Perfis Full v1–v5 continuam presos a workloads v1; o perfil Recommended v6 usa workloads v2 calibrados. `analysis_version = 1` permanece porque o estimador não mudou, mas consumidores precisam ler `completed_paired_rounds`, pois `n` deixou de ser constante. Ranking, dataset e bisect exigem identidade runtime confirmada e versão de workload confirmada.
 
 Mudanças na geometria, SPIR-V, ordem dos draws, resolução, formato, cálculo ou regra padrão de comparação exigem uma nova `workload_version`.
 
-Veja [docs/RESULT_SCHEMA.md](docs/RESULT_SCHEMA.md).
+Veja [docs/RESULT_SCHEMA.md](docs/RESULT_SCHEMA.md), [docs/PHASE15_DYNAMIC_RANGE.md](docs/PHASE15_DYNAMIC_RANGE.md) e [docs/WORKLOAD_VERSION_AUDIT.md](docs/WORKLOAD_VERSION_AUDIT.md).
 
 ## Compilar e testar
 

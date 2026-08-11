@@ -9,7 +9,7 @@ import org.junit.Test;
 public final class Phase13ContractTest {
     @Test
     public void uxRedesignDoesNotChangeTechnicalSchema() {
-        assertEquals(14, Phase13Contract.RESULT_SCHEMA_VERSION);
+        assertEquals(15, Phase13Contract.RESULT_SCHEMA_VERSION);
         assertEquals(2, Phase13Contract.UX_SCHEMA_VERSION);
         assertEquals(5, Phase13Contract.GUIDED_STEP_COUNT);
         assertTrue(Phase13Contract.TECHNICAL_IDENTIFIERS_STABLE);

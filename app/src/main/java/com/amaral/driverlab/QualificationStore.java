@@ -55,8 +55,12 @@ final class QualificationStore {
                     .put("result_type", JSONObject.NULL)
                     .put("failure", JSONObject.NULL));
         }
+        int qualificationSchemaVersion = profileVersion
+                >= Phase15DynamicRangeContract.PROFILE_VERSION
+                ? Phase15DynamicRangeContract.QUALIFICATION_SCHEMA_VERSION
+                : Phase11Contract.QUALIFICATION_SCHEMA_VERSION;
         JSONObject manifest = new JSONObject()
-                .put("qualification_schema_version", Phase11Contract.QUALIFICATION_SCHEMA_VERSION)
+                .put("qualification_schema_version", qualificationSchemaVersion)
                 .put("qualification_id", id)
                 .put("created_at_ms", now)
                 .put("app_version", BuildConfig.VERSION_NAME)
@@ -66,7 +70,11 @@ final class QualificationStore {
                 .put("phase10_contract", Phase10Contract.contractJson())
                 .put("phase11_contract", Phase11Contract.contractJson())
                 .put("phase13_validation_contract", profileVersion >= 4
+                        && profileVersion <= Phase13ValidationContract.PROFILE_VERSION
                         ? Phase13ValidationContract.contractJson(profileVersion) : JSONObject.NULL)
+                .put("phase15_dynamic_range_contract", profileVersion
+                        == Phase15DynamicRangeContract.PROFILE_VERSION
+                        ? Phase15DynamicRangeContract.contractJson() : JSONObject.NULL)
                 .put("profile", profile)
                 .put("profile_sha256", profile.getString("profile_sha256"))
                 .put("driver", driver.toJson())
@@ -85,7 +93,10 @@ final class QualificationStore {
                         .put("steps", states))
                 .put("report", JSONObject.NULL)
                 .put("diagnostic_bundle", JSONObject.NULL)
-                .put("limitations", profile.optInt("profile_version", 1) >= 4
+                .put("limitations", profile.optInt("profile_version", 1)
+                        == Phase15DynamicRangeContract.PROFILE_VERSION
+                        ? Phase15DynamicRangeContract.LIMITATION
+                        : profile.optInt("profile_version", 1) >= 4
                         ? Phase13ValidationContract.limitationForVersion(
                                 profile.optInt("profile_version", 1))
                         : profile.optInt("profile_version", 1) >= 3
@@ -117,8 +128,11 @@ final class QualificationStore {
             int actualSchema = manifest.optInt("qualification_schema_version", -1);
             if (profileVersionHint >= 3) {
                 // v3 remains readable/resumable; new manifests are written as v4.
-                if (actualSchema < 3
-                        || actualSchema > Phase11Contract.QUALIFICATION_SCHEMA_VERSION) return false;
+                int maximumSchema = profileVersionHint
+                        >= Phase15DynamicRangeContract.PROFILE_VERSION
+                        ? Phase15DynamicRangeContract.QUALIFICATION_SCHEMA_VERSION
+                        : Phase11Contract.QUALIFICATION_SCHEMA_VERSION;
+                if (actualSchema < 3 || actualSchema > maximumSchema) return false;
             } else if (actualSchema != Phase7Contract.QUALIFICATION_SCHEMA_VERSION) return false;
             if (!manifest.optString("qualification_id", "").matches("qualification-[0-9]{10,20}")) {
                 return false;

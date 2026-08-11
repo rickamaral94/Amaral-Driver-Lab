@@ -303,7 +303,7 @@ public final class MainActivity extends LocalizedActivity {
         intent.putExtra(QualificationActivity.EXTRA_AUTOSTART, true);
         intent.putExtra(QualificationActivity.EXTRA_OPEN_LOG_ON_COMPLETE, true);
         intent.putExtra(QualificationActivity.EXTRA_PROFILE_VERSION,
-                Phase13ValidationContract.PROFILE_VERSION);
+                Phase15DynamicRangeContract.PROFILE_VERSION);
         intent.putExtra(QualificationActivity.EXTRA_DRIVER_SHA, candidate.sha256);
         intent.putExtra(QualificationActivity.EXTRA_COMPARISON_MODE,
                 isTurnipVsTurnip() ? "turnip_vs_turnip" : "system_vs_turnip");

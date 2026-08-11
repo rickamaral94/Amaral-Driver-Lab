@@ -121,6 +121,24 @@ final class QualificationScore {
                     || report.optJSONArray("failure_catalog") != null
                     && report.optJSONArray("failure_catalog").length() > 0;
             if (reportFailure) gateReasons.put("blocking_suite:" + stepId + ":" + verdict);
+            JSONObject workloadVersionAudit = report.optJSONObject("workload_version_audit");
+            boolean workloadVersionConfirmed = workloadVersionAudit != null
+                    && workloadVersionAudit.optBoolean("eligible_for_aggregation", false);
+            if (!workloadVersionConfirmed) {
+                gateReasons.put("workload_version_not_confirmed:" + stepId + ":"
+                        + (workloadVersionAudit == null ? WorkloadVersionIdentity.UNDETERMINABLE
+                        : workloadVersionAudit.optString("status",
+                        WorkloadVersionIdentity.UNDETERMINABLE)));
+            }
+            JSONObject dynamicRange = report.optJSONObject("dynamic_range_calibration");
+            boolean requiresDynamicRange = step.optInt("workload_version", 1) >= 2
+                    && WorkloadContract.isPerformance(step.optString("workload_id"))
+                    && !WorkloadContract.TRANSFER_ID.equals(step.optString("workload_id"));
+            boolean dynamicRangeEligible = !requiresDynamicRange || dynamicRange != null
+                    && dynamicRange.optBoolean("ranking_eligible", false);
+            if (!dynamicRangeEligible) {
+                gateReasons.put("dynamic_range_not_eligible:" + stepId);
+            }
 
             if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(step.optString("workload_id"))) {
                 compatibilityChecksTotal++;
@@ -165,7 +183,8 @@ final class QualificationScore {
             int samples = analysis == null ? 0 : analysis.optInt("paired_sample_count", 0);
             String classification = analysis == null ? "unavailable"
                     : analysis.optString("classification", "inconclusive");
-            boolean valid = !reportFailure && Double.isFinite(improvement)
+            boolean valid = !reportFailure && workloadVersionConfirmed
+                    && dynamicRangeEligible && Double.isFinite(improvement)
                     && samples >= WorkloadContract.MINIMUM_PAIRED_SAMPLES;
             if (!valid) {
                 category.put("status", "not_rankable")
@@ -234,10 +253,14 @@ final class QualificationScore {
                 && conclusiveSteps[0] >= highConclusive && warnings.length() == 0 ? "high"
                 : validPerformanceSteps[0] >= mediumThreshold
                 && conclusiveSteps[0] >= mediumConclusive ? "medium" : "low";
-        int scoreVersion = profileVersion >= 3 ? Phase11Contract.SCORE_VERSION
+        int scoreVersion = profileVersion >= Phase15DynamicRangeContract.PROFILE_VERSION
+                ? Phase15DynamicRangeContract.SCORE_VERSION
+                : profileVersion >= 3 ? Phase11Contract.SCORE_VERSION
                 : profileVersion >= 2 ? Phase8Contract.CURRENT_QUALIFICATION_SCORE_VERSION
                 : Phase7Contract.SCORE_VERSION;
-        String limitation = profileVersion >= 4
+        String limitation = profileVersion >= Phase15DynamicRangeContract.PROFILE_VERSION
+                ? Phase15DynamicRangeContract.LIMITATION
+                : profileVersion >= 4
                 ? Phase13ValidationContract.limitationForVersion(profileVersion)
                 : profileVersion >= 3 ? Phase11Contract.LIMITATION
                 : profileVersion >= 2 ? Phase8Contract.LIMITATION : Phase7Contract.LIMITATION;

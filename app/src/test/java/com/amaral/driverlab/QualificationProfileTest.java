@@ -17,7 +17,7 @@ public final class QualificationProfileTest {
         JSONObject profile = QualificationProfile.definition();
         assertTrue(QualificationProfile.verify(profile));
         assertEquals(Phase7Contract.PROFILE_ID, profile.getString("profile_id"));
-        assertEquals(5, profile.getInt("profile_version"));
+        assertEquals(6, profile.getInt("profile_version"));
         assertEquals(9, profile.getInt("step_count"));
         assertEquals(9, profile.getInt("automated_logical_test_count"));
         assertEquals(1, profile.getInt("optional_evidence_slot_count"));
@@ -52,20 +52,35 @@ public final class QualificationProfileTest {
         JSONObject v3 = QualificationProfile.definitionForVersion(3);
         JSONObject v4 = QualificationProfile.definitionForVersion(4);
         JSONObject v5 = QualificationProfile.definitionForVersion(5);
+        JSONObject v6 = QualificationProfile.definitionForVersion(6);
         assertTrue(QualificationProfile.verify(v1));
         assertTrue(QualificationProfile.verify(v2));
         assertTrue(QualificationProfile.verify(v3));
         assertTrue(QualificationProfile.verify(v4));
         assertTrue(QualificationProfile.verify(v5));
+        assertTrue(QualificationProfile.verify(v6));
         assertEquals(10, v1.getInt("step_count"));
         assertEquals(13, v2.getInt("step_count"));
         assertEquals(15, v3.getInt("step_count"));
         assertEquals(8, v4.getInt("step_count"));
         assertEquals(9, v5.getInt("step_count"));
+        assertEquals(9, v6.getInt("step_count"));
         assertNotEquals(v1.getString("profile_sha256"), v2.getString("profile_sha256"));
         assertNotEquals(v2.getString("profile_sha256"), v3.getString("profile_sha256"));
         assertNotEquals(v3.getString("profile_sha256"), v4.getString("profile_sha256"));
         assertNotEquals(v4.getString("profile_sha256"), v5.getString("profile_sha256"));
+        assertNotEquals(v5.getString("profile_sha256"), v6.getString("profile_sha256"));
+
+        for (int version = 1; version <= 5; ++version) {
+            JSONArray historical = QualificationProfile.definitionForVersion(version)
+                    .getJSONArray("steps");
+            for (int index = 0; index < historical.length(); ++index) {
+                JSONObject step = historical.getJSONObject(index);
+                if (QualificationProfile.KIND_SUITE.equals(step.getString("step_kind"))) {
+                    assertEquals(1, step.getInt("workload_version"));
+                }
+            }
+        }
     }
 
     @Test

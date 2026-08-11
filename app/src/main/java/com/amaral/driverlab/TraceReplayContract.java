@@ -12,7 +12,8 @@ final class TraceReplayContract {
     static final int TRACE_ANALYSIS_VERSION = 1;
     static final String MIXED_TRACE_ID = "mixed_graphics_compute_barrier";
     static final String COMPUTE_CHAIN_TRACE_ID = "compute_dependency_chain";
-    static final int TRACE_VERSION = 1;
+    static final int LEGACY_TRACE_VERSION = 1;
+    static final int TRACE_VERSION = 2;
     static final int GRAPHICS_WIDTH = 320;
     static final int GRAPHICS_HEIGHT = 180;
     static final int COMPUTE_WORD_COUNT = 65_536;
@@ -33,20 +34,30 @@ final class TraceReplayContract {
     }
 
     static String labelFor(String traceId) {
+        return labelFor(traceId, TRACE_VERSION);
+    }
+
+    static String labelFor(String traceId, int version) {
+        requireVersion(version);
         if (MIXED_TRACE_ID.equals(traceId)) {
-            return "Misto: render pass + compute + barreiras v1";
+            return "Misto: render pass + compute + barreiras v" + version;
         }
         if (COMPUTE_CHAIN_TRACE_ID.equals(traceId)) {
-            return "Compute: cadeia de dependências v1";
+            return "Compute: cadeia de dependências v" + version;
         }
         throw new IllegalArgumentException("Trace desconhecido: " + traceId);
     }
 
     static JSONObject definition(String traceId) throws Exception {
+        return definition(traceId, TRACE_VERSION);
+    }
+
+    static JSONObject definition(String traceId, int version) throws Exception {
+        requireVersion(version);
         if (!isSupported(traceId)) throw new IllegalArgumentException("Trace desconhecido: " + traceId);
         JSONObject definition = new JSONObject();
         definition.put("trace_id", traceId);
-        definition.put("trace_version", TRACE_VERSION);
+        definition.put("trace_version", version);
         definition.put("trace_format_version", TRACE_FORMAT_VERSION);
         definition.put("immutable", true);
         definition.put("primary_metric", WorkloadContract.TRACE_REPLAY_METRIC);
@@ -84,19 +95,31 @@ final class TraceReplayContract {
         }
         definition.put("compute_word_count", COMPUTE_WORD_COUNT);
         definition.put("operations", operations);
+        definition.put("repetition_policy", version >= 2
+                ? "complete_trace_with_state_reset_per_repetition" : "single_trace_per_sample");
         definition.put("limitations", LIMITATION);
         definition.put("definition_sha256", JsonCanonicalizer.sha256(definition));
         return definition;
     }
 
     static JSONObject contractJson(String traceId) throws Exception {
+        return contractJson(traceId, TRACE_VERSION);
+    }
+
+    static JSONObject contractJson(String traceId, int version) throws Exception {
         return new JSONObject()
                 .put("trace_analysis_version", TRACE_ANALYSIS_VERSION)
                 .put("trace_format_version", TRACE_FORMAT_VERSION)
-                .put("selected_trace", definition(traceId))
+                .put("selected_trace", definition(traceId, version))
                 .put("correctness_gate", "exact_output_sha256_before_performance_verdict")
                 .put("isolation", "fresh_runner_process_per_arm")
                 .put("order_policy", "paired_AB_BA_alternating")
                 .put("limitations", LIMITATION);
+    }
+
+    private static void requireVersion(int version) {
+        if (version != LEGACY_TRACE_VERSION && version != TRACE_VERSION) {
+            throw new IllegalArgumentException("Versão de trace desconhecida: " + version);
+        }
     }
 }

@@ -17,6 +17,7 @@ final class QualificationProfile {
         final String label;
         final String kind;
         final String workloadId;
+        final int workloadVersion;
         final String traceId;
         final int rounds;
         final int warmupSeconds;
@@ -30,17 +31,26 @@ final class QualificationProfile {
         Step(String stepId, String label, String workloadId, String traceId,
              int rounds, int warmupSeconds, int measureSeconds, int cooldownSeconds,
              int weight, boolean compatibilityGate) {
-            this(stepId, label, KIND_SUITE, workloadId, traceId, rounds, warmupSeconds,
+            this(stepId, label, KIND_SUITE, workloadId, 1, traceId, rounds, warmupSeconds,
                     measureSeconds, cooldownSeconds, weight, compatibilityGate, 0, 0);
+        }
+
+        Step(String stepId, String label, String workloadId, int workloadVersion,
+             String traceId, int rounds, int warmupSeconds, int measureSeconds,
+             int cooldownSeconds, int weight, boolean compatibilityGate) {
+            this(stepId, label, KIND_SUITE, workloadId, workloadVersion, traceId,
+                    rounds, warmupSeconds, measureSeconds, cooldownSeconds, weight,
+                    compatibilityGate, 0, 0);
         }
 
         Step(String stepId, String label, String kind, int cooldownSeconds,
              int weight, boolean compatibilityGate, int diagnosticCycles, int memoryMiB) {
-            this(stepId, label, kind, "", "", 0, 0, 0, cooldownSeconds, weight,
+            this(stepId, label, kind, "", 0, "", 0, 0, 0, cooldownSeconds, weight,
                     compatibilityGate, diagnosticCycles, memoryMiB);
         }
 
         private Step(String stepId, String label, String kind, String workloadId,
+                     int workloadVersion,
                      String traceId, int rounds, int warmupSeconds, int measureSeconds,
                      int cooldownSeconds, int weight, boolean compatibilityGate,
                      int diagnosticCycles, int memoryMiB) {
@@ -48,6 +58,7 @@ final class QualificationProfile {
             this.label = label;
             this.kind = kind;
             this.workloadId = workloadId == null ? "" : workloadId;
+            this.workloadVersion = workloadVersion;
             this.traceId = traceId == null ? "" : traceId;
             this.rounds = rounds;
             this.warmupSeconds = warmupSeconds;
@@ -69,10 +80,10 @@ final class QualificationProfile {
                     .put("cooldown_seconds", cooldownSeconds);
             if (KIND_SUITE.equals(kind)) {
                 output.put("workload_id", workloadId)
-                        .put("workload_version", WorkloadContract.versionFor(workloadId))
+                        .put("workload_version", workloadVersion)
                         .put("trace_id", traceId.isEmpty() ? JSONObject.NULL : traceId)
                         .put("trace_version", traceId.isEmpty() ? JSONObject.NULL
-                                : TraceReplayContract.definition(traceId)
+                                : TraceReplayContract.definition(traceId, workloadVersion)
                                 .optInt("trace_version", 1))
                         .put("rounds", rounds)
                         .put("warmup_seconds", warmupSeconds)
@@ -95,7 +106,7 @@ final class QualificationProfile {
 
     private QualificationProfile() {}
 
-    static int currentVersion() { return Phase13ValidationContract.PROFILE_VERSION; }
+    static int currentVersion() { return Phase15DynamicRangeContract.PROFILE_VERSION; }
     static List<Step> steps() { return stepsForVersion(currentVersion()); }
 
     static List<Step> stepsForVersion(int version) {
@@ -106,6 +117,7 @@ final class QualificationProfile {
             return recommendedV4Steps();
         }
         if (version == Phase13ValidationContract.PROFILE_VERSION) return recommendedV5Steps();
+        if (version == Phase15DynamicRangeContract.PROFILE_VERSION) return recommendedV6Steps();
         throw new IllegalArgumentException("Versão de Qualification desconhecida: " + version);
     }
 
@@ -254,6 +266,30 @@ final class QualificationProfile {
         return Collections.unmodifiableList(output);
     }
 
+    private static List<Step> recommendedV6Steps() {
+        List<Step> output = new ArrayList<>();
+        output.add(new Step("correctness_pre", "Correção offscreen inicial",
+                WorkloadContract.RENDER_CORRECTNESS_ID, 1, "", 3, 0, 1, 2, 0, true));
+        output.add(new Step("visual_geometry", "Cena visível: geometria e depth",
+                VisualSceneContract.GEOMETRY_ID, 2, "", 5, 1, 5, 2, 15, true));
+        output.add(new Step("visual_materials", "Cena visível: materiais e amostragem",
+                VisualSceneContract.MATERIALS_ID, 2, "", 5, 1, 5, 2, 10, true));
+        output.add(new Step("visual_postprocess", "Cena visível: pós-processamento",
+                VisualSceneContract.POSTPROCESS_ID, 2, "", 5, 1, 5, 2, 10, true));
+        output.add(new Step("visual_gpu_stress", "Cena avançada: GPU Stress 3D 720p",
+                VisualSceneContract.GPU_STRESS_ID, 2, "", 5, 1, 5, 2, 20, true));
+        output.add(new Step("shader_compile", "Compilação cold de shaders",
+                WorkloadContract.SHADER_COMPILE_ID, 2, "", 5, 1, 1, 2, 10, false));
+        output.add(new Step("stable_scene", "Frametime da cena estável",
+                WorkloadContract.STABLE_SCENE_ID, 2, "", 5, 2, 6, 2, 25, false));
+        output.add(new Step("trace_mixed", "Trace gráfico, compute e barreiras",
+                WorkloadContract.TRACE_REPLAY_ID, 2, TraceReplayContract.MIXED_TRACE_ID,
+                5, 2, 5, 2, 10, true));
+        output.add(new Step("correctness_post", "Correção offscreen após carga",
+                WorkloadContract.RENDER_CORRECTNESS_ID, 1, "", 3, 0, 1, 0, 0, true));
+        return Collections.unmodifiableList(output);
+    }
+
     static JSONObject definition() throws Exception { return definitionForVersion(currentVersion()); }
 
     static JSONObject definitionForVersion(int version) throws Exception {
@@ -266,10 +302,14 @@ final class QualificationProfile {
         String label = version == 1 ? Phase7Contract.PROFILE_LABEL
                 : version == 2 ? Phase8Contract.FULL_PROFILE_LABEL
                 : version == 3 ? Phase11Contract.PROFILE_LABEL
+                : version == Phase15DynamicRangeContract.PROFILE_VERSION
+                ? Phase15DynamicRangeContract.PROFILE_LABEL
                 : Phase13ValidationContract.profileLabelForVersion(version);
         String limitations = version == 1 ? Phase7Contract.LIMITATION
                 : version == 2 ? Phase8Contract.LIMITATION
                 : version == 3 ? Phase11Contract.LIMITATION
+                : version == Phase15DynamicRangeContract.PROFILE_VERSION
+                ? Phase15DynamicRangeContract.LIMITATION
                 : Phase13ValidationContract.limitationForVersion(version);
         JSONObject definition = new JSONObject()
                 .put("profile_id", Phase7Contract.PROFILE_ID)
@@ -306,7 +346,8 @@ final class QualificationProfile {
             int version = profile.optInt("profile_version", -1);
             if (version != 1 && version != 2 && version != 3
                     && version != Phase13ValidationContract.LEGACY_PROFILE_VERSION
-                    && version != Phase13ValidationContract.PROFILE_VERSION) return false;
+                    && version != Phase13ValidationContract.PROFILE_VERSION
+                    && version != Phase15DynamicRangeContract.PROFILE_VERSION) return false;
             JSONArray steps = profile.optJSONArray("steps");
             if (steps == null || steps.length() != stepsForVersion(version).size()) return false;
             String expected = profile.optString("profile_sha256", "");

@@ -53,6 +53,10 @@ final class QualificationReport {
                     if (definition != null && QualificationProfile.KIND_SUITE.equals(definition.kind)) {
                         compact.put("workload_id", result.optString("workload_id"))
                                 .put("workload_version", result.optInt("workload_version", 1))
+                                .put("workload_version_audit",
+                                        result.opt("workload_version_audit"))
+                                .put("dynamic_range_calibration",
+                                        result.opt("dynamic_range_calibration"))
                                 .put("verdict", result.optString("verdict", "unknown"))
                                 .put("validity_warnings", result.optJSONArray("validity_warnings"))
                                 .put("failure_catalog", result.optJSONArray("failure_catalog"))
@@ -103,10 +107,14 @@ final class QualificationReport {
         optimization.put("driver_identity_audit", driverIdentityAudit);
         optimization.put("format_change_note",
                 "Campos de identidade são aditivos; format_version permanece 2.");
-        int reportVersion = profileVersion >= 3 ? Phase11Contract.REPORT_VERSION
+        int reportVersion = profileVersion >= Phase15DynamicRangeContract.PROFILE_VERSION
+                ? Phase15DynamicRangeContract.REPORT_VERSION
+                : profileVersion >= 3 ? Phase11Contract.REPORT_VERSION
                 : profileVersion >= 2 ? Phase8Contract.CURRENT_QUALIFICATION_REPORT_VERSION
                 : Phase7Contract.REPORT_VERSION;
-        String limitation = profileVersion >= 4
+        String limitation = profileVersion >= Phase15DynamicRangeContract.PROFILE_VERSION
+                ? Phase15DynamicRangeContract.LIMITATION
+                : profileVersion >= 4
                 ? Phase13ValidationContract.limitationForVersion(profileVersion)
                 : profileVersion >= 3 ? Phase11Contract.LIMITATION
                 : profileVersion >= 2 ? Phase8Contract.LIMITATION : Phase7Contract.LIMITATION;
@@ -126,10 +134,16 @@ final class QualificationReport {
                         ? Phase11Contract.contractJson() : JSONObject.NULL)
                 .put("phase12_contract", Phase12Contract.contractJson())
                 .put("phase13_validation_contract", profileVersion >= 4
+                        && profileVersion <= Phase13ValidationContract.PROFILE_VERSION
                         ? Phase13ValidationContract.contractJson(profileVersion) : JSONObject.NULL)
+                .put("phase15_dynamic_range_contract", profileVersion
+                        == Phase15DynamicRangeContract.PROFILE_VERSION
+                        ? Phase15DynamicRangeContract.contractJson() : JSONObject.NULL)
                 .put("profile_id", Phase7Contract.PROFILE_ID)
                 .put("profile_version", profileVersion)
                 .put("profile_sha256", manifest.getString("profile_sha256"))
+                .put("workload_version_audit",
+                        WorkloadVersionIdentity.aggregateQualification(scoredSteps))
                 .put("driver", driver)
                 .put("comparison_mode", comparisonMode)
                 .put("reference_driver", referenceDriver == null
