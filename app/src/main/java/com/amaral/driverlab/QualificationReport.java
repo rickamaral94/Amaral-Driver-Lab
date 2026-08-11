@@ -25,7 +25,10 @@ final class QualificationReport {
             QualificationProfile.Step definition = QualificationProfile.step(profileVersion, stepId);
             JSONObject scored = new JSONObject()
                     .put("step_id", stepId)
-                    .put("status", state.optString("status"));
+                    .put("status", state.optString("status"))
+                    .put("expected_identity_process_count", definition == null ? 0
+                            : QualificationProfile.KIND_SUITE.equals(definition.kind)
+                            ? Math.max(1, definition.rounds) * 2 : 2);
             JSONObject compact = new JSONObject()
                     .put("step_id", stepId)
                     .put("step_kind", definition == null ? state.optString("step_kind", "unknown")
@@ -44,6 +47,9 @@ final class QualificationReport {
                 if (resultFile != null && resultFile.isFile()) {
                     JSONObject result = new JSONObject(ResultFiles.readUtf8(resultFile));
                     scored.put("report", result);
+                    compact.put("driver_identity_audit",
+                            result.has("driver_identity_audit")
+                                    ? result.opt("driver_identity_audit") : JSONObject.NULL);
                     if (definition != null && QualificationProfile.KIND_SUITE.equals(definition.kind)) {
                         compact.put("workload_id", result.optString("workload_id"))
                                 .put("workload_version", result.optInt("workload_version", 1))
@@ -78,9 +84,12 @@ final class QualificationReport {
                     .put("device_key", "unknown");
         }
 
+        JSONObject driverIdentityAudit = ValidationDriverIdentity.aggregateQualification(
+                scoredSteps);
         JSONObject score = QualificationScore.evaluate(
                 manifest.getJSONObject("profile"), scoredSteps,
-                manifest.getJSONObject("preflight"), environmentComparison);
+                manifest.getJSONObject("preflight"), environmentComparison,
+                driverIdentityAudit);
         JSONObject driver = manifest.getJSONObject("driver");
         String comparisonMode = manifest.optString("comparison_mode", "system_vs_turnip");
         JSONObject referenceDriver = manifest.optJSONObject("reference_driver");
@@ -91,6 +100,9 @@ final class QualificationReport {
         JSONObject human = humanSummary(driver, referenceDriver, comparisonMode, score);
         JSONObject optimization = QualificationOptimizationReport.build(
                 manifest, scoredSteps, hardware, score);
+        optimization.put("driver_identity_audit", driverIdentityAudit);
+        optimization.put("format_change_note",
+                "Campos de identidade são aditivos; format_version permanece 2.");
         int reportVersion = profileVersion >= 3 ? Phase11Contract.REPORT_VERSION
                 : profileVersion >= 2 ? Phase8Contract.CURRENT_QUALIFICATION_REPORT_VERSION
                 : Phase7Contract.REPORT_VERSION;
@@ -122,6 +134,15 @@ final class QualificationReport {
                 .put("comparison_mode", comparisonMode)
                 .put("reference_driver", referenceDriver == null
                         ? JSONObject.NULL : referenceDriver)
+                .put("driver_identity_audit", driverIdentityAudit)
+                .put("driver_identity_confidence",
+                        driverIdentityAudit.getString("driver_identity_confidence"))
+                .put("driver_identity_policy_version",
+                        driverIdentityAudit.getInt("driver_identity_policy_version"))
+                .put("identity_observation_coverage",
+                        driverIdentityAudit.getJSONObject("identity_observation_coverage"))
+                .put("loader_isolation_verified",
+                        driverIdentityAudit.get("loader_isolation_verified"))
                 .put("hardware_identity", hardware)
                 .put("preflight", manifest.getJSONObject("preflight"))
                 .put("final_environment", finalEnvironment)

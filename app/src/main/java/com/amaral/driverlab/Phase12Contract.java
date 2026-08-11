@@ -5,7 +5,7 @@ import org.json.JSONObject;
 
 final class Phase12Contract {
     static final int LOCALIZATION_SCHEMA_VERSION = 1;
-    static final int RESULT_SCHEMA_VERSION = 13;
+    static final int RESULT_SCHEMA_VERSION = 14;
     static final String DEFAULT_FALLBACK_LANGUAGE = "en";
     static final String[] SUPPORTED_LANGUAGE_TAGS = {
             "pt-BR", "en", "es", "fr", "de", "it", "ja", "zh-CN"

@@ -2,13 +2,13 @@
 
 Cada suíte grava `files/runs/suite-<timestamp>/suite.json`. Cada processo isolado grava um `phase-*.json`; workloads de correção também preservam um `phase-*.png` lossless como evidência visual.
 
-## Versão atual: `schema_version = 13`
+## Versão atual: `schema_version = 14`
 
-A versão 13 é uma evolução **aditiva e compatível** das versões anteriores. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
+A versão 14 adiciona a auditoria de identidade runtime. Workloads e métricas permanecem nas mesmas versões, mas rankings, scores e datasets públicos passam a excluir resultados sem identidade confirmada. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
 
 | Campo | Significado |
 |---|---|
-| `schema_version` | Versão do formato do resultado; atualmente `13` |
+| `schema_version` | Versão do formato do resultado; atualmente `14` |
 | `suite_id` | Identificador local imutável da suíte |
 | `app_version` | Versão do APK que gerou o resultado |
 | `mode` | `system_only`, `candidate_only` ou `ab_system_vs_candidate` |
@@ -26,6 +26,9 @@ A versão 13 é uma evolução **aditiva e compatível** das versões anteriores
 | `failure_catalog[]` | Crashes, timeouts, erros Vulkan, validation errors e mismatches |
 | `verdict` | Veredito explícito da suíte |
 | `validity_warnings[]` | Condições que pedem repetição ou cautela |
+| `driver_identity_audit` | Reconciliação do pacote solicitado com propriedades Vulkan observadas por processo |
+| `identity_observation_coverage` | Quantidade de processos esperados, observados e ausentes |
+| `loader_isolation_verified` | `true`, `false` ou `not_determinable` |
 
 ## Contrato do workload legado de transferência
 
@@ -652,6 +655,155 @@ O manifesto e o relatório Full adicionam `comparison_mode` (`system_vs_turnip` 
 
 ### Recommended Validation v2 · profile v5
 
-O schema permanece 13. O perfil `turnip_full_qualification/v5` adiciona `visual_scene_gpu_stress/v1` como a nona etapa do Teste Full Recomendado. A etapa usa `step_id = visual_gpu_stress`, peso 20 e `compatibility_gate = true`. Os pesos do perfil somam 100; seis das sete categorias de performance precisam ser válidas para uma recomendação.
+O perfil `turnip_full_qualification/v5` nasceu no schema 13 e adiciona `visual_scene_gpu_stress/v1` como a nona etapa do Teste Full Recomendado. A etapa usa `step_id = visual_gpu_stress`, peso 20 e `compatibility_gate = true`. Os pesos do perfil somam 100; seis das sete categorias de performance precisam ser válidas para uma recomendação. Novas execuções usam schema 14 somente por causa da auditoria de identidade; o perfil e sua metodologia permanecem v5.
 
 O perfil v4 continua verificável com sua definição, hash, oito etapas e limiares originais. Resultados v4 e v5 nunca entram no mesmo ranking. Full v1–v3 também permanecem séries históricas independentes.
+
+## Emulator log schema v2 — identidade do driver
+
+O relatório de log de emulador usa schema próprio e passa de `schema_version = 1` para
+`schema_version = 2`. Esse schema é independente do `suite.json` de validação, atualmente em
+schema 14, e não modifica qualquer `workload_version`.
+
+```json
+{
+  "schema_version": 2,
+  "driver": "qualcomm_blob",
+  "driver_display_name": "Qualcomm Proprietary",
+  "driver_identity_confidence": "runtime_confirmed",
+  "driver_identity_policy_version": 2,
+  "driver_identity_evidence": [
+    {
+      "block": 1,
+      "source": "runtime_emulator",
+      "priority": 1,
+      "line": 49,
+      "content": "[GPU Logging] ... driver: Qualcomm Proprietary",
+      "identity": "qualcomm_blob",
+      "strength": "identity"
+    }
+  ],
+  "driver_identity_blocks": [
+    {
+      "block": 1,
+      "start_line": 1,
+      "end_line": 60,
+      "driver": "qualcomm_blob",
+      "driver_identity_confidence": "runtime_confirmed"
+    }
+  ]
+}
+```
+
+Valores canônicos de `driver`: `qualcomm_blob`, `turnip`, `other`, `unknown`.
+
+Valores de confiança:
+
+- `runtime_confirmed`: identidade nominal confirmada por evidência de runtime/Vulkan;
+- `inferred`: apenas configuração ou ausência de evidência conclusiva;
+- `disputed`: fontes ou blocos discordam, ou só existe padrão de versão ambíguo;
+- `unaudited`: valor produzido pelo leitor ao abrir relatório schema v1 sem auditoria.
+
+A ordem das fontes é runtime do emulador, propriedades Vulkan e configuração. Vendor explícito
+`Qualcomm Proprietary`/`Qualcomm Technologies` tem veto sobre a identidade canônica, mas qualquer
+evidência contrária permanece publicada e torna a confiança `disputed`. Versão de blob ou Mesa,
+isoladamente, nunca determina a identidade.
+
+Relatórios schema v1 continuam legíveis, porém a identidade neles é `unaudited`. Consultas e
+agregações por driver aceitam somente identidade conhecida com `runtime_confirmed`; `unknown`,
+`inferred`, `disputed` e `unaudited` ficam de fora. Portanto, séries históricas baseadas no rótulo
+livre de schema v1 não são comparáveis com agregações de identidade auditada do schema v2.
+
+Essa métrica identifica o driver declarado no log; ela não prova causalidade entre o driver e um
+erro do emulador, nem desempenho em jogos.
+
+## Fase 1b — identidade runtime da validação
+
+O `suite.json` passa para schema 14 e registra, em cada processo `:runner`, o pacote solicitado, o
+SHA-256 da biblioteca solicitada e as propriedades Vulkan retornadas depois da inicialização. O
+`meta.json` continua sendo evidência não confiável de intenção; nunca confirma identidade sozinho.
+
+```json
+{
+  "schema_version": 14,
+  "driver_identity_confidence": "runtime_confirmed",
+  "identity_observation_coverage": {
+    "expected_process_count": 18,
+    "observed_process_count": 18,
+    "missing_process_count": 0,
+    "coverage_percent": 100.0,
+    "coverage_class": "full"
+  },
+  "loader_isolation_verified": "not_determinable",
+  "driver_identity_audit": {
+    "driver_identity_policy_version": 2,
+    "eligible_for_aggregation": true,
+    "candidate": {
+      "driver": "turnip",
+      "driver_identity_confidence": "runtime_confirmed",
+      "requested_package_sha256": "...",
+      "effective_loaded_library_sha256": null
+    },
+    "reference": {},
+    "runtime_observations": []
+  }
+}
+```
+
+### Tabela-verdade de cobertura
+
+| Cobertura | Identidades runtime | Conflito com pacote | Saída |
+|---|---|---|---|
+| 100% | uma identidade conhecida | não | `runtime_confirmed` |
+| parcial | uma identidade conhecida | não | `inferred` |
+| qualquer | divergentes | qualquer | `disputed` |
+| qualquer | vendor Qualcomm explícito + outra evidência | qualquer | identidade `qualcomm_blob`, confiança `disputed` |
+| nenhuma | nenhuma | qualquer | identidade `unknown`, confiança `inferred` |
+| relatório schema 1–13 | não auditado | não aplicável | `unaudited` no leitor |
+
+Vendor Qualcomm explícito vence a identidade canônica, mas não apaga o conflito. Um braço
+`qualcomm_blob` solicitado como Turnip permanece `disputed`.
+
+### Família não é build
+
+`runtime_confirmed` prova a família do driver, não o build. Dois pacotes Turnip diferentes podem
+retornar `VK_DRIVER_ID_MESA_TURNIP`, `driverName` e `driverInfo` idênticos. A versão fixada do
+`libadrenotools` não expõe o caminho/hash do DSO customizado efetivamente carregado; por isso
+`effective_loaded_library_sha256` é `null` e o caso v1 × v3 idêntico usa
+`loader_isolation_verified = not_determinable`. O SHA-256 da biblioteca solicitada prova somente o
+arquivo entregue ao loader. O sistema nunca converte essa evidência em prova do build carregado.
+
+`driverVersion` é preservado em `driver_version_raw` e `driver_version_decoded`. O valor bruto tem
+codificação específica por fornecedor e nunca é comparado entre fornecedores diferentes.
+`conformance_version` é `null` quando `VK_KHR_driver_properties`/Vulkan 1.2 não o expõe; nunca se
+inventa `0.0.0.0`.
+
+### Integridade do loader
+
+- `true`: propriedades runtime diferentes demonstram que os braços não reutilizaram a mesma
+  identidade observável;
+- `false`: reservado para contradição futura comprovada pelo hash do DSO efetivamente carregado;
+- `not_determinable`: as propriedades são idênticas e não existe hash efetivo para separar builds.
+
+### Elegibilidade e histórico
+
+Somente `runtime_confirmed` entra em score, ranking, bisect ou dataset público. Resultados schema
+1–13 são lidos como `unaudited` e permanecem visíveis no histórico. Rankings v2 exibem
+`excluded_by_identity_count`, a contagem por `unaudited`/`inferred`/`disputed` e apontam este
+critério, evitando que o ranking encolha silenciosamente.
+
+### Versionamento da Fase 1b
+
+| Contrato | Antes → agora | Motivo |
+|---|---:|---|
+| `suite.json schema_version` | 13 → 14 | formato aditivo: novos blocos de identidade |
+| `qualification_schema_version` | 3 → 4 | formato: manifesto novo declara política auditada; v3 segue legível |
+| `qualification_report_version` | 3 → 4 | significado: recomendação passa a exigir identidade confirmada |
+| `qualification_score_version` | 3 → 4 | significado: identidade não confirmada bloqueia score/recomendação |
+| `ranking_version` | 1 → 2 | significado: exclui resultados não confirmados e publica contagens |
+| `public_dataset_schema_version` | 1 → 2 | significado: publicação exige identidade confirmada |
+| `optimization_report.format_version` | 2 → 2 | sem bump: apenas campos aditivos, sem mudança de interpretação existente |
+
+O Full Recomendado permanece `profile_version = 5`; `workload_version`, comandos, shaders,
+resoluções, amostras e fórmulas permanecem inalterados. Esta fase não recalibra workloads nem
+corrige a estatística das fases seguintes.

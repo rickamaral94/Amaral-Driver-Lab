@@ -37,4 +37,17 @@ public final class PublicDatasetEnvelopeTest {
             assertTrue(expected.getMessage().contains("bloqueante"));
         }
     }
+
+    @Test
+    public void rejectsUnauditedHistoricalIdentity() throws Exception {
+        JSONObject report = Phase4TestData.report("legacy", Phase4TestData.sha('a'),
+                "driver-a", 5.0, "candidate_better", 1L);
+        report.put("schema_version", 13).remove("driver_identity_audit");
+        try {
+            PublicDatasetEnvelope.create(SuiteRecord.parse(null, report));
+            fail("Expected unaudited identity rejection");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("não confirmada"));
+        }
+    }
 }

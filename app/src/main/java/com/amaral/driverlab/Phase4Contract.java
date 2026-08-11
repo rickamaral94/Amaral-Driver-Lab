@@ -5,9 +5,9 @@ import org.json.JSONObject;
 final class Phase4Contract {
     static final int CATALOG_VERSION = 1;
     static final int SUITE_DIFF_VERSION = 1;
-    static final int RANKING_VERSION = 1;
+    static final int RANKING_VERSION = 2;
     static final int BISECT_VERSION = 1;
-    static final int PUBLIC_DATASET_SCHEMA_VERSION = 1;
+    static final int PUBLIC_DATASET_SCHEMA_VERSION = 2;
     static final int MAX_LOCAL_SUITES = 1_000;
     static final long MAX_IMPORTED_SUITE_BYTES = 2L * 1024L * 1024L;
 
@@ -16,7 +16,9 @@ final class Phase4Contract {
                     + "hardware, workload, versão, configuração e analysis_version; bisect assume "
                     + "uma sequência ordenada e regressão monotônica. O envelope público remove "
                     + "identificadores diretos, mas SoC, GPU, workload e hash do ZIP continuam "
-                    + "sendo identificadores técnicos potencialmente correlacionáveis.";
+                    + "sendo identificadores técnicos potencialmente correlacionáveis. Rankings "
+                    + "v2 e datasets públicos v2 excluem identidade não auditada, inferida ou "
+                    + "disputada e informam quantos resultados foram excluídos.";
 
     private Phase4Contract() {}
 

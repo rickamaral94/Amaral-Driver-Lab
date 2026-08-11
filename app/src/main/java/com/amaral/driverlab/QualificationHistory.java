@@ -22,6 +22,9 @@ final class QualificationHistory {
         File root = new File(filesDir, "qualifications");
         File[] directories = root.listFiles(File::isDirectory);
         List<JSONObject> entries = new ArrayList<>();
+        int excludedUnaudited = 0;
+        int excludedInferred = 0;
+        int excludedDisputed = 0;
         if (directories != null) {
             for (File directory : directories) {
                 File reportFile = new File(directory, "report.json");
@@ -38,6 +41,21 @@ final class QualificationHistory {
                     String reportReferenceSha = reportReference == null ? "system"
                             : reportReference.optString("sha256", "unknown");
                     if (!referenceDriverSha.equals(reportReferenceSha)) continue;
+                    JSONObject identityAudit = report.optJSONObject("driver_identity_audit");
+                    String identityConfidence = identityAudit == null
+                            ? (report.optInt("schema_version", 1) < 14
+                            ? DriverIdentityPolicy.UNAUDITED : DriverIdentityPolicy.INFERRED)
+                            : identityAudit.optString("driver_identity_confidence",
+                            DriverIdentityPolicy.INFERRED);
+                    if (identityAudit == null
+                            || !identityAudit.optBoolean("eligible_for_aggregation", false)) {
+                        if (DriverIdentityPolicy.DISPUTED.equals(identityConfidence)) {
+                            excludedDisputed++;
+                        } else if (DriverIdentityPolicy.UNAUDITED.equals(identityConfidence)) {
+                            excludedUnaudited++;
+                        } else excludedInferred++;
+                        continue;
+                    }
                     JSONObject score = report.optJSONObject("score");
                     if (score == null || !score.optBoolean("eligible_for_recommendation", false)) {
                         continue;
@@ -80,6 +98,14 @@ final class QualificationHistory {
                 .put("comparison_mode", comparisonMode)
                 .put("reference_driver_sha256", referenceDriverSha)
                 .put("eligible_entry_count", entries.size())
+                .put("excluded_by_identity_count",
+                        excludedUnaudited + excludedInferred + excludedDisputed)
+                .put("excluded_by_identity", new JSONObject()
+                        .put("unaudited", excludedUnaudited)
+                        .put("inferred", excludedInferred)
+                        .put("disputed", excludedDisputed))
+                .put("identity_eligibility_criterion",
+                        ValidationDriverIdentity.CRITERION_DOC)
                 .put("current_rank", referenceRank == 0 ? JSONObject.NULL : referenceRank)
                 .put("entries", encoded)
                 .put("limitations", "Compara somente Full Qualification com mesmo perfil, hardware, modo de comparação e driver de referência.");

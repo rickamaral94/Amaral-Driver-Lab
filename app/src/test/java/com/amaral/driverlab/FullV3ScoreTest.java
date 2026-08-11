@@ -14,7 +14,7 @@ public final class FullV3ScoreTest {
         JSONObject profile = QualificationProfile.definitionForVersion(3);
         JSONObject score = QualificationScore.evaluate(profile, completed(false, false),
                 cleanPreflight(), cleanEnvironment());
-        assertEquals(3, score.getInt("qualification_score_version"));
+        assertEquals(4, score.getInt("qualification_score_version"));
         assertTrue(score.getBoolean("eligible_for_recommendation"));
         assertEquals("candidate", score.getString("winner"));
         assertEquals(100.0, score.getDouble("compatibility_index"), 0.0);
@@ -40,6 +40,22 @@ public final class FullV3ScoreTest {
         assertFalse(score.getBoolean("eligible_for_recommendation"));
         assertTrue(score.getJSONArray("gate_reasons").toString()
                 .contains("candidate_soak_failed"));
+    }
+
+    @Test
+    public void unconfirmedRuntimeIdentityBlocksRecommendation() throws Exception {
+        JSONObject identityAudit = new JSONObject()
+                .put("driver_identity_confidence", "inferred")
+                .put("eligible_for_aggregation", false);
+        JSONObject score = QualificationScore.evaluate(
+                QualificationProfile.definitionForVersion(3), completed(false, false),
+                cleanPreflight(), cleanEnvironment(), identityAudit);
+
+        assertFalse(score.getBoolean("eligible_for_recommendation"));
+        assertFalse(score.getBoolean("driver_identity_eligible"));
+        assertEquals("low", score.getString("confidence"));
+        assertTrue(score.getJSONArray("gate_reasons").toString()
+                .contains("driver_identity_not_runtime_confirmed:inferred"));
     }
 
     private static JSONArray completed(boolean formatRegression, boolean soakFailure)

@@ -15,6 +15,12 @@ final class QualificationScore {
     static JSONObject evaluate(JSONObject profile, JSONArray completedSteps,
                                JSONObject preflight, JSONObject environmentComparison)
             throws Exception {
+        return evaluate(profile, completedSteps, preflight, environmentComparison, null);
+    }
+
+    static JSONObject evaluate(JSONObject profile, JSONArray completedSteps,
+                               JSONObject preflight, JSONObject environmentComparison,
+                               JSONObject driverIdentityAudit) throws Exception {
         if (!QualificationProfile.verify(profile)) {
             throw new IllegalArgumentException("Perfil Full Qualification inválido");
         }
@@ -37,6 +43,13 @@ final class QualificationScore {
         copyArray(preflight.optJSONObject("evaluation"), "warnings", warnings);
         copyArray(environmentComparison, "blockers", gateReasons);
         copyArray(environmentComparison, "warnings", warnings);
+        boolean identityEligible = driverIdentityAudit == null
+                || driverIdentityAudit.optBoolean("eligible_for_aggregation", false);
+        if (!identityEligible) {
+            gateReasons.put("driver_identity_not_runtime_confirmed:"
+                    + driverIdentityAudit.optString("driver_identity_confidence",
+                    DriverIdentityPolicy.INFERRED));
+        }
 
         List<JSONObject> categories = new ArrayList<>();
         double[] weightedImprovement = {0.0};
@@ -217,7 +230,7 @@ final class QualificationScore {
         int mediumConclusive = profileVersion >= 4
                 ? Phase13ValidationContract
                 .mediumConfidenceConclusiveCategoriesForVersion(profileVersion) : 4;
-        String confidence = validPerformanceSteps[0] >= highThreshold
+        String confidence = !identityEligible ? "low" : validPerformanceSteps[0] >= highThreshold
                 && conclusiveSteps[0] >= highConclusive && warnings.length() == 0 ? "high"
                 : validPerformanceSteps[0] >= mediumThreshold
                 && conclusiveSteps[0] >= mediumConclusive ? "medium" : "low";
@@ -232,6 +245,7 @@ final class QualificationScore {
         return new JSONObject()
                 .put("qualification_score_version", scoreVersion)
                 .put("eligible_for_recommendation", eligible)
+                .put("driver_identity_eligible", identityEligible)
                 .put("compatibility_gate_passed", gateReasons.length() == 0)
                 .put("compatibility_index", compatibilityIndex)
                 .put("compatibility_score", profileVersion >= 3

@@ -206,6 +206,8 @@ public final class RunnerActivity extends LocalizedActivity {
                             ? JSONObject.NULL : driverDisplayName);
             result.put("driver_sha256", driverSha == null || driverSha.isEmpty()
                     ? JSONObject.NULL : driverSha);
+            result.put("requested_library_sha256",
+                    DriverExecutionIdentity.requestedLibrarySha256(driverDir, driverName));
             result.put("driver_metadata", driverMeta == null || driverMeta.isEmpty()
                     ? JSONObject.NULL : new JSONObject(driverMeta));
             beforeSnapshot = DeviceSnapshot.capture(this);
@@ -260,7 +262,10 @@ public final class RunnerActivity extends LocalizedActivity {
             }
 
             JSONObject nativeResult = new JSONObject(nativeJson);
+            DriverExecutionIdentity.normalizeRuntimeCapabilities(nativeResult);
             result.put("native", nativeResult);
+            result.put("runtime_driver_identity",
+                    ValidationDriverIdentity.runtimeIdentity(nativeResult));
             boolean nativeSuccess = nativeResult.optBoolean("success", false);
             if (nativeSuccess && WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
                 result.put("evidence", finalizeRenderEvidence(resultFile, rawEvidence, nativeResult));

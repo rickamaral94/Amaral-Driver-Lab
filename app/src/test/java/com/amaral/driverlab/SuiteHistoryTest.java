@@ -29,4 +29,23 @@ public final class SuiteHistoryTest {
         assertEquals(6.0,
                 entries.getJSONObject(0).getDouble("median_improvement_percent"), 0.0001);
     }
+
+    @Test
+    public void rankingExplainsHistoricalUnauditedExclusions() throws Exception {
+        JSONObject legacy = Phase4TestData.report("legacy", Phase4TestData.sha('a'),
+                "driver-a", 4.0, "candidate_better", 1L);
+        legacy.put("schema_version", 13).remove("driver_identity_audit");
+        SuiteRecord legacyRecord = SuiteRecord.parse(null, legacy);
+        JSONObject current = Phase4TestData.report("current", Phase4TestData.sha('b'),
+                "driver-b", 5.0, "candidate_better", 2L);
+        SuiteRecord currentRecord = SuiteRecord.parse(null, current);
+
+        JSONObject ranking = SuiteHistory.ranking(
+                java.util.Arrays.asList(legacyRecord, currentRecord), currentRecord);
+
+        assertEquals(1, ranking.getInt("excluded_by_identity_count"));
+        assertEquals(1, ranking.getJSONObject("excluded_by_identity").getInt("unaudited"));
+        assertTrue(ranking.getString("identity_eligibility_criterion")
+                .contains("RESULT_SCHEMA.md"));
+    }
 }

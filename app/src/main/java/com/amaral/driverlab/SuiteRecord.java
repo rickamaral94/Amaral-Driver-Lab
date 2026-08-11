@@ -28,6 +28,8 @@ final class SuiteRecord {
     final String classification;
     final String verdict;
     final boolean blockingValidity;
+    final String driverIdentityConfidence;
+    final boolean identityEligibleForAggregation;
     final List<String> warnings;
 
     private SuiteRecord(File file, JSONObject report, JSONObject hardware,
@@ -57,6 +59,15 @@ final class SuiteRecord {
         classification = analysis == null ? "not_applicable"
                 : analysis.optString("classification", "inconclusive");
         verdict = report.optString("verdict", "unknown");
+        JSONObject identityAudit = report.optJSONObject("driver_identity_audit");
+        driverIdentityConfidence = identityAudit == null
+                ? (schemaVersion < 14 ? DriverIdentityPolicy.UNAUDITED
+                : DriverIdentityPolicy.INFERRED)
+                : identityAudit.optString("driver_identity_confidence",
+                DriverIdentityPolicy.INFERRED);
+        identityEligibleForAggregation = identityAudit != null
+                && identityAudit.optBoolean("eligible_for_aggregation", false)
+                && DriverIdentityPolicy.RUNTIME_CONFIRMED.equals(driverIdentityConfidence);
         this.blockingValidity = blockingValidity;
         this.warnings = warnings;
     }
@@ -101,6 +112,8 @@ final class SuiteRecord {
         output.put("classification", classification);
         output.put("verdict", verdict);
         output.put("blocking_validity", blockingValidity);
+        output.put("driver_identity_confidence", driverIdentityConfidence);
+        output.put("identity_eligible_for_aggregation", identityEligibleForAggregation);
         return output;
     }
 

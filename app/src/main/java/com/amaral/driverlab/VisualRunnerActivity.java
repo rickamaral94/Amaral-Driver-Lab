@@ -230,6 +230,9 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                                     ? JSONObject.NULL : driverDisplayName)
                     .put("driver_sha256", driverSha == null || driverSha.isEmpty()
                             ? JSONObject.NULL : driverSha)
+                    .put("requested_library_sha256",
+                            DriverExecutionIdentity.requestedLibrarySha256(
+                                    driverDir, driverName))
                     .put("driver_metadata", driverMetadata == null || driverMetadata.isEmpty()
                             ? JSONObject.NULL : new JSONObject(driverMetadata));
             beforeSnapshot = DeviceSnapshot.capture(this);
@@ -255,7 +258,10 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                     measure,
                     rawPrefix);
             JSONObject nativeResult = new JSONObject(nativeJson);
+            DriverExecutionIdentity.normalizeRuntimeCapabilities(nativeResult);
             result.put("native", nativeResult);
+            result.put("runtime_driver_identity",
+                    ValidationDriverIdentity.runtimeIdentity(nativeResult));
             boolean success = nativeResult.optBoolean("success", false);
             if (success) {
                 result.put("evidence", finalizeCheckpoints(

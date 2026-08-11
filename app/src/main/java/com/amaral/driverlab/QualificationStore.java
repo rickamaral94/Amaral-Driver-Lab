@@ -114,10 +114,12 @@ final class QualificationStore {
         try {
             int profileVersionHint = manifest.optJSONObject("profile") == null ? -1
                     : manifest.optJSONObject("profile").optInt("profile_version", -1);
-            int expectedSchema = profileVersionHint >= 3
-                    ? Phase11Contract.QUALIFICATION_SCHEMA_VERSION
-                    : Phase7Contract.QUALIFICATION_SCHEMA_VERSION;
-            if (manifest.optInt("qualification_schema_version", -1) != expectedSchema) return false;
+            int actualSchema = manifest.optInt("qualification_schema_version", -1);
+            if (profileVersionHint >= 3) {
+                // v3 remains readable/resumable; new manifests are written as v4.
+                if (actualSchema < 3
+                        || actualSchema > Phase11Contract.QUALIFICATION_SCHEMA_VERSION) return false;
+            } else if (actualSchema != Phase7Contract.QUALIFICATION_SCHEMA_VERSION) return false;
             if (!manifest.optString("qualification_id", "").matches("qualification-[0-9]{10,20}")) {
                 return false;
             }

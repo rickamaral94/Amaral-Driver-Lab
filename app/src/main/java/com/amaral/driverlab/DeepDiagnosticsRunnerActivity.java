@@ -116,6 +116,8 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
                                     ? JSONObject.NULL : driverDisplayName)
                     .put("driver_sha256", driverSha == null || driverSha.isEmpty()
                             ? JSONObject.NULL : driverSha)
+                    .put("requested_library_sha256",
+                            DriverExecutionIdentity.requestedLibrarySha256(driverDir, driverName))
                     .put("driver_metadata", driverMeta == null || driverMeta.isEmpty()
                             ? JSONObject.NULL : new JSONObject(driverMeta))
                     .put("diagnostic_mode", mode)
@@ -142,7 +144,10 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
                     cycles,
                     memoryMiB);
             JSONObject nativeResult = new JSONObject(nativeJson);
+            DriverExecutionIdentity.normalizeRuntimeCapabilities(nativeResult);
             result.put("native", nativeResult)
+                    .put("runtime_driver_identity",
+                            ValidationDriverIdentity.runtimeIdentity(nativeResult))
                     .put("success", nativeResult.optBoolean("success", false));
             if (!nativeResult.optBoolean("success", false)) {
                 result.put("failure_type",

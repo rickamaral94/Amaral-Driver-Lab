@@ -39,6 +39,8 @@ final class PublicDatasetEnvelope {
                         : candidate.optString("packageVersion",
                                 candidate.optString("driverVersion", ""))));
         payload.put("result", resultPayload(record));
+        payload.put("driver_identity_audit", record.report.getJSONObject(
+                "driver_identity_audit"));
         payload.put("validity", new JSONObject()
                 .put("blocking_warnings", false)
                 .put("failure_count", 0));
@@ -105,6 +107,10 @@ final class PublicDatasetEnvelope {
     }
 
     private static void validatePublishable(SuiteRecord record) {
+        if (!record.identityEligibleForAggregation) {
+            throw new IllegalArgumentException("Identidade runtime do driver não confirmada: "
+                    + record.driverIdentityConfidence);
+        }
         if (record.blockingValidity) {
             throw new IllegalArgumentException("Suíte possui aviso ou falha bloqueante");
         }

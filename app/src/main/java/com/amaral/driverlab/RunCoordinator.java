@@ -317,6 +317,10 @@ final class RunCoordinator {
 
     private void finishSuite() {
         try {
+            JSONObject candidateJson = candidate == null ? null : candidate.toJson();
+            JSONObject referenceJson = reference == null ? null : reference.toJson();
+            JSONObject driverIdentityAudit = ValidationDriverIdentity.auditPhases(
+                    phaseResults, candidateJson, referenceJson);
             JSONObject report = new JSONObject();
             report.put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION);
             report.put("suite_id", suiteDirectory.getName());
@@ -337,11 +341,20 @@ final class RunCoordinator {
                 report.put("measure_seconds", measureSeconds);
             }
             report.put("host_device", DeviceSnapshot.capture(activity));
-            report.put("candidate", candidate == null ? JSONObject.NULL : candidate.toJson());
-            report.put("reference", reference == null ? JSONObject.NULL : reference.toJson());
+            report.put("candidate", candidateJson == null ? JSONObject.NULL : candidateJson);
+            report.put("reference", referenceJson == null ? JSONObject.NULL : referenceJson);
             report.put("comparison_mode", reference == null
                     ? "system_vs_turnip" : "turnip_vs_turnip");
             report.put("phases", phaseResults);
+            report.put("driver_identity_audit", driverIdentityAudit);
+            report.put("driver_identity_confidence",
+                    driverIdentityAudit.getString("driver_identity_confidence"));
+            report.put("driver_identity_policy_version",
+                    driverIdentityAudit.getInt("driver_identity_policy_version"));
+            report.put("identity_observation_coverage",
+                    driverIdentityAudit.getJSONObject("identity_observation_coverage"));
+            report.put("loader_isolation_verified",
+                    driverIdentityAudit.get("loader_isolation_verified"));
 
             JSONArray failureCatalog = FailureCatalog.fromPhases(phaseResults);
             JSONObject summary;
@@ -402,9 +415,15 @@ final class RunCoordinator {
                     capabilityDiff == null ? JSONObject.NULL : capabilityDiff);
             report.put("failure_catalog", failureCatalog);
             report.put("verdict", verdict);
-            report.put("validity_warnings", buildWarnings(
+            JSONArray validityWarnings = buildWarnings(
                     renderCorrectness, failureCatalog, statisticalAnalysis,
-                    traceReplay, visualScene));
+                    traceReplay, visualScene);
+            if (!driverIdentityAudit.optBoolean("eligible_for_aggregation", false)) {
+                validityWarnings.put("driver_identity_not_runtime_confirmed:"
+                        + driverIdentityAudit.optString("driver_identity_confidence",
+                        DriverIdentityPolicy.INFERRED));
+            }
+            report.put("validity_warnings", validityWarnings);
             report.put("phase4_contract", Phase4Contract.contractJson());
             report.put("phase6_contract", campaignContext == null
                     ? JSONObject.NULL : Phase6Contract.contractJson());

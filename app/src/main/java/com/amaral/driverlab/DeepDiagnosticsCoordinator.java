@@ -194,6 +194,10 @@ final class DeepDiagnosticsCoordinator {
             JSONObject system = find(false);
             JSONObject candidateResult = find(true);
             JSONObject comparison = DeepDiagnosticsComparison.compare(system, candidateResult);
+            JSONObject candidateJson = candidate.toJson();
+            JSONObject referenceJson = reference == null ? null : reference.toJson();
+            JSONObject driverIdentityAudit = ValidationDriverIdentity.auditPhases(
+                    results, candidateJson, referenceJson);
             String reportId = "phase10-" + startedAt;
             JSONObject report = new JSONObject()
                     .put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION)
@@ -209,12 +213,21 @@ final class DeepDiagnosticsCoordinator {
                     .put("memory_mib", memoryMiB)
                     .put("started_at_ms", startedAt)
                     .put("finished_at_ms", System.currentTimeMillis())
-                    .put("candidate_driver", candidate.toJson())
+                    .put("candidate_driver", candidateJson)
                     .put("reference_driver", reference == null
-                            ? JSONObject.NULL : reference.toJson())
+                            ? JSONObject.NULL : referenceJson)
                     .put("comparison_mode", reference == null
                             ? "system_vs_turnip" : "turnip_vs_turnip")
                     .put("phases", results)
+                    .put("driver_identity_audit", driverIdentityAudit)
+                    .put("driver_identity_confidence",
+                            driverIdentityAudit.getString("driver_identity_confidence"))
+                    .put("driver_identity_policy_version",
+                            driverIdentityAudit.getInt("driver_identity_policy_version"))
+                    .put("identity_observation_coverage",
+                            driverIdentityAudit.getJSONObject("identity_observation_coverage"))
+                    .put("loader_isolation_verified",
+                            driverIdentityAudit.get("loader_isolation_verified"))
                     .put("comparison", comparison)
                     .put("historical_comparability", new JSONObject()
                             .put("series", Phase10Contract.PROFILE_ID + "/v1/" + mode)

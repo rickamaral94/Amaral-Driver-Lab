@@ -144,6 +144,11 @@ final class GitHubIssuePublisher {
         String gpu = hardware == null ? "" : hardware.optString("gpu_model", "");
         String state = manifest.optJSONObject("execution") == null ? "unknown"
                 : manifest.optJSONObject("execution").optString("state", "unknown");
+        if (!ValidationDriverIdentity.isEligible(report)) {
+            String title = "[driver-unconfirmed] [Turnip Validation] driver não confirmado · "
+                    + model + (gpu.isEmpty() ? "" : " · " + gpu) + " · " + state;
+            return title.length() > 240 ? title.substring(0, 240) : title;
+        }
         String title = "[Turnip Validation] CANDIDATO " + driverLabel(candidate)
                 + " vs REFERÊNCIA " + referenceLabel
                 + " · " + model + (gpu.isEmpty() ? "" : " · " + gpu)
@@ -177,6 +182,12 @@ final class GitHubIssuePublisher {
                 ? driverLabel(reference) : "Driver do sistema Android";
         StringBuilder body = new StringBuilder();
         body.append("## Turnip Validation — Amaral Driver Lab\n\n");
+        if (!ValidationDriverIdentity.isEligible(report)) {
+            body.append("> **[driver-unconfirmed] Identidade do driver não confirmada em runtime.** "
+                    + "Os nomes dos pacotes não provam qual família ou build foi carregado; "
+                    + "este relatório é diagnóstico e não entra em score, ranking ou dataset.\n\n");
+        }
+        body.append(identityAuditMarkdown(report));
         if (human != null) {
             body.append("**").append(human.optString("headline", "Resultado")).append("**\n\n")
                     .append(human.optString("detail", "")).append("\n\n");
@@ -296,6 +307,11 @@ final class GitHubIssuePublisher {
                 : candidate.optString("name", "candidate") + " "
                 + candidate.optString("packageVersion", candidate.optString("driverVersion", ""));
         String workloadId = report.optString("workload_id", WorkloadContract.TRANSFER_ID);
+        if (!ValidationDriverIdentity.isEligible(report)) {
+            String title = "[driver-unconfirmed] [driver-lab] " + model
+                    + " · driver não confirmado";
+            return title.length() > 240 ? title.substring(0, 240) : title;
+        }
         String suffix = "";
         if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
             String verdict = report.optString("verdict", "completed_no_reference");
@@ -327,6 +343,12 @@ final class GitHubIssuePublisher {
         JSONObject summary = report.optJSONObject("summary");
         String workloadId = report.optString("workload_id", WorkloadContract.TRANSFER_ID);
         body.append("## Amaral Driver Lab\n\n");
+        if (!ValidationDriverIdentity.isEligible(report)) {
+            body.append("> **[driver-unconfirmed] Identidade do driver não confirmada em runtime.** "
+                    + "O rótulo do ZIP não prova o driver efetivamente carregado; o resultado "
+                    + "é diagnóstico e foi excluído de agregações públicas.\n\n");
+        }
+        body.append(identityAuditMarkdown(report));
         body.append("| Campo | Valor |\n|---|---|\n");
         body.append("| Suite | `").append(table(report.optString("suite_id"))).append("` |\n");
         body.append("| Aparelho | ").append(table(host == null ? Build.MODEL
@@ -426,6 +448,35 @@ final class GitHubIssuePublisher {
         }
         if (values.length() > limit) body.append(" … +").append(values.length() - limit);
         body.append("\n");
+    }
+
+    private static String identityAuditMarkdown(JSONObject report) {
+        JSONObject audit = report == null ? null : report.optJSONObject("driver_identity_audit");
+        if (audit == null) return "";
+        JSONObject coverage = audit.optJSONObject("identity_observation_coverage");
+        JSONObject candidate = audit.optJSONObject("candidate");
+        JSONObject reference = audit.optJSONObject("reference");
+        StringBuilder body = new StringBuilder("### Auditoria de identidade runtime\n\n")
+                .append("| Campo | Valor |\n|---|---|\n")
+                .append("| Confiança | `")
+                .append(table(audit.optString("driver_identity_confidence", "inferred")))
+                .append("` |\n")
+                .append("| Família candidata | `")
+                .append(table(candidate == null ? "unknown"
+                        : candidate.optString("driver", "unknown"))).append("` |\n")
+                .append("| Família de referência | `")
+                .append(table(reference == null ? "unknown"
+                        : reference.optString("driver", "unknown"))).append("` |\n")
+                .append("| Cobertura | ")
+                .append(coverage == null ? "—" : coverage.optInt("observed_process_count", 0)
+                        + " / " + coverage.optInt("expected_process_count", 0))
+                .append(" |\n")
+                .append("| Isolamento do loader | `")
+                .append(table(String.valueOf(audit.opt("loader_isolation_verified"))))
+                .append("` |\n\n")
+                .append("> `runtime_confirmed` prova a família, não o build Turnip; o hash "
+                        + "efetivo do DSO carregado não está disponível nesta versão.\n\n");
+        return body.toString();
     }
 
     private static void validateRepository(String owner, String repository) {

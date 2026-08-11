@@ -12,7 +12,9 @@ public final class Phase11ContractTest {
     public void phaseElevenContractIsAdditiveAndExplicit() throws Exception {
         JSONObject contract = Phase11Contract.contractJson();
         assertEquals(3, contract.getInt("current_full_profile_version"));
-        assertEquals(3, contract.getInt("qualification_schema_version"));
+        assertEquals(4, contract.getInt("qualification_schema_version"));
+        assertEquals(4, contract.getInt("current_qualification_report_version"));
+        assertEquals(4, contract.getInt("current_qualification_score_version"));
         assertEquals(15, contract.getInt("automated_orchestrated_steps"));
         assertEquals(20, contract.getInt("automated_logical_tests"));
         assertEquals(5, contract.getInt("full_soak_cycles"));

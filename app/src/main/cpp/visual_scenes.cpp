@@ -135,6 +135,27 @@ Function requireInstance(PFN_vkGetInstanceProcAddr getter, VkInstance instance, 
 }
 
 template <typename Function>
+Function optionalInstance(PFN_vkGetInstanceProcAddr getter, VkInstance instance, const char *name) {
+    return reinterpret_cast<Function>(getter(instance, name));
+}
+
+std::string versionString(uint32_t value) {
+    return std::to_string(VK_VERSION_MAJOR(value)) + "."
+            + std::to_string(VK_VERSION_MINOR(value)) + "."
+            + std::to_string(VK_VERSION_PATCH(value));
+}
+
+const char *driverIdName(VkDriverId id) {
+    switch (id) {
+        case VK_DRIVER_ID_QUALCOMM_PROPRIETARY: return "QUALCOMM_PROPRIETARY";
+        case VK_DRIVER_ID_MESA_TURNIP: return "MESA_TURNIP";
+        case VK_DRIVER_ID_GOOGLE_SWIFTSHADER: return "GOOGLE_SWIFTSHADER";
+        case VK_DRIVER_ID_MESA_LLVMPIPE: return "MESA_LLVMPIPE";
+        default: return "OTHER_OR_UNKNOWN";
+    }
+}
+
+template <typename Function>
 Function requireDevice(PFN_vkGetDeviceProcAddr getter, VkDevice device, const char *name) {
     auto function = reinterpret_cast<Function>(getter(device, name));
     if (function == nullptr) {
@@ -283,12 +304,24 @@ public:
         check(vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr,
                                                    &deviceExtensionCount, nullptr),
               "vkEnumerateDeviceExtensionProperties(count)");
-        std::vector<VkExtensionProperties> deviceExtensions(deviceExtensionCount);
+        deviceExtensions.resize(deviceExtensionCount);
         check(vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr,
                                                    &deviceExtensionCount, deviceExtensions.data()),
               "vkEnumerateDeviceExtensionProperties(list)");
         if (!hasExtension(deviceExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
             throw std::runtime_error("Driver does not expose VK_KHR_swapchain");
+        }
+        if (vkGetPhysicalDeviceProperties2 != nullptr
+                && (properties.apiVersion >= VK_API_VERSION_1_2
+                    || hasExtension(deviceExtensions,
+                                    VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME))) {
+            driverProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+            VkPhysicalDeviceProperties2 properties2{};
+            properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            properties2.pNext = &driverProperties;
+            vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
+            properties = properties2.properties;
+            hasDriverProperties = true;
         }
 
         uint32_t familyCount = 0;
@@ -388,6 +421,9 @@ public:
              << ",\"vendor_id\":" << properties.vendorID
              << ",\"device_id\":" << properties.deviceID
              << ",\"driver_version_raw\":" << properties.driverVersion
+             << ",\"driver_version_decoded\":\""
+             << versionString(properties.driverVersion) << "\""
+             << ",\"capabilities\":" << capabilitiesJson()
              << ",\"image_width\":" << renderWidth
              << ",\"image_height\":" << renderHeight
              << ",\"vertices_per_instance\":" << vertexCount
@@ -434,6 +470,36 @@ public:
     }
 
 private:
+    std::string capabilitiesJson() const {
+        std::ostringstream json;
+        json << '{'
+             << "\"gpu_name\":\"" << jsonEscape(properties.deviceName) << "\""
+             << ",\"vendor_id\":" << properties.vendorID
+             << ",\"device_id\":" << properties.deviceID
+             << ",\"api_version_raw\":" << properties.apiVersion
+             << ",\"api_version\":\"" << versionString(properties.apiVersion) << "\""
+             << ",\"driver_version_raw\":" << properties.driverVersion
+             << ",\"driver_version_decoded\":\""
+             << versionString(properties.driverVersion) << "\"";
+        if (hasDriverProperties) {
+            json << ",\"driver_id\":" << static_cast<int>(driverProperties.driverID)
+                 << ",\"driver_id_name\":\"" << driverIdName(driverProperties.driverID) << "\""
+                 << ",\"driver_name\":\"" << jsonEscape(driverProperties.driverName) << "\""
+                 << ",\"driver_info\":\"" << jsonEscape(driverProperties.driverInfo) << "\""
+                 << ",\"conformance_version\":\""
+                 << static_cast<unsigned int>(driverProperties.conformanceVersion.major) << '.'
+                 << static_cast<unsigned int>(driverProperties.conformanceVersion.minor) << '.'
+                 << static_cast<unsigned int>(driverProperties.conformanceVersion.subminor) << '.'
+                 << static_cast<unsigned int>(driverProperties.conformanceVersion.patch) << "\"";
+        } else {
+            json << ",\"driver_id\":null,\"driver_id_name\":null"
+                 << ",\"driver_name\":null,\"driver_info\":null"
+                 << ",\"conformance_version\":null";
+        }
+        json << '}';
+        return json.str();
+    }
+
     void loadInstanceFunctions() {
         vkDestroyInstance = requireInstance<PFN_vkDestroyInstance>(getInstanceProcAddr, instance,
                                                                    "vkDestroyInstance");
@@ -441,6 +507,15 @@ private:
                 getInstanceProcAddr, instance, "vkEnumeratePhysicalDevices");
         vkGetPhysicalDeviceProperties = requireInstance<PFN_vkGetPhysicalDeviceProperties>(
                 getInstanceProcAddr, instance, "vkGetPhysicalDeviceProperties");
+        vkGetPhysicalDeviceProperties2 = optionalInstance<PFN_vkGetPhysicalDeviceProperties2>(
+                getInstanceProcAddr, instance, "vkGetPhysicalDeviceProperties2");
+        if (vkGetPhysicalDeviceProperties2 == nullptr) {
+            vkGetPhysicalDeviceProperties2 =
+                    reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+                            optionalInstance<PFN_vkGetPhysicalDeviceProperties2KHR>(
+                                    getInstanceProcAddr, instance,
+                                    "vkGetPhysicalDeviceProperties2KHR"));
+        }
         vkGetPhysicalDeviceMemoryProperties = requireInstance<PFN_vkGetPhysicalDeviceMemoryProperties>(
                 getInstanceProcAddr, instance, "vkGetPhysicalDeviceMemoryProperties");
         vkGetPhysicalDeviceQueueFamilyProperties = requireInstance<PFN_vkGetPhysicalDeviceQueueFamilyProperties>(
@@ -1297,6 +1372,9 @@ private:
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties properties{};
+    VkPhysicalDeviceDriverProperties driverProperties{};
+    bool hasDriverProperties = false;
+    std::vector<VkExtensionProperties> deviceExtensions;
     VkPhysicalDeviceMemoryProperties memoryProperties{};
     VkQueueFamilyProperties queueFamilyProperties{};
     uint32_t queueFamilyIndex = 0;
@@ -1338,6 +1416,7 @@ private:
     PFN_vkDestroyInstance vkDestroyInstance = nullptr;
     PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
     PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = nullptr;
+    PFN_vkGetPhysicalDeviceProperties2 vkGetPhysicalDeviceProperties2 = nullptr;
     PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties = nullptr;
     PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties = nullptr;
     PFN_vkEnumerateDeviceExtensionProperties vkEnumerateDeviceExtensionProperties = nullptr;

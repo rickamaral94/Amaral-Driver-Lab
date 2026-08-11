@@ -16,7 +16,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class EmulatorLogAnalyzer {
-    static final int SCHEMA_VERSION = 1;
+    static final int SCHEMA_VERSION = 2;
     static final int DEFAULT_MAX_BYTES = 2_000_000;
     private static final int MAX_FINDINGS = 24;
     private static final int MAX_EXCERPT_LINES = 90;
@@ -35,8 +35,6 @@ final class EmulatorLogAnalyzer {
 
     private static final Pattern GPU = Pattern.compile(
             "(?i)\\b(Adreno(?:\\s*\\(TM\\))?\\s*\\d{3}|Mali[-\\s][A-Za-z0-9_-]+|Xclipse\\s*\\d+|Apple\\s+[A-Za-z0-9_-]+\\s+GPU)\\b");
-    private static final Pattern DRIVER = Pattern.compile(
-            "(?i)\\b((?:Mesa\\s+)?Turnip[^\\n,;]{0,90}|Mesa\\s+\\d{2,4}\\.\\d+(?:\\.\\d+)?[^\\n,;]{0,60}|Qualcomm[^\\n,;]{0,80}Vulkan[^\\n,;]{0,80})");
     private static final Pattern API = Pattern.compile(
             "(?i)\\b(Vulkan(?:\\s+API)?\\s*(?:version)?\\s*[0-9]+(?:\\.[0-9]+){1,2}|OpenGL\\s*ES\\s*[0-9.]+|DXVK\\s*[0-9.]+|VKD3D(?:-Proton)?\\s*[0-9.]+|Direct3D\\s*1[0-2])\\b");
     private static final Pattern GAME = Pattern.compile(
@@ -111,8 +109,8 @@ final class EmulatorLogAnalyzer {
         String game = capture(GAME, sanitized);
         String titleId = capture(TITLE_ID, sanitized);
         String gpu = capture(GPU, sanitized);
-        String driver = capture(DRIVER, sanitized);
         String api = capture(API, sanitized);
+        JSONObject identity = DriverIdentityResolver.resolve(sanitized);
 
         int fatalCount = 0;
         int errorCount = 0;
@@ -133,13 +131,13 @@ final class EmulatorLogAnalyzer {
             if (error) errorCount++;
             if (warning) warningCount++;
 
-            boolean identity = containsAny(lower, "emulator", "version", "build", "gpu",
+            boolean identityLine = containsAny(lower, "emulator", "version", "build", "gpu",
                     "adreno", "mali", "turnip", "mesa", "vulkan", "driver",
                     "game:", "title:", "title id", "program id");
             if ((fatal || error || warning) && findings.length() < MAX_FINDINGS) {
                 findings.put("L" + (index + 1) + ": " + limit(compact, 300));
             }
-            if ((fatal || error || warning || identity) && excerpt.size() < MAX_EXCERPT_LINES) {
+            if ((fatal || error || warning || identityLine) && excerpt.size() < MAX_EXCERPT_LINES) {
                 excerpt.add("L" + (index + 1) + ": " + limit(compact, 500));
             }
         }
@@ -169,7 +167,15 @@ final class EmulatorLogAnalyzer {
                 .put("title_id", valueOrUnknown(titleId))
                 .put("gpu", valueOrUnknown(gpu))
                 .put("graphics_api", valueOrUnknown(api))
-                .put("driver", valueOrUnknown(driver))
+                .put("driver", identity.getString("driver"))
+                .put("driver_display_name", identity.getString("driver_display_name"))
+                .put("driver_identity_confidence",
+                        identity.getString("driver_identity_confidence"))
+                .put("driver_identity_policy_version",
+                        identity.getInt("driver_identity_policy_version"))
+                .put("driver_identity_evidence",
+                        identity.getJSONArray("driver_identity_evidence"))
+                .put("driver_identity_blocks", identity.getJSONArray("driver_identity_blocks"))
                 .put("severity", severity)
                 .put("fatal_count", fatalCount)
                 .put("error_count", errorCount)
@@ -190,7 +196,14 @@ final class EmulatorLogAnalyzer {
         String model = device == null ? "Android device"
                 : device.optString("model", "Android device");
         String emulator = report.optString("emulator", "Unknown emulator");
-        String driver = report.optString("driver", "Unknown driver");
+        String confidence = report.optString("driver_identity_confidence",
+                DriverIdentityResolver.UNAUDITED);
+        String canonical = report.optString("driver", DriverIdentityResolver.UNKNOWN);
+        boolean confirmed = DriverIdentityResolver.RUNTIME_CONFIRMED.equals(confidence)
+                && !DriverIdentityResolver.UNKNOWN.equals(canonical);
+        String displayName = report.optString("driver_display_name", canonical).trim();
+        if (displayName.isEmpty()) displayName = canonical;
+        String driver = confirmed ? displayName : "[driver-unconfirmed]";
         if (driver.length() > 55) driver = driver.substring(0, 55);
         String title = "[Emulator Log] " + emulator + " · " + model + " · "
                 + driver + " · " + report.optString("severity", "informational");
@@ -203,6 +216,7 @@ final class EmulatorLogAnalyzer {
         body.append("## Emulator log report — Amaral Driver Lab\n\n");
         body.append("> This summary was generated locally from a selected emulator log. ")
                 .append("Sensitive paths, e-mail addresses, tokens and IP addresses were redacted automatically.\n\n");
+        appendIdentityWarning(body, report);
         body.append("### Environment\n\n");
         body.append("| Field | Value |\n|---|---|\n");
         row(body, "Device", device == null ? "Unknown"
@@ -216,7 +230,12 @@ final class EmulatorLogAnalyzer {
         row(body, "Title / program ID", report.optString("title_id", "Unknown"));
         row(body, "GPU", report.optString("gpu", "Unknown"));
         row(body, "Graphics API", report.optString("graphics_api", "Unknown"));
-        row(body, "Driver", report.optString("driver", "Unknown"));
+        row(body, "Driver identity", report.optString("driver", DriverIdentityResolver.UNKNOWN));
+        row(body, "Driver display name", report.optString("driver_display_name", "Unknown"));
+        row(body, "Driver identity confidence", report.optString(
+                "driver_identity_confidence", DriverIdentityResolver.UNAUDITED));
+        row(body, "Driver identity policy", String.valueOf(report.optInt(
+                "driver_identity_policy_version", 0)));
         row(body, "Severity", report.optString("severity", "informational"));
         row(body, "Fatal / error / warning lines",
                 report.optInt("fatal_count") + " / " + report.optInt("error_count")
@@ -226,6 +245,8 @@ final class EmulatorLogAnalyzer {
         row(body, "Log truncated by importer", String.valueOf(report.optBoolean("source_truncated")));
         row(body, "Privacy redactions", String.valueOf(report.optInt("privacy_redactions")));
         row(body, "Sanitized SHA-256", "`" + report.optString("sanitized_sha256") + "`");
+
+        appendIdentityEvidence(body, report);
 
         body.append("\n### User context\n\n")
                 .append("- **What were you trying to run?** \n")
@@ -261,11 +282,86 @@ final class EmulatorLogAnalyzer {
     private static String preview(JSONObject report) {
         return report.optString("emulator") + " · "
                 + report.optString("gpu") + "\n"
-                + report.optString("driver") + "\n"
+                + report.optString("driver_display_name", report.optString("driver"))
+                + " · " + report.optString("driver_identity_confidence",
+                        DriverIdentityResolver.UNAUDITED) + "\n"
                 + "Fatal " + report.optInt("fatal_count")
                 + " · Errors " + report.optInt("error_count")
                 + " · Warnings " + report.optInt("warning_count")
                 + " · Redactions " + report.optInt("privacy_redactions");
+    }
+
+    static JSONObject normalizeForRead(JSONObject report) throws Exception {
+        return DriverIdentityResolver.normalizeForRead(report);
+    }
+
+    static boolean isEligibleForIdentityAggregation(JSONObject report) {
+        return DriverIdentityResolver.isEligibleForAggregation(report);
+    }
+
+    private static void appendIdentityWarning(StringBuilder body, JSONObject report) {
+        String confidence = report.optString("driver_identity_confidence",
+                DriverIdentityResolver.UNAUDITED);
+        if (DriverIdentityResolver.DISPUTED.equals(confidence)) {
+            body.append("> [!WARNING]\n")
+                    .append("> **Driver identity is disputed.** Runtime/configuration evidence ")
+                    .append("or initialization blocks disagree. The Issue title intentionally ")
+                    .append("uses `[driver-unconfirmed]`.\n\n");
+        } else if (DriverIdentityResolver.INFERRED.equals(confidence)
+                || DriverIdentityResolver.UNAUDITED.equals(confidence)) {
+            body.append("> [!CAUTION]\n")
+                    .append("> **Driver identity is not runtime-confirmed.** The Issue title ")
+                    .append("intentionally uses `[driver-unconfirmed]`.\n\n");
+        }
+    }
+
+    private static void appendIdentityEvidence(StringBuilder body, JSONObject report) {
+        body.append("\n### Driver identity evidence\n\n");
+        JSONArray evidence = report.optJSONArray("driver_identity_evidence");
+        if (evidence == null || evidence.length() == 0) {
+            body.append("No driver identity evidence was found in the runtime log.\n");
+        } else {
+            body.append("| Block | Source | Line | Identity | Strength | Sanitized evidence |\n")
+                    .append("|---:|---|---:|---|---|---|\n");
+            for (int index = 0; index < evidence.length(); index++) {
+                JSONObject item = evidence.optJSONObject(index);
+                if (item == null) continue;
+                rowIdentityEvidence(body, item);
+            }
+        }
+        JSONArray blocks = report.optJSONArray("driver_identity_blocks");
+        body.append("\nInitialization blocks: ");
+        if (blocks == null || blocks.length() == 0) {
+            body.append("none with identity evidence.\n");
+            return;
+        }
+        for (int index = 0; index < blocks.length(); index++) {
+            JSONObject block = blocks.optJSONObject(index);
+            if (block == null) continue;
+            if (index > 0) body.append("; ");
+            body.append("#").append(block.optInt("block"))
+                    .append(" L").append(block.optInt("start_line"))
+                    .append("–L").append(block.optInt("end_line"))
+                    .append(" = `").append(block.optString("driver", "unknown"))
+                    .append("` (`").append(block.optString("driver_identity_confidence", "inferred"))
+                    .append("`)");
+        }
+        body.append(".\n");
+    }
+
+    private static void rowIdentityEvidence(StringBuilder body, JSONObject item) {
+        body.append("| ").append(item.optInt("block"))
+                .append(" | ").append(markdownCell(item.optString("source")))
+                .append(" | ").append(item.optInt("line"))
+                .append(" | ").append(markdownCell(item.optString("identity")))
+                .append(" | ").append(markdownCell(item.optString("strength")))
+                .append(" | ").append(markdownCell(item.optString("content")))
+                .append(" |\n");
+    }
+
+    private static String markdownCell(String value) {
+        return value == null ? "" : value.replace("|", "\\|")
+                .replace("\n", " ").trim();
     }
 
     private static RedactionResult redact(String value) {

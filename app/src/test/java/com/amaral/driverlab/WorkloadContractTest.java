@@ -23,7 +23,7 @@ public final class WorkloadContractTest {
 
     @Test
     public void phaseTwoSeriesRemainVersionOneWhileSchemaAdvancesAdditively() {
-        assertEquals(13, WorkloadContract.RESULT_SCHEMA_VERSION);
+        assertEquals(14, WorkloadContract.RESULT_SCHEMA_VERSION);
         assertEquals(5, WorkloadContract.PHASE2_IDS.size());
         for (String workloadId : WorkloadContract.PHASE2_IDS) {
             assertEquals(1, WorkloadContract.versionFor(workloadId));
@@ -58,9 +58,9 @@ public final class WorkloadContractTest {
     public void phaseFourVersionsCatalogWithoutChangingWorkloads() {
         assertEquals(1, Phase4Contract.CATALOG_VERSION);
         assertEquals(1, Phase4Contract.SUITE_DIFF_VERSION);
-        assertEquals(1, Phase4Contract.RANKING_VERSION);
+        assertEquals(2, Phase4Contract.RANKING_VERSION);
         assertEquals(1, Phase4Contract.BISECT_VERSION);
-        assertEquals(1, Phase4Contract.PUBLIC_DATASET_SCHEMA_VERSION);
+        assertEquals(2, Phase4Contract.PUBLIC_DATASET_SCHEMA_VERSION);
         assertEquals(1, WorkloadContract.COMPUTE_ARITHMETIC_VERSION);
         assertEquals(1, WorkloadContract.STABLE_SCENE_VERSION);
     }
@@ -106,7 +106,9 @@ public final class WorkloadContractTest {
     @Test
     public void phaseElevenAddsFullV3WithoutRedefiningEarlierSeries() {
         assertEquals(3, Phase11Contract.PROFILE_VERSION);
-        assertEquals(3, Phase11Contract.QUALIFICATION_SCHEMA_VERSION);
+        assertEquals(4, Phase11Contract.QUALIFICATION_SCHEMA_VERSION);
+        assertEquals(4, Phase11Contract.REPORT_VERSION);
+        assertEquals(4, Phase11Contract.SCORE_VERSION);
         assertEquals(5, Phase11Contract.FULL_SOAK_CYCLES);
         assertEquals(128, Phase11Contract.RECOMMENDED_MEMORY_MIB);
         assertEquals(2, Phase8Contract.CURRENT_FULL_PROFILE_VERSION);
