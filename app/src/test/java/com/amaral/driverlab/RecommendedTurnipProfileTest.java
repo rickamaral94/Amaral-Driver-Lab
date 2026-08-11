@@ -114,6 +114,7 @@ public final class RecommendedTurnipProfileTest {
                             .put("passed_correctness_gate", true));
                 }
             }
+            report.put("workload_version_audit", confirmedWorkloadVersionAudit());
             completed.put(new JSONObject().put("step_id", step.stepId)
                     .put("status", "completed").put("report", report));
         }
@@ -167,10 +168,17 @@ public final class RecommendedTurnipProfileTest {
                             .put("passed_correctness_gate", true));
                 }
             }
+            report.put("workload_version_audit", confirmedWorkloadVersionAudit());
             completed.put(new JSONObject().put("step_id", step.stepId)
                     .put("status", "completed").put("report", report));
         }
         return completed;
+    }
+
+    private static JSONObject confirmedWorkloadVersionAudit() throws Exception {
+        return new JSONObject()
+                .put("status", WorkloadVersionIdentity.CONFIRMED)
+                .put("eligible_for_aggregation", true);
     }
 
     private static JSONObject cleanPreflight() throws Exception {

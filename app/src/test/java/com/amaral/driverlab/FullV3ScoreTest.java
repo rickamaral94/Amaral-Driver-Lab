@@ -72,6 +72,9 @@ public final class FullV3ScoreTest {
             } else {
                 report = suiteReport(step);
             }
+            report.put("workload_version_audit", new JSONObject()
+                    .put("status", WorkloadVersionIdentity.CONFIRMED)
+                    .put("eligible_for_aggregation", true));
             output.put(new JSONObject().put("step_id", step.stepId)
                     .put("status", "completed").put("report", report));
         }
