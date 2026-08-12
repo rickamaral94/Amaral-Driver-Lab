@@ -6,7 +6,8 @@
 |---|---|---|
 | Implementação | concluído | contratos Java/JNI, unidades de repetição, cache persistente, linearidade, n adaptativo sem espiada, gates térmicos, auditoria histórica e testes locais |
 | Primeira rodada física A740 | falha de orquestração | a Issue #48 executou correção, mas os probes seguintes foram interrompidos pela reutilização prematura do processo `:runner`; nenhum número de performance é válido |
-| Requalificação A740 | pendente | exige o APK alpha14 com intervalo de relançamento corrigido e duas execuções físicas completas |
+| Segunda rodada física A740 | falha de apresentação | a alpha14 manteve o overlay Android, mas a superfície Vulkan ficou preta e o runner devolveu o aparelho ao launcher; nenhum resultado visual ou de performance é válido |
+| Requalificação A740 | pendente | exige o APK alpha15 com sincronização explícita da apresentação e retorno seguro à qualificação, seguido por duas execuções físicas completas |
 
 O checkpoint de implementação prova estrutura e regras do protocolo. Só o checkpoint físico pode
 provar tempos, estabilidade, temperatura, sensibilidade de 1%/3%/10% ou comportamento GMEM no
@@ -23,14 +24,20 @@ O sintoma foi reproduzível na estrutura do relatório: correção offscreen con
 workloads v2 falharam no início da calibração e a cobertura de identidade ficou em 12/82. Isso é
 falha do laboratório, não regressão do driver e não evidência de performance.
 
-O contrato corrigido centraliza dois tempos:
+O contrato alpha14 centralizou dois tempos:
 
 - conclusão visual: até 250 ms, seguida pelo autoencerramento do runner em 350 ms;
 - relançamento pelo coordenador: 1.200 ms.
 
 Todos os caminhos que encadeiam probes, piloto e fases aguardam o intervalo de relançamento. Um
-teste unitário preserva uma margem mínima de 500 ms entre os dois eventos. A correção precisa ser
-confirmada no aparelho; análise de fonte e teste unitário não provam o comportamento do Android.
+teste unitário preservou uma margem mínima de 500 ms entre os dois eventos. A validação física
+mostrou que o encerramento ainda podia competir com a transação de retorno da Activity.
+
+Na alpha15, o processo isolado só agenda sua retirada depois que Android chama `onDestroy()` na
+Activity concluída. A cena visual também espera `surfaceChanged()` com dimensões válidas, usa FIFO
+e declara dependências explícitas entre color attachment, leitura do shader e transferência para
+o swapchain. Essas mudanças corrigem as duas causas do sintoma observado sem classificar o caso
+como regressão do driver. A confirmação final continua dependente do teste físico.
 
 ## Contrato de calibração
 
@@ -104,8 +111,8 @@ que não recuperar o efeito permanece falho, sem correção numérica.
 
 ## Protocolo físico A740 pendente
 
-1. Compilar e instalar o APK alpha14 no A740. A alpha14 preserva a tarefa principal
-   entre runners isolados e inclui breadcrumbs duráveis para crash/timeout nativo.
+1. Compilar e instalar o APK alpha15 no A740. A alpha15 preserva a tarefa principal,
+   sincroniza a apresentação das cenas e mantém breadcrumbs duráveis para crash/timeout nativo.
 2. Executar a qualificação v6 em perfil térmico controlado e repetir em outro dia.
 3. Confirmar faixa 8–16 ms, linearidade, ausência de drift e `completed_paired_rounds` planejado.
 4. Rodar a injeção 0%/1%/3%/10% no mesmo workload e conferir o efeito realmente medido.

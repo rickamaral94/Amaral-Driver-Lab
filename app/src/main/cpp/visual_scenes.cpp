@@ -675,20 +675,9 @@ private:
             }
         }
 
-        uint32_t presentCount = 0;
-        check(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentCount,
-                                                        nullptr),
-              "vkGetPhysicalDeviceSurfacePresentModesKHR(count)");
-        std::vector<VkPresentModeKHR> modes(presentCount);
-        check(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentCount,
-                                                        modes.data()),
-              "vkGetPhysicalDeviceSurfacePresentModesKHR(list)");
+        // FIFO is required by Vulkan and is the most predictable mode across Android
+        // compositors. The visual workload measures GPU timestamps, not display latency.
         presentMode = VK_PRESENT_MODE_FIFO_KHR;
-        if (std::find(modes.begin(), modes.end(), VK_PRESENT_MODE_MAILBOX_KHR) != modes.end()) {
-            presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-        } else if (std::find(modes.begin(), modes.end(), VK_PRESENT_MODE_IMMEDIATE_KHR) != modes.end()) {
-            presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
-        }
 
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
             surfaceExtent = capabilities.currentExtent;
@@ -882,21 +871,29 @@ private:
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorReference;
         subpass.pDepthStencilAttachment = &depthReference;
-        VkSubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        std::array<VkSubpassDependency, 2> sceneDependencies{};
+        sceneDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+        sceneDependencies[0].dstSubpass = 0;
+        sceneDependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        sceneDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        sceneDependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        sceneDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        sceneDependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        sceneDependencies[1].srcSubpass = 0;
+        sceneDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+        sceneDependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        sceneDependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        sceneDependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        sceneDependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        sceneDependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
         VkRenderPassCreateInfo sceneInfo{};
         sceneInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         sceneInfo.attachmentCount = 2;
         sceneInfo.pAttachments = sceneAttachments;
         sceneInfo.subpassCount = 1;
         sceneInfo.pSubpasses = &subpass;
-        sceneInfo.dependencyCount = 1;
-        sceneInfo.pDependencies = &dependency;
+        sceneInfo.dependencyCount = static_cast<uint32_t>(sceneDependencies.size());
+        sceneInfo.pDependencies = sceneDependencies.data();
         check(vkCreateRenderPass(device, &sceneInfo, nullptr, &sceneRenderPass),
               "vkCreateRenderPass(scene)");
 
@@ -912,20 +909,29 @@ private:
         finalSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         finalSubpass.colorAttachmentCount = 1;
         finalSubpass.pColorAttachments = &finalReference;
-        VkSubpassDependency finalDependency{};
-        finalDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        finalDependency.dstSubpass = 0;
-        finalDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        finalDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        finalDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        std::array<VkSubpassDependency, 2> finalDependencies{};
+        finalDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+        finalDependencies[0].dstSubpass = 0;
+        finalDependencies[0].srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        finalDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        finalDependencies[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        finalDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        finalDependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        finalDependencies[1].srcSubpass = 0;
+        finalDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+        finalDependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        finalDependencies[1].dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        finalDependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        finalDependencies[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        finalDependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
         VkRenderPassCreateInfo finalInfo{};
         finalInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         finalInfo.attachmentCount = 1;
         finalInfo.pAttachments = &finalAttachment;
         finalInfo.subpassCount = 1;
         finalInfo.pSubpasses = &finalSubpass;
-        finalInfo.dependencyCount = 1;
-        finalInfo.pDependencies = &finalDependency;
+        finalInfo.dependencyCount = static_cast<uint32_t>(finalDependencies.size());
+        finalInfo.pDependencies = finalDependencies.data();
         check(vkCreateRenderPass(device, &finalInfo, nullptr, &finalRenderPass),
               "vkCreateRenderPass(final)");
 

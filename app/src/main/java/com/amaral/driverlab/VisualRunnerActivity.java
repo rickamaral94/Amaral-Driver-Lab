@@ -62,6 +62,7 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
     private final AtomicBoolean started = new AtomicBoolean(false);
     private File resultFile;
     private TextView overlay;
+    private volatile boolean retireRunnerOnDestroy;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -149,14 +150,29 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        if (!started.compareAndSet(false, true)) return;
+        // surfaceChanged supplies the first dimensions that are safe for swapchain creation.
+    }
+
+    @Override
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         Surface surface = holder.getSurface();
+        if (width <= 0 || height <= 0 || surface == null || !surface.isValid()
+                || !started.compareAndSet(false, true)) {
+            return;
+        }
         Thread worker = new Thread(() -> execute(surface), "visible-vulkan-scene");
         worker.start();
     }
 
-    @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
     @Override public void surfaceDestroyed(SurfaceHolder holder) {}
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (retireRunnerOnDestroy && isFinishing()) {
+            RunnerProcessLifecycle.retireAfterActivityDestroyed();
+        }
+    }
 
     private File validateResultPath(String rawPath) throws Exception {
         if (rawPath == null) throw new IllegalArgumentException("Caminho de resultado ausente");
@@ -352,10 +368,8 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             }
             runOnUiThread(() -> overlay.setText("Cena concluída · consolidando resultados…"));
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                retireRunnerOnDestroy = true;
                 finish();
-                new Handler(Looper.getMainLooper()).postDelayed(
-                        () -> Process.killProcess(Process.myPid()),
-                        RunnerProcessLifecycle.SELF_TERMINATION_DELAY_MS);
             }, RunnerProcessLifecycle.VISUAL_COMPLETION_DELAY_MS);
         }
     }

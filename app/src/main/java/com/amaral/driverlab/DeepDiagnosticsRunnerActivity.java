@@ -36,6 +36,8 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
     static final String EXTRA_CYCLES = "cycles";
     static final String EXTRA_MEMORY_MIB = "memory_mib";
 
+    private volatile boolean retireRunnerOnDestroy;
+
     private static native String runNativeDeepDiagnostics(
             String mode,
             String driverDirectory,
@@ -56,6 +58,14 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
             return;
         }
         new Thread(() -> execute(result), "phase10-deep-diagnostics").start();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (retireRunnerOnDestroy && isFinishing()) {
+            RunnerProcessLifecycle.retireAfterActivityDestroyed();
+        }
     }
 
     private File validateResultPath(String path) throws Exception {
@@ -193,10 +203,8 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
                 // Coordinator classifies a missing result as a crash.
             }
             new Handler(Looper.getMainLooper()).post(() -> {
+                retireRunnerOnDestroy = true;
                 finish();
-                new Handler(Looper.getMainLooper()).postDelayed(
-                        () -> Process.killProcess(Process.myPid()),
-                        RunnerProcessLifecycle.SELF_TERMINATION_DELAY_MS);
             });
         }
     }

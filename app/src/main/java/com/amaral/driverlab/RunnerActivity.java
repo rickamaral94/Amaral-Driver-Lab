@@ -48,6 +48,8 @@ public final class RunnerActivity extends LocalizedActivity {
     static final String EXTRA_REPETITIONS_PER_SAMPLE = "repetitions_per_sample";
     static final String EXTRA_EFFECT_INJECTION_PERCENT = "effect_injection_percent";
 
+    private volatile boolean retireRunnerOnDestroy;
+
     private static native String runNativeBenchmark(
             String driverDirectory,
             String driverName,
@@ -101,6 +103,14 @@ public final class RunnerActivity extends LocalizedActivity {
 
         Thread worker = new Thread(() -> execute(resultFile), "vulkan-workload");
         worker.start();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (retireRunnerOnDestroy && isFinishing()) {
+            RunnerProcessLifecycle.retireAfterActivityDestroyed();
+        }
     }
 
     private File validateResultPath(String rawPath) throws Exception {
@@ -357,10 +367,8 @@ public final class RunnerActivity extends LocalizedActivity {
                 // The controller classifies a missing file as a crashed phase.
             }
             new Handler(Looper.getMainLooper()).post(() -> {
+                retireRunnerOnDestroy = true;
                 finish();
-                new Handler(Looper.getMainLooper()).postDelayed(
-                        () -> Process.killProcess(Process.myPid()),
-                        RunnerProcessLifecycle.SELF_TERMINATION_DELAY_MS);
             });
         }
     }

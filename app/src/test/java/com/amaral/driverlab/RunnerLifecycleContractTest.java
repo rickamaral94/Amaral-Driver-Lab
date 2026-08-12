@@ -25,6 +25,10 @@ public final class RunnerLifecycleContractTest {
                     java.contains("finishAndRemoveTask("));
             assertTrue(runner + " must finish only its own Activity",
                     java.contains("finish();"));
+            assertTrue(runner + " must retire only after Activity destruction",
+                    java.contains("RunnerProcessLifecycle.retireAfterActivityDestroyed()"));
+            assertFalse(runner + " must not kill its process from the finish callback",
+                    java.contains("Process.killProcess("));
         }
     }
 
