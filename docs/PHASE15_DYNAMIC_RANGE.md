@@ -104,7 +104,8 @@ que não recuperar o efeito permanece falho, sem correção numérica.
 
 ## Protocolo físico A740 pendente
 
-1. Compilar e instalar o APK alpha14 no A740.
+1. Compilar e instalar o APK alpha14 no A740. A alpha14 preserva a tarefa principal
+   entre runners isolados e inclui breadcrumbs duráveis para crash/timeout nativo.
 2. Executar a qualificação v6 em perfil térmico controlado e repetir em outro dia.
 3. Confirmar faixa 8–16 ms, linearidade, ausência de drift e `completed_paired_rounds` planejado.
 4. Rodar a injeção 0%/1%/3%/10% no mesmo workload e conferir o efeito realmente medido.

@@ -75,7 +75,7 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         try {
             resultFile = validateResultPath(getIntent().getStringExtra(RunnerActivity.EXTRA_RESULT_PATH));
         } catch (Exception error) {
-            finishAndRemoveTask();
+            finish();
             return;
         }
 
@@ -176,12 +176,7 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         ScheduledExecutorService sampler = Executors.newSingleThreadScheduledExecutor();
         String rawPrefix = null;
         try {
-            JSONObject state = new JSONObject()
-                    .put("state", "started")
-                    .put("pid", Process.myPid())
-                    .put("started_at_ms", startedAt);
-            ResultFiles.writeAtomic(new File(resultFile.getAbsolutePath() + ".state"),
-                    state.toString(2));
+            RunnerProcessState.start(resultFile, Process.myPid(), startedAt);
 
             String workloadId = getIntent().getStringExtra(RunnerActivity.EXTRA_WORKLOAD_ID);
             if (!VisualSceneContract.isVisualScene(workloadId)) {
@@ -258,18 +253,29 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                                     driverDir, driverName))
                     .put("driver_metadata", driverMetadata == null || driverMetadata.isEmpty()
                             ? JSONObject.NULL : new JSONObject(driverMetadata));
+            RunnerProcessState.checkpoint(resultFile, "runner_inputs_validated",
+                    new JSONObject()
+                            .put("phase", result.optString("phase"))
+                            .put("workload_id", workloadId)
+                            .put("workload_version", workloadVersion)
+                            .put("driver_mode", result.optString("driver_mode"))
+                            .put("driver_role", result.optString("driver_role"))
+                            .put("driver_display_name", result.opt("driver_display_name"))
+                            .put("driver_sha256", result.opt("driver_sha256")));
             beforeSnapshot = DeviceSnapshot.capture(this);
             result.put("device_before", beforeSnapshot);
             sampler.scheduleAtFixedRate(
                     () -> telemetry.add(DeviceSnapshot.captureTelemetry(this)),
                     0, 1, TimeUnit.SECONDS);
 
+            RunnerProcessState.checkpoint(resultFile, "jni_library_load", null);
             System.loadLibrary("driverlab");
             File temporary = new File(getCacheDir(), "visual-runner-temp");
             if (!temporary.isDirectory() && !temporary.mkdirs()) {
                 throw new IllegalStateException("Falha ao criar pasta temporária visual");
             }
             rawPrefix = rawPrefix(resultFile);
+            RunnerProcessState.checkpoint(resultFile, "native_vulkan_call", null);
             String nativeJson = runNativeVisualScene(
                     surface,
                     workloadId,
@@ -283,6 +289,7 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                     warmup,
                     measure,
                     rawPrefix);
+            RunnerProcessState.checkpoint(resultFile, "native_vulkan_returned", null);
             JSONObject nativeResult = new JSONObject(nativeJson);
             DriverExecutionIdentity.normalizeRuntimeCapabilities(nativeResult);
             result.put("native", nativeResult);
@@ -338,18 +345,14 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                     }
                 }
                 ResultFiles.writeAtomic(resultFile, result.toString(2));
-                ResultFiles.writeAtomic(new File(resultFile.getAbsolutePath() + ".state"),
-                        new JSONObject()
-                                .put("state", "completed")
-                                .put("pid", Process.myPid())
-                                .put("success", result.optBoolean("success", false))
-                                .toString(2));
+                RunnerProcessState.complete(resultFile, Process.myPid(),
+                        result.optBoolean("success", false));
             } catch (Exception ignored) {
                 // Controller classifies a missing result as a crashed phase.
             }
             runOnUiThread(() -> overlay.setText("Cena concluída · consolidando resultados…"));
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                finishAndRemoveTask();
+                finish();
                 new Handler(Looper.getMainLooper()).postDelayed(
                         () -> Process.killProcess(Process.myPid()),
                         RunnerProcessLifecycle.SELF_TERMINATION_DELAY_MS);

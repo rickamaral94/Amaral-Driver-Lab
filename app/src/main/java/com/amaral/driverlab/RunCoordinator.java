@@ -97,6 +97,7 @@ final class RunCoordinator {
     private String calibrationThermalProfile;
     private JSONObject linearity;
     private JSONObject sampleSizePlan;
+    private JSONObject calibrationFailure;
     private boolean operationalBudgetExhausted;
 
     RunCoordinator(Activity activity, DriverPackage candidate, int mode, int rounds,
@@ -559,8 +560,21 @@ final class RunCoordinator {
             if (currentResultFile.isFile()) {
                 JSONObject completed = new JSONObject(ResultFiles.readUtf8(currentResultFile));
                 if (calibrationProbeActive) {
-                    calibrationProbeActive = false;
-                    handleCalibrationProbe(completed);
+                    if (!completed.optBoolean("success", false)) {
+                        finishCalibrationFailure(completed);
+                    } else {
+                        calibrationProbeActive = false;
+                        try {
+                            handleCalibrationProbe(completed);
+                        } catch (Throwable error) {
+                            completed.put("success", false)
+                                    .put("failure_type", "calibration_probe_invalid")
+                                    .put("failure_stage", "calibration_result_validation")
+                                    .put("error", error.toString());
+                            ResultFiles.writeAtomic(currentResultFile, completed.toString(2));
+                            finishCalibrationFailure(completed);
+                        }
+                    }
                     return;
                 }
                 if (sampleSizePilotActive) sampleSizePilotResults.put(completed);
@@ -573,11 +587,12 @@ final class RunCoordinator {
             if (runnerExitedUnexpectedly()) {
                 killTimedOutRunner();
                 if (calibrationProbeActive) {
-                    calibrationProbeActive = false;
-                    listener.onFailure("Falha no probe de calibração", null);
+                    JSONObject failure = recordSyntheticFailure(
+                            "crash", "runner_crash", true);
+                    finishCalibrationFailure(failure);
                     return;
                 }
-                recordSyntheticFailure("crash", "runner_crash");
+                recordSyntheticFailure("crash", "runner_crash", false);
                 phaseIndex++;
                 handler.postDelayed(this::launchNext,
                         RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
@@ -586,11 +601,12 @@ final class RunCoordinator {
             if (SystemClock.elapsedRealtime() >= phaseDeadlineElapsed) {
                 killTimedOutRunner();
                 if (calibrationProbeActive) {
-                    calibrationProbeActive = false;
-                    listener.onFailure("Timeout no probe de calibração", null);
+                    JSONObject failure = recordSyntheticFailure(
+                            "timeout", "runner_timeout", true);
+                    finishCalibrationFailure(failure);
                     return;
                 }
-                recordSyntheticFailure("timeout", "runner_timeout");
+                recordSyntheticFailure("timeout", "runner_timeout", false);
                 phaseIndex++;
                 handler.postDelayed(this::launchNext,
                         RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
@@ -605,9 +621,8 @@ final class RunCoordinator {
     private boolean runnerExitedUnexpectedly() {
         if (SystemClock.elapsedRealtime() - phaseLaunchedElapsed < 2000L) return false;
         try {
-            File stateFile = new File(currentResultFile.getAbsolutePath() + ".state");
-            if (!stateFile.isFile()) return false;
-            JSONObject state = new JSONObject(ResultFiles.readUtf8(stateFile));
+            JSONObject state = RunnerProcessState.read(currentResultFile);
+            if (state == null) return false;
             if (!"started".equals(state.optString("state"))) return false;
             int pid = state.optInt("pid", -1);
             return pid > 0 && !new File("/proc/" + pid).exists();
@@ -616,12 +631,14 @@ final class RunCoordinator {
         }
     }
 
-    private void recordSyntheticFailure(String failureType, String error) throws Exception {
-        Phase phase = phases.get(phaseIndex);
+    private JSONObject recordSyntheticFailure(String failureType, String error,
+                                              boolean calibration) throws Exception {
+        Phase phase = calibration
+                ? new Phase(false, 0, reference) : phases.get(phaseIndex);
         JSONObject failure = new JSONObject();
         failure.put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION);
         failure.put("success", false);
-        failure.put("phase", phase.label);
+        failure.put("phase", calibration ? "calibration_reference" : phase.label);
         failure.put("driver_mode",
                 DriverExecutionIdentity.mode(phase.usesCustomDriver()));
         failure.put("driver_role", phase.executionRole());
@@ -634,19 +651,36 @@ final class RunCoordinator {
         failure.put("workload_version", workloadVersion);
         if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) failure.put("trace_id", traceId);
         failure.put("failure_type", failureType);
-        failure.put("failure_stage", "runner_process");
         failure.put("error", error);
         failure.put("finished_at_ms", System.currentTimeMillis());
+        RunnerProcessState.attachToSyntheticFailure(
+                failure, currentResultFile, "runner_process");
         ResultFiles.writeAtomic(currentResultFile, failure.toString(2));
-        if (sampleSizePilotActive) sampleSizePilotResults.put(failure);
-        else phaseResults.put(failure);
+        if (!calibration) {
+            if (sampleSizePilotActive) sampleSizePilotResults.put(failure);
+            else phaseResults.put(failure);
+        }
+        return failure;
+    }
+
+    private void finishCalibrationFailure(JSONObject failure) throws Exception {
+        calibrationProbeActive = false;
+        calibrationFailure = new JSONObject(failure.toString());
+        calibrationObservations.put(new JSONObject()
+                .put("stage", calibrationStage)
+                .put("success", false)
+                .put("failure_type", failure.optString("failure_type", "calibration_failure"))
+                .put("failure_stage", failure.optString("failure_stage", "runner_process"))
+                .put("runner_last_stage", failure.opt("runner_last_stage")));
+        phaseResults.put(failure);
+        finishSuite();
     }
 
     private void killTimedOutRunner() {
         try {
-            File stateFile = new File(currentResultFile.getAbsolutePath() + ".state");
-            if (!stateFile.isFile()) return;
-            int pid = new JSONObject(ResultFiles.readUtf8(stateFile)).optInt("pid", -1);
+            JSONObject state = RunnerProcessState.read(currentResultFile);
+            if (state == null) return;
+            int pid = state.optInt("pid", -1);
             if (pid > 0 && pid != Process.myPid()) Process.killProcess(pid);
         } catch (Exception ignored) {
             // The failure remains recorded even if the stale runner cannot be killed.
@@ -884,7 +918,8 @@ final class RunCoordinator {
                 && !Boolean.TRUE.equals(thermal.opt("thermal_drift_detected"))
                 && !drift.optBoolean("calibration_drift", true)
                 && !operationalBudgetExhausted;
-        String status = eligible ? "valid"
+        String status = calibrationFailure != null ? "calibration_failed"
+                : eligible ? "valid"
                 : operationalBudgetExhausted ? "operational_budget_exhausted"
                 : drift.optBoolean("calibration_drift", true) ? "calibration_drift"
                 : Boolean.TRUE.equals(thermal.opt("thermal_drift_detected"))
@@ -903,6 +938,8 @@ final class RunCoordinator {
                 .put("linearity", linearityResult)
                 .put("sample_duration_gate", gate)
                 .put("calibration_observations", calibrationObservations)
+                .put("calibration_failure", calibrationFailure == null
+                        ? JSONObject.NULL : calibrationFailure)
                 .put("effect_injection_validation", effectInjectionObservations)
                 .put("post_run_validation", drift)
                 .put("thermal_drift", thermal)

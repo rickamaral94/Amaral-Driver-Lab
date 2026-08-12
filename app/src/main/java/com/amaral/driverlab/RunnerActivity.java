@@ -95,7 +95,7 @@ public final class RunnerActivity extends LocalizedActivity {
         try {
             resultFile = validateResultPath(getIntent().getStringExtra(EXTRA_RESULT_PATH));
         } catch (Exception error) {
-            finishAndRemoveTask();
+            finish();
             return;
         }
 
@@ -121,12 +121,7 @@ public final class RunnerActivity extends LocalizedActivity {
         ScheduledExecutorService sampler = Executors.newSingleThreadScheduledExecutor();
         File rawEvidence = null;
         try {
-            File stateFile = new File(resultFile.getAbsolutePath() + ".state");
-            JSONObject state = new JSONObject();
-            state.put("state", "started");
-            state.put("pid", Process.myPid());
-            state.put("started_at_ms", System.currentTimeMillis());
-            ResultFiles.writeAtomic(stateFile, state.toString(2));
+            RunnerProcessState.start(resultFile, Process.myPid(), executionStartedAt);
 
             String phase = getIntent().getStringExtra(EXTRA_PHASE_LABEL);
             String driverDir = getIntent().getStringExtra(EXTRA_DRIVER_DIR);
@@ -234,18 +229,29 @@ public final class RunnerActivity extends LocalizedActivity {
                     DriverExecutionIdentity.requestedLibrarySha256(driverDir, driverName));
             result.put("driver_metadata", driverMeta == null || driverMeta.isEmpty()
                     ? JSONObject.NULL : new JSONObject(driverMeta));
+            RunnerProcessState.checkpoint(resultFile, "runner_inputs_validated",
+                    new JSONObject()
+                            .put("phase", result.optString("phase"))
+                            .put("workload_id", workloadId)
+                            .put("workload_version", workloadVersion)
+                            .put("driver_mode", driverMode)
+                            .put("driver_role", result.optString("driver_role"))
+                            .put("driver_display_name", result.opt("driver_display_name"))
+                            .put("driver_sha256", result.opt("driver_sha256")));
             beforeSnapshot = DeviceSnapshot.capture(this);
             result.put("device_before", beforeSnapshot);
 
             sampler.scheduleAtFixedRate(
                     () -> samples.add(DeviceSnapshot.captureTelemetry(this)), 0, 1, TimeUnit.SECONDS);
 
+            RunnerProcessState.checkpoint(resultFile, "jni_library_load", null);
             System.loadLibrary("driverlab");
             File temporary = new File(getCacheDir(), "driver-runner-temp");
             if (!temporary.isDirectory() && !temporary.mkdirs()) {
                 throw new IllegalStateException("Falha ao criar pasta temporária nativa");
             }
 
+            RunnerProcessState.checkpoint(resultFile, "native_vulkan_call", null);
             String nativeJson;
             if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
                 rawEvidence = siblingEvidence(resultFile, ".rgba");
@@ -291,6 +297,7 @@ public final class RunnerActivity extends LocalizedActivity {
                         measure);
             }
 
+            RunnerProcessState.checkpoint(resultFile, "native_vulkan_returned", null);
             JSONObject nativeResult = new JSONObject(nativeJson);
             DriverExecutionIdentity.normalizeRuntimeCapabilities(nativeResult);
             result.put("native", nativeResult);
@@ -344,17 +351,13 @@ public final class RunnerActivity extends LocalizedActivity {
                     if (validationErrors.length() > 0) result.put("validation_errors", validationErrors);
                 }
                 ResultFiles.writeAtomic(resultFile, result.toString(2));
-                JSONObject completed = new JSONObject();
-                completed.put("state", "completed");
-                completed.put("pid", Process.myPid());
-                completed.put("success", result.optBoolean("success", false));
-                ResultFiles.writeAtomic(new File(resultFile.getAbsolutePath() + ".state"),
-                        completed.toString(2));
+                RunnerProcessState.complete(resultFile, Process.myPid(),
+                        result.optBoolean("success", false));
             } catch (Exception ignored) {
                 // The controller classifies a missing file as a crashed phase.
             }
             new Handler(Looper.getMainLooper()).post(() -> {
-                finishAndRemoveTask();
+                finish();
                 new Handler(Looper.getMainLooper()).postDelayed(
                         () -> Process.killProcess(Process.myPid()),
                         RunnerProcessLifecycle.SELF_TERMINATION_DELAY_MS);

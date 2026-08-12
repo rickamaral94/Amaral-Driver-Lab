@@ -52,7 +52,7 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
         try {
             result = validateResultPath(getIntent().getStringExtra(EXTRA_RESULT_PATH));
         } catch (Exception error) {
-            finishAndRemoveTask();
+            finish();
             return;
         }
         new Thread(() -> execute(result), "phase10-deep-diagnostics").start();
@@ -74,12 +74,7 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
         ScheduledExecutorService sampler = Executors.newSingleThreadScheduledExecutor();
         long started = System.currentTimeMillis();
         try {
-            JSONObject state = new JSONObject()
-                    .put("state", "started")
-                    .put("pid", Process.myPid())
-                    .put("started_at_ms", started);
-            ResultFiles.writeAtomic(new File(resultFile.getAbsolutePath() + ".state"),
-                    state.toString(2));
+            RunnerProcessState.start(resultFile, Process.myPid(), started);
 
             String mode = getIntent().getStringExtra(EXTRA_MODE);
             if (!"soak".equals(mode)) mode = "full";
@@ -126,15 +121,25 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
                     .put("started_at_ms", started)
                     .put("runner_pid", Process.myPid())
                     .put("device_before", DeviceSnapshot.capture(this));
+            RunnerProcessState.checkpoint(resultFile, "runner_inputs_validated",
+                    new JSONObject()
+                            .put("phase", result.optString("phase"))
+                            .put("diagnostic_mode", mode)
+                            .put("driver_mode", result.optString("driver_mode"))
+                            .put("driver_role", result.optString("driver_role"))
+                            .put("driver_display_name", result.opt("driver_display_name"))
+                            .put("driver_sha256", result.opt("driver_sha256")));
 
             sampler.scheduleAtFixedRate(
                     () -> samples.add(DeviceSnapshot.captureTelemetry(this)),
                     0, 1, TimeUnit.SECONDS);
+            RunnerProcessState.checkpoint(resultFile, "jni_library_load", null);
             System.loadLibrary("driverlab");
             File temporary = new File(getCacheDir(), "phase10-native-temp");
             if (!temporary.isDirectory() && !temporary.mkdirs()) {
                 throw new IllegalStateException("Falha ao criar pasta temporária nativa");
             }
+            RunnerProcessState.checkpoint(resultFile, "native_vulkan_call", null);
             String nativeJson = runNativeDeepDiagnostics(
                     mode,
                     driverDir == null ? "" : driverDir,
@@ -143,6 +148,7 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
                     temporary.getAbsolutePath(),
                     cycles,
                     memoryMiB);
+            RunnerProcessState.checkpoint(resultFile, "native_vulkan_returned", null);
             JSONObject nativeResult = new JSONObject(nativeJson);
             DriverExecutionIdentity.normalizeRuntimeCapabilities(nativeResult);
             result.put("native", nativeResult)
@@ -181,17 +187,13 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
                 String logcat = captureOwnLogcat();
                 if (!logcat.isEmpty()) result.put("runner_logcat_tail", logcat);
                 ResultFiles.writeAtomic(resultFile, result.toString(2));
-                ResultFiles.writeAtomic(new File(resultFile.getAbsolutePath() + ".state"),
-                        new JSONObject()
-                                .put("state", "completed")
-                                .put("pid", Process.myPid())
-                                .put("success", result.optBoolean("success", false))
-                                .toString(2));
+                RunnerProcessState.complete(resultFile, Process.myPid(),
+                        result.optBoolean("success", false));
             } catch (Exception ignored) {
                 // Coordinator classifies a missing result as a crash.
             }
             new Handler(Looper.getMainLooper()).post(() -> {
-                finishAndRemoveTask();
+                finish();
                 new Handler(Looper.getMainLooper()).postDelayed(
                         () -> Process.killProcess(Process.myPid()),
                         RunnerProcessLifecycle.SELF_TERMINATION_DELAY_MS);

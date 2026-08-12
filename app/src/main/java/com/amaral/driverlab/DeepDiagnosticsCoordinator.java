@@ -53,6 +53,7 @@ final class DeepDiagnosticsCoordinator {
     private File directory;
     private File currentResult;
     private long deadlineElapsed;
+    private long launchedElapsed;
     private int phaseIndex;
     private long startedAt;
     private boolean active;
@@ -138,6 +139,7 @@ final class DeepDiagnosticsCoordinator {
             intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_SHA, phase.driver.sha256);
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        launchedElapsed = SystemClock.elapsedRealtime();
         activity.startActivity(intent);
         long timeoutSeconds = "soak".equals(mode)
                 ? Math.max(180L, cycles * 15L + 90L) : 420L;
@@ -153,6 +155,13 @@ final class DeepDiagnosticsCoordinator {
                 phaseIndex++;
                 handler.postDelayed(this::launchNext,
                         RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                return;
+            }
+            if (runnerExitedUnexpectedly()) {
+                killRunner();
+                recordSyntheticFailure("crash", "phase10_runner_crash");
+                phaseIndex++;
+                handler.postDelayed(this::launchNext, 1200L);
                 return;
             }
             if (SystemClock.elapsedRealtime() >= deadlineElapsed) {
@@ -185,10 +194,20 @@ final class DeepDiagnosticsCoordinator {
                         ? JSONObject.NULL : phase.driver.sha256)
                 .put("success", false)
                 .put("failure_type", type)
-                .put("failure_stage", stage)
+                .put("error", stage)
                 .put("finished_at_ms", System.currentTimeMillis());
+        RunnerProcessState.attachToSyntheticFailure(
+                failure, currentResult, "phase10_runner_process");
         ResultFiles.writeAtomic(currentResult, failure.toString(2));
         results.put(failure);
+    }
+
+    private boolean runnerExitedUnexpectedly() {
+        if (SystemClock.elapsedRealtime() - launchedElapsed < 2000L) return false;
+        JSONObject state = RunnerProcessState.read(currentResult);
+        if (state == null || !"started".equals(state.optString("state"))) return false;
+        int pid = state.optInt("pid", -1);
+        return pid > 0 && !new File("/proc/" + pid).exists();
     }
 
     private void finish() {
