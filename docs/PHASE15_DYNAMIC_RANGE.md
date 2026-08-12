@@ -5,11 +5,32 @@
 | Checkpoint | Estado | O que foi verificado |
 |---|---|---|
 | Implementação | concluído | contratos Java/JNI, unidades de repetição, cache persistente, linearidade, n adaptativo sem espiada, gates térmicos, auditoria histórica e testes locais |
-| Rodada física A740 | pendente | APK precisa ser compilado/instalado e executado no aparelho; nenhum número físico é inferido deste ambiente |
+| Primeira rodada física A740 | falha de orquestração | a Issue #48 executou correção, mas os probes seguintes foram interrompidos pela reutilização prematura do processo `:runner`; nenhum número de performance é válido |
+| Requalificação A740 | pendente | exige o APK alpha14 com intervalo de relançamento corrigido e duas execuções físicas completas |
 
 O checkpoint de implementação prova estrutura e regras do protocolo. Só o checkpoint físico pode
 provar tempos, estabilidade, temperatura, sensibilidade de 1%/3%/10% ou comportamento GMEM no
 A740.
+
+## Aprendizado da primeira rodada física — Issue #48
+
+O alpha13 gravava o resultado de um probe e o coordenador iniciava o probe seguinte
+imediatamente. As activities de benchmark compartilham o processo Android `:runner`; ao concluir,
+a activity anterior ainda tinha um `Process.killProcess()` agendado para 350 ms depois. O novo
+probe podia nascer no mesmo processo e ser morto pelo callback da execução anterior.
+
+O sintoma foi reproduzível na estrutura do relatório: correção offscreen concluiu, enquanto os
+workloads v2 falharam no início da calibração e a cobertura de identidade ficou em 12/82. Isso é
+falha do laboratório, não regressão do driver e não evidência de performance.
+
+O contrato corrigido centraliza dois tempos:
+
+- conclusão visual: até 250 ms, seguida pelo autoencerramento do runner em 350 ms;
+- relançamento pelo coordenador: 1.200 ms.
+
+Todos os caminhos que encadeiam probes, piloto e fases aguardam o intervalo de relançamento. Um
+teste unitário preserva uma margem mínima de 500 ms entre os dois eventos. A correção precisa ser
+confirmada no aparelho; análise de fonte e teste unitário não provam o comportamento do Android.
 
 ## Contrato de calibração
 
@@ -83,7 +104,7 @@ que não recuperar o efeito permanece falho, sem correção numérica.
 
 ## Protocolo físico A740 pendente
 
-1. Compilar e instalar o APK alpha13 no A740.
+1. Compilar e instalar o APK alpha14 no A740.
 2. Executar a qualificação v6 em perfil térmico controlado e repetir em outro dia.
 3. Confirmar faixa 8–16 ms, linearidade, ausência de drift e `completed_paired_rounds` planejado.
 4. Rodar a injeção 0%/1%/3%/10% no mesmo workload e conferir o efeito realmente medido.

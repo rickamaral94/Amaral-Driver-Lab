@@ -151,14 +151,16 @@ final class DeepDiagnosticsCoordinator {
             if (currentResult.isFile()) {
                 results.put(new JSONObject(ResultFiles.readUtf8(currentResult)));
                 phaseIndex++;
-                handler.postDelayed(this::launchNext, 1200L);
+                handler.postDelayed(this::launchNext,
+                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
                 return;
             }
             if (SystemClock.elapsedRealtime() >= deadlineElapsed) {
                 killRunner();
                 recordSyntheticFailure("timeout", "phase10_runner_timeout");
                 phaseIndex++;
-                handler.postDelayed(this::launchNext, 1200L);
+                handler.postDelayed(this::launchNext,
+                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
                 return;
             }
             handler.postDelayed(this::poll, 500L);

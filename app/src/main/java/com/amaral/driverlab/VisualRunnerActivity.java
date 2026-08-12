@@ -351,8 +351,9 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 finishAndRemoveTask();
                 new Handler(Looper.getMainLooper()).postDelayed(
-                        () -> Process.killProcess(Process.myPid()), 350);
-            }, 250);
+                        () -> Process.killProcess(Process.myPid()),
+                        RunnerProcessLifecycle.SELF_TERMINATION_DELAY_MS);
+            }, RunnerProcessLifecycle.VISUAL_COMPLETION_DELAY_MS);
         }
     }
 

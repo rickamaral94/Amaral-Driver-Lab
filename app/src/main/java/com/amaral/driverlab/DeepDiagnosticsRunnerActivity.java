@@ -193,7 +193,8 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
             new Handler(Looper.getMainLooper()).post(() -> {
                 finishAndRemoveTask();
                 new Handler(Looper.getMainLooper()).postDelayed(
-                        () -> Process.killProcess(Process.myPid()), 350L);
+                        () -> Process.killProcess(Process.myPid()),
+                        RunnerProcessLifecycle.SELF_TERMINATION_DELAY_MS);
             });
         }
     }

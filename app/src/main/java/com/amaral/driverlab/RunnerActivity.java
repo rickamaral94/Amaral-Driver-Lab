@@ -356,7 +356,8 @@ public final class RunnerActivity extends LocalizedActivity {
             new Handler(Looper.getMainLooper()).post(() -> {
                 finishAndRemoveTask();
                 new Handler(Looper.getMainLooper()).postDelayed(
-                        () -> Process.killProcess(Process.myPid()), 350);
+                        () -> Process.killProcess(Process.myPid()),
+                        RunnerProcessLifecycle.SELF_TERMINATION_DELAY_MS);
             });
         }
     }

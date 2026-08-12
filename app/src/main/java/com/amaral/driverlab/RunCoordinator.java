@@ -297,6 +297,18 @@ final class RunCoordinator {
         }
     }
 
+    private void scheduleCalibrationProbe(int repetitions, String stage) {
+        scheduleCalibrationProbe(repetitions, 0, stage);
+    }
+
+    private void scheduleCalibrationProbe(int repetitions, int effectPercent, String stage) {
+        // RunnerActivity and VisualRunnerActivity share the :runner process. The activity that
+        // just wrote the result still has a pending self-termination callback, so starting the
+        // next probe immediately lets the old callback kill the new probe in the same process.
+        handler.postDelayed(() -> launchCalibrationProbe(repetitions, effectPercent, stage),
+                RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+    }
+
     private void handleCalibrationProbe(JSONObject result) throws Exception {
         double medianUs = extractMedianBatchUs(result);
         if (!result.optBoolean("success", false) || !Double.isFinite(medianUs)
@@ -329,20 +341,20 @@ final class RunCoordinator {
                 calibrationRepetitions = BenchmarkCalibrationContract.selectMultiplier(medianUs);
                 calibrationStage = "calibrated_m";
             }
-            launchCalibrationProbe(calibrationRepetitions, calibrationStage);
+            scheduleCalibrationProbe(calibrationRepetitions, calibrationStage);
             return;
         }
         if ("pilot_base".equals(calibrationStage)) {
             calibrationRepetitions = BenchmarkCalibrationContract.selectMultiplier(medianUs);
             calibrationStage = "calibrated_m";
-            launchCalibrationProbe(calibrationRepetitions, calibrationStage);
+            scheduleCalibrationProbe(calibrationRepetitions, calibrationStage);
             return;
         }
         if ("validate_cached_m".equals(calibrationStage)
                 || "calibrated_m".equals(calibrationStage)) {
             calibratedMedianUs = medianUs;
             calibrationStage = "linearity_2m";
-            launchCalibrationProbe(Math.min(BenchmarkCalibrationContract.MAX_REPETITIONS,
+            scheduleCalibrationProbe(Math.min(BenchmarkCalibrationContract.MAX_REPETITIONS,
                     calibrationRepetitions * 2), calibrationStage);
             return;
         }
@@ -356,7 +368,7 @@ final class RunCoordinator {
                         calibrationRepetitions, calibratedMedianUs, linearity);
             }
             calibrationStage = "effect_injection_1";
-            launchCalibrationProbe(calibrationRepetitions, 1, calibrationStage);
+            scheduleCalibrationProbe(calibrationRepetitions, 1, calibrationStage);
             return;
         }
         if (calibrationStage.startsWith("effect_injection_")) {
@@ -371,12 +383,13 @@ final class RunCoordinator {
                             nominal, realized, calibratedMedianUs, medianUs, domain));
             if (nominal == 1) {
                 calibrationStage = "effect_injection_3";
-                launchCalibrationProbe(calibrationRepetitions, 3, calibrationStage);
+                scheduleCalibrationProbe(calibrationRepetitions, 3, calibrationStage);
             } else if (nominal == 3) {
                 calibrationStage = "effect_injection_10";
-                launchCalibrationProbe(calibrationRepetitions, 10, calibrationStage);
+                scheduleCalibrationProbe(calibrationRepetitions, 10, calibrationStage);
             } else {
-                startSampleSizePilot();
+                handler.postDelayed(this::startSampleSizePilot,
+                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
             }
             return;
         }
@@ -553,7 +566,8 @@ final class RunCoordinator {
                 if (sampleSizePilotActive) sampleSizePilotResults.put(completed);
                 else phaseResults.put(completed);
                 phaseIndex++;
-                handler.postDelayed(this::launchNext, 1200);
+                handler.postDelayed(this::launchNext,
+                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
                 return;
             }
             if (runnerExitedUnexpectedly()) {
@@ -565,7 +579,8 @@ final class RunCoordinator {
                 }
                 recordSyntheticFailure("crash", "runner_crash");
                 phaseIndex++;
-                handler.postDelayed(this::launchNext, 1200);
+                handler.postDelayed(this::launchNext,
+                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
                 return;
             }
             if (SystemClock.elapsedRealtime() >= phaseDeadlineElapsed) {
@@ -577,7 +592,8 @@ final class RunCoordinator {
                 }
                 recordSyntheticFailure("timeout", "runner_timeout");
                 phaseIndex++;
-                handler.postDelayed(this::launchNext, 1200);
+                handler.postDelayed(this::launchNext,
+                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
                 return;
             }
             handler.postDelayed(this::pollCurrent, 500);
