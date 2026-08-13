@@ -1,0 +1,139 @@
+name: Publish v0.13.0-alpha16 prerelease
+
+on:
+  push:
+    branches:
+      - agent/phase2-dynamic-range-v2-pr
+    paths:
+      - '.github/workflows/publish-alpha16-prerelease.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_CLIENT_ID: ${{ vars.GITHUB_CLIENT_ID }}
+      TAG: v0.13.0-alpha16
+      APK_NAME: Amaral-Driver-Lab-v0.13.0-alpha16.apk
+      SHA_NAME: Amaral-Driver-Lab-v0.13.0-alpha16.sha256
+    steps:
+      - name: Checkout prerelease source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Native toolchain
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" \
+            "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest :telemetry-sdk:testDebugUnitTest --stacktrace --console=plain
+
+      - name: Build prerelease APK
+        run: ./gradlew :app:assembleDebug --stacktrace --console=plain
+
+      - name: Prepare and verify release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" \
+            | grep -F "versionName='0.13.0-alpha16'"
+          mkdir -p release
+          cp "$apk" "release/${APK_NAME}"
+          (
+            cd release
+            sha256sum "${APK_NAME}" > "${SHA_NAME}"
+          )
+
+      - name: Publish GitHub prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES=$(cat <<'EOF'
+          ## Amaral Driver Lab v0.13.0-alpha16
+
+          This is a diagnostic prerelease for the persistent black visible-scene and unexpected launcher return observed on the Odin 2 Portal / Adreno A740.
+
+          ### Persistent app logs
+          - creates `/storage/emulated/0/Android/data/com.amaral.driverlab/files/logs/` without broad storage permission;
+          - separates main-process and isolated Vulkan-runner JSON-line logs;
+          - records Activity lifecycle, durable runner stages and uncaught Java exceptions;
+          - reads Android 11+ `ApplicationExitInfo`, preserving exit reason/status and an Android-provided trace when available;
+          - rotates each process log at 2 MiB with three archives and retains at most eight 1 MiB exit traces.
+
+          ### Native visual breadcrumbs
+          - synchronizes native stage events to disk;
+          - records the first frame and visual checkpoints around image acquire, queue submit, present return, fence completion and evidence write;
+          - preserves the last confirmed Vulkan point if the disposable runner dies abruptly.
+
+          ### User export
+          - adds `EXPORT APP LOGS (.ZIP)` to the home screen;
+          - exports the persistent directory through Android's document picker, avoiding file-manager restrictions around `Android/data`.
+
+          ### Validation status
+          - Android and telemetry unit tests execute before publication;
+          - Java API 28-35 compatibility and arm64 JNI/C++ compile before publication;
+          - the APK manifest is checked for version `0.13.0-alpha16`;
+          - the uploaded APK digest is verified against the generated SHA-256.
+
+          Install this APK over the existing app so prior app data is preserved. Reproduce the failure once, reopen Driver Lab, export the app logs ZIP and provide it for analysis. This release does not claim the black-scene defect is fixed and does not attribute the failure to either compared driver.
+          EOF
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "Amaral Driver Lab v0.13.0-alpha16" \
+              --notes "$NOTES" --draft=false --prerelease
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" \
+              --title "Amaral Driver Lab v0.13.0-alpha16" \
+              --notes "$NOTES" --prerelease
+          fi
+          gh release upload "$TAG" \
+            "release/${APK_NAME}" "release/${SHA_NAME}" --clobber
+
+      - name: Verify prerelease and record status
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" \
+            --json tagName,name,url,targetCommitish,publishedAt,isDraft,isPrerelease,assets \
+            > /tmp/alpha16-release.json
+          test "$(jq -r '.isDraft' /tmp/alpha16-release.json)" = "false"
+          test "$(jq -r '.isPrerelease' /tmp/alpha16-release.json)" = "true"
+          apk_sha=$(awk '{print $1}' "release/${SHA_NAME}")
+          remote_digest=$(jq -r --arg name "$APK_NAME" \
+            '.assets[] | select(.name == $name) | .digest' /tmp/alpha16-release.json)
+          test "$remote_digest" = "sha256:${apk_sha}"
+
+          git checkout "$GITHUB_REF_NAME"
+          git pull --ff-only origin "$GITHUB_REF_NAME"
+          mkdir -p .release-status
+          jq --arg expected "$apk_sha" \
+             --arg workflow_run "$GITHUB_RUN_ID" \
+             '. + {verification: {expected_apk_sha256: $expected, workflow_run: $workflow_run, status: "published_as_prerelease_and_verified"}}' \
+             /tmp/alpha16-release.json > .release-status/v0.13.0-alpha16.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .release-status/v0.13.0-alpha16.json
+          git commit -m "release: record verified v0.13.0-alpha16 prerelease" || true
+          git push origin HEAD:"$GITHUB_REF_NAME"
