@@ -29,6 +29,9 @@ final class RunnerProcessState {
                 .put("breadcrumbs", new JSONArray()
                         .put(breadcrumb("runner_started", startedAtMs)));
         ResultFiles.writeAtomic(fileFor(resultFile), state.toString(2));
+        AppDiagnostics.event("runner_state_started", new JSONObject()
+                .put("result_file", resultFile.getName())
+                .put("pid", pid));
     }
 
     static void checkpoint(File resultFile, String stage, JSONObject details) throws Exception {
@@ -61,6 +64,10 @@ final class RunnerProcessState {
         breadcrumbs.put(breadcrumb(stage, now));
         state.put("breadcrumbs", breadcrumbs);
         ResultFiles.writeAtomic(fileFor(resultFile), state.toString(2));
+        AppDiagnostics.event("runner_checkpoint", new JSONObject()
+                .put("result_file", resultFile.getName())
+                .put("stage", stage)
+                .put("context", context));
     }
 
     static void complete(File resultFile, int pid, boolean success) throws Exception {
@@ -81,6 +88,10 @@ final class RunnerProcessState {
                 .put("last_stage_at_ms", now)
                 .put("finished_at_ms", now);
         ResultFiles.writeAtomic(fileFor(resultFile), state.toString(2));
+        AppDiagnostics.event("runner_state_completed", new JSONObject()
+                .put("result_file", resultFile.getName())
+                .put("pid", pid)
+                .put("success", success));
     }
 
     static JSONObject read(File resultFile) {
@@ -106,6 +117,11 @@ final class RunnerProcessState {
                         .put("native_signal", JSONObject.NULL)
                         .put("native_signal_limitation",
                                 "SIGSEGV/SIGABRT require an Android tombstone or external ADB logcat for exact attribution"));
+        AppDiagnostics.event("runner_synthetic_failure", new JSONObject()
+                .put("result_file", resultFile.getName())
+                .put("last_stage", lastStage)
+                .put("failure_type", failure.optString("failure_type"))
+                .put("error", failure.optString("error")));
     }
 
     private static JSONObject breadcrumb(String stage, long atMs) throws Exception {

@@ -57,7 +57,8 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             String temporaryDirectory,
             int warmupSeconds,
             int measureSeconds,
-            String rawPrefix);
+            String rawPrefix,
+            String diagnosticLogPath);
 
     private final AtomicBoolean started = new AtomicBoolean(false);
     private File resultFile;
@@ -76,9 +77,17 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         try {
             resultFile = validateResultPath(getIntent().getStringExtra(RunnerActivity.EXTRA_RESULT_PATH));
         } catch (Exception error) {
+            AppDiagnostics.event("visual_runner_invalid_result_path",
+                    AppDiagnostics.details("error", error.toString()));
             finish();
             return;
         }
+        AppDiagnostics.event("visual_runner_created", AppDiagnostics.details(
+                "result_file", resultFile.getName(),
+                "workload_id", getIntent().getStringExtra(RunnerActivity.EXTRA_WORKLOAD_ID),
+                "workload_version", getIntent().getIntExtra(
+                        RunnerActivity.EXTRA_WORKLOAD_VERSION, -1),
+                "phase", getIntent().getStringExtra(RunnerActivity.EXTRA_PHASE_LABEL)));
 
         FrameLayout root = new FrameLayout(this);
         SurfaceView surfaceView = new SurfaceView(this);
@@ -151,11 +160,19 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         // surfaceChanged supplies the first dimensions that are safe for swapchain creation.
+        AppDiagnostics.event("visual_surface_created", AppDiagnostics.details(
+                "valid", holder.getSurface() != null && holder.getSurface().isValid()));
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         Surface surface = holder.getSurface();
+        AppDiagnostics.event("visual_surface_changed", AppDiagnostics.details(
+                "format", format,
+                "width", width,
+                "height", height,
+                "valid", surface != null && surface.isValid(),
+                "already_started", started.get()));
         if (width <= 0 || height <= 0 || surface == null || !surface.isValid()
                 || !started.compareAndSet(false, true)) {
             return;
@@ -164,7 +181,10 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         worker.start();
     }
 
-    @Override public void surfaceDestroyed(SurfaceHolder holder) {}
+    @Override public void surfaceDestroyed(SurfaceHolder holder) {
+        AppDiagnostics.event("visual_surface_destroyed", AppDiagnostics.details(
+                "runner_started", started.get()));
+    }
 
     @Override
     protected void onDestroy() {
@@ -304,7 +324,9 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                     temporary.getAbsolutePath(),
                     warmup,
                     measure,
-                    rawPrefix);
+                    rawPrefix,
+                    new File(AppDiagnostics.logsDirectory(this),
+                            "app-runner.log").getAbsolutePath());
             RunnerProcessState.checkpoint(resultFile, "native_vulkan_returned", null);
             JSONObject nativeResult = new JSONObject(nativeJson);
             DriverExecutionIdentity.normalizeRuntimeCapabilities(nativeResult);

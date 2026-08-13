@@ -7,7 +7,9 @@
 | Implementação | concluído | contratos Java/JNI, unidades de repetição, cache persistente, linearidade, n adaptativo sem espiada, gates térmicos, auditoria histórica e testes locais |
 | Primeira rodada física A740 | falha de orquestração | a Issue #48 executou correção, mas os probes seguintes foram interrompidos pela reutilização prematura do processo `:runner`; nenhum número de performance é válido |
 | Segunda rodada física A740 | falha de apresentação | a alpha14 manteve o overlay Android, mas a superfície Vulkan ficou preta e o runner devolveu o aparelho ao launcher; nenhum resultado visual ou de performance é válido |
-| Requalificação A740 | pendente | exige o APK alpha15 com sincronização explícita da apresentação e retorno seguro à qualificação, seguido por duas execuções físicas completas |
+| Confirmação alpha15 | falha de apresentação persistente | a cena continuou preta e o aparelho voltou ao launcher; sem log externo, a causa exata permanece indeterminada |
+| Instrumentação alpha16 | concluído em código | adiciona logs persistentes do app, histórico `ApplicationExitInfo`, traces quando disponíveis e breadcrumbs nativos da apresentação Vulkan |
+| Requalificação A740 | pendente | primeiro exige uma reprodução na alpha16 e análise do ZIP; a correção causal será feita somente após essa evidência |
 
 O checkpoint de implementação prova estrutura e regras do protocolo. Só o checkpoint físico pode
 provar tempos, estabilidade, temperatura, sensibilidade de 1%/3%/10% ou comportamento GMEM no
@@ -36,8 +38,9 @@ mostrou que o encerramento ainda podia competir com a transação de retorno da 
 Na alpha15, o processo isolado só agenda sua retirada depois que Android chama `onDestroy()` na
 Activity concluída. A cena visual também espera `surfaceChanged()` com dimensões válidas, usa FIFO
 e declara dependências explícitas entre color attachment, leitura do shader e transferência para
-o swapchain. Essas mudanças corrigem as duas causas do sintoma observado sem classificar o caso
-como regressão do driver. A confirmação final continua dependente do teste físico.
+o swapchain. O teste físico manteve o mesmo sintoma, portanto essas hipóteses não encerraram a
+causa. A alpha16 não declara nova correção: ela persiste evidência suficiente para localizar o
+último estágio Java/Vulkan confirmado e o motivo de saída reconhecido pelo Android.
 
 ## Contrato de calibração
 
@@ -111,9 +114,10 @@ que não recuperar o efeito permanece falho, sem correção numérica.
 
 ## Protocolo físico A740 pendente
 
-1. Compilar e instalar o APK alpha15 no A740. A alpha15 preserva a tarefa principal,
-   sincroniza a apresentação das cenas e mantém breadcrumbs duráveis para crash/timeout nativo.
-2. Executar a qualificação v6 em perfil térmico controlado e repetir em outro dia.
-3. Confirmar faixa 8–16 ms, linearidade, ausência de drift e `completed_paired_rounds` planejado.
-4. Rodar a injeção 0%/1%/3%/10% no mesmo workload e conferir o efeito realmente medido.
-5. Publicar artefatos brutos. Falha em qualquer gate permanece falha; não ajustar o delta depois.
+1. Instalar a alpha16 sobre a instalação existente no A740 e reproduzir o fechamento uma vez.
+2. Reabrir o app e exportar **Logs do próprio Driver Lab** em ZIP.
+3. Corrigir a causa observada e somente então executar a qualificação v6 em perfil térmico
+   controlado, repetindo em outro dia.
+4. Confirmar faixa 8–16 ms, linearidade, ausência de drift e `completed_paired_rounds` planejado.
+5. Rodar a injeção 0%/1%/3%/10% no mesmo workload e conferir o efeito realmente medido.
+6. Publicar artefatos brutos. Falha em qualquer gate permanece falha; não ajustar o delta depois.

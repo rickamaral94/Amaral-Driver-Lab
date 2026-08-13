@@ -23,6 +23,7 @@ APK Android arm64, sem root, para comparar o driver Vulkan do sistema com pacote
 - diagnóstico profundo A/B de formatos, corpus de shaders, pipeline cache, memória, sincronização e Soak Test.
 - benchmark visual avançado com 768 cubos 3D em 1280×720, iluminação procedural e pós-processamento de 19 amostras, integrado ao Recommended v5.
 - workloads v2 com faixa dinâmica calibrada, multiplicador persistente por hardware/configuração, linearidade `m`/`2m`, piloto amostral independente e gates de deriva térmica.
+- logs persistentes em `Android/data/com.amaral.driverlab/files/logs`, histórico de encerramento do Android, breadcrumbs Vulkan sincronizados e exportação ZIP pela tela inicial.
 
 A correção offscreen valida somente a cena fixa incluída no APK. Ela **não prova ganho em jogos** nem correção em todos os shaders, APIs ou emuladores.
 
@@ -111,7 +112,7 @@ A versão atual usa `schema_version = 15`. Perfis Full v1–v5 continuam presos 
 
 Mudanças na geometria, SPIR-V, ordem dos draws, resolução, formato, cálculo ou regra padrão de comparação exigem uma nova `workload_version`.
 
-Veja [docs/RESULT_SCHEMA.md](docs/RESULT_SCHEMA.md), [docs/PHASE15_DYNAMIC_RANGE.md](docs/PHASE15_DYNAMIC_RANGE.md) e [docs/WORKLOAD_VERSION_AUDIT.md](docs/WORKLOAD_VERSION_AUDIT.md).
+Veja [docs/RESULT_SCHEMA.md](docs/RESULT_SCHEMA.md), [docs/PHASE15_DYNAMIC_RANGE.md](docs/PHASE15_DYNAMIC_RANGE.md), [docs/APP_DIAGNOSTICS.md](docs/APP_DIAGNOSTICS.md) e [docs/WORKLOAD_VERSION_AUDIT.md](docs/WORKLOAD_VERSION_AUDIT.md).
 
 ## Compilar e testar
 

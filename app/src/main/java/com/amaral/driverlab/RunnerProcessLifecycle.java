@@ -25,6 +25,10 @@ final class RunnerProcessLifecycle {
      */
     static void retireAfterActivityDestroyed() {
         int pid = Process.myPid();
+        AppDiagnostics.event("runner_process_retirement_scheduled",
+                AppDiagnostics.details(
+                        "pid", pid,
+                        "delay_ms", POST_DESTROY_TERMINATION_DELAY_MS));
         new Handler(Looper.getMainLooper()).postDelayed(
                 () -> Process.killProcess(pid), POST_DESTROY_TERMINATION_DELAY_MS);
     }
