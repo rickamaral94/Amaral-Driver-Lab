@@ -48,6 +48,7 @@ public final class RunnerActivity extends LocalizedActivity {
     static final String EXTRA_REPETITIONS_PER_SAMPLE = "repetitions_per_sample";
     static final String EXTRA_EFFECT_INJECTION_PERCENT = "effect_injection_percent";
 
+    private File resultFile;
     private volatile boolean retireRunnerOnDestroy;
 
     private static native String runNativeBenchmark(
@@ -93,15 +94,17 @@ public final class RunnerActivity extends LocalizedActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        File resultFile;
+        File validatedResultFile;
         try {
-            resultFile = validateResultPath(getIntent().getStringExtra(EXTRA_RESULT_PATH));
+            validatedResultFile = validateResultPath(
+                    getIntent().getStringExtra(EXTRA_RESULT_PATH));
         } catch (Exception error) {
             finish();
             return;
         }
+        resultFile = validatedResultFile;
 
-        Thread worker = new Thread(() -> execute(resultFile), "vulkan-workload");
+        Thread worker = new Thread(() -> execute(validatedResultFile), "vulkan-workload");
         worker.start();
     }
 
@@ -109,7 +112,7 @@ public final class RunnerActivity extends LocalizedActivity {
     protected void onDestroy() {
         super.onDestroy();
         if (retireRunnerOnDestroy && isFinishing()) {
-            RunnerProcessLifecycle.retireAfterActivityDestroyed();
+            RunnerProcessState.markActivityDestroyed(resultFile, Process.myPid());
         }
     }
 
