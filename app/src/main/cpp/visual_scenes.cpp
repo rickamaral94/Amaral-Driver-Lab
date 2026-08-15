@@ -210,8 +210,10 @@ public:
                     const std::string &driverName,
                     const std::string &nativeLibraryDirectory,
                     const std::string &temporaryDirectory,
-                    const std::string &diagnosticLogPathValue) {
+                    const std::string &diagnosticLogPathValue,
+                    const std::string &nativeStagePathValue) {
         diagnosticLogPath = diagnosticLogPathValue;
+        nativeStagePath = nativeStagePathValue;
         sceneId = sceneIdValue;
         if (workloadVersionValue != 1U && workloadVersionValue != 2U) {
             throw std::runtime_error("Unsupported visual workload version");
@@ -302,31 +304,27 @@ public:
         check(createInstance(&instanceInfo, nullptr, &instance), "vkCreateInstance");
         loadInstanceFunctions();
 
-        nativeWindow = ANativeWindow_fromSurface(environment, surfaceObject);
-        if (nativeWindow == nullptr) throw std::runtime_error("Unable to acquire ANativeWindow");
-        VkAndroidSurfaceCreateInfoKHR surfaceInfo{};
-        surfaceInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
-        surfaceInfo.window = nativeWindow;
-        setStage("create_android_surface");
-        check(vkCreateAndroidSurfaceKHR(instance, &surfaceInfo, nullptr, &surface),
-              "vkCreateAndroidSurfaceKHR");
-
+        setStage("enumerate_physical_devices_count");
         uint32_t physicalCount = 0;
         check(vkEnumeratePhysicalDevices(instance, &physicalCount, nullptr),
               "vkEnumeratePhysicalDevices(count)");
         if (physicalCount == 0) throw std::runtime_error("Driver exposed no physical device");
         std::vector<VkPhysicalDevice> devices(physicalCount);
+        setStage("enumerate_physical_devices_list");
         check(vkEnumeratePhysicalDevices(instance, &physicalCount, devices.data()),
               "vkEnumeratePhysicalDevices(list)");
         physicalDevice = devices.front();
+        setStage("query_physical_device");
         vkGetPhysicalDeviceProperties(physicalDevice, &properties);
         vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
 
         uint32_t deviceExtensionCount = 0;
+        setStage("enumerate_device_extensions_count");
         check(vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr,
                                                    &deviceExtensionCount, nullptr),
               "vkEnumerateDeviceExtensionProperties(count)");
         deviceExtensions.resize(deviceExtensionCount);
+        setStage("enumerate_device_extensions_list");
         check(vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr,
                                                    &deviceExtensionCount, deviceExtensions.data()),
               "vkEnumerateDeviceExtensionProperties(list)");
@@ -345,6 +343,17 @@ public:
             properties = properties2.properties;
             hasDriverProperties = true;
         }
+
+        setStage("acquire_android_window");
+        nativeWindow = ANativeWindow_fromSurface(environment, surfaceObject);
+        if (nativeWindow == nullptr) throw std::runtime_error("Unable to acquire ANativeWindow");
+        VkAndroidSurfaceCreateInfoKHR surfaceInfo{};
+        surfaceInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+        surfaceInfo.window = nativeWindow;
+        setStage("create_android_surface_call");
+        check(vkCreateAndroidSurfaceKHR(instance, &surfaceInfo, nullptr, &surface),
+              "vkCreateAndroidSurfaceKHR");
+        setStage("create_android_surface_returned");
 
         uint32_t familyCount = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &familyCount, nullptr);
@@ -1361,7 +1370,27 @@ private:
     void setStage(const std::string &value) {
         if (stage == value) return;
         stage = value;
+        persistNativeStage();
         appendDiagnostic("native_visual_stage", -1, 0);
+    }
+
+    void persistNativeStage() const {
+        if (nativeStagePath.empty()) return;
+        const std::string data = stage + "\n";
+        const int descriptor = open(nativeStagePath.c_str(),
+                                    O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+        if (descriptor < 0) return;
+        size_t written = 0;
+        while (written < data.size()) {
+            const ssize_t count = write(descriptor, data.data() + written,
+                                        data.size() - written);
+            if (count <= 0) break;
+            written += static_cast<size_t>(count);
+        }
+        const int syncResult = fsync(descriptor);
+        const int closeResult = close(descriptor);
+        (void) syncResult;
+        (void) closeResult;
     }
 
     void appendDiagnostic(const char *event, int64_t frame, int64_t value) const {
@@ -1462,6 +1491,7 @@ private:
     uint32_t vertexCount = kLegacyVertexCount;
     std::string stage = "not_started";
     std::string diagnosticLogPath;
+    std::string nativeStagePath;
     bool customDriver = false;
     void *library = nullptr;
     ANativeWindow *nativeWindow = nullptr;
@@ -1619,7 +1649,8 @@ Java_com_amaral_driverlab_VisualRunnerActivity_runNativeVisualScene(
         jint warmupSeconds,
         jint measureSeconds,
         jstring rawPrefix,
-        jstring diagnosticLogPath) {
+        jstring diagnosticLogPath,
+        jstring nativeStagePath) {
     VisualRenderer renderer;
     try {
         renderer.initialize(environment, surface,
@@ -1631,7 +1662,8 @@ Java_com_amaral_driverlab_VisualRunnerActivity_runNativeVisualScene(
                             UtfString(environment, driverName).string(),
                             UtfString(environment, nativeLibraryDirectory).string(),
                             UtfString(environment, temporaryDirectory).string(),
-                            UtfString(environment, diagnosticLogPath).string());
+                            UtfString(environment, diagnosticLogPath).string(),
+                            UtfString(environment, nativeStagePath).string());
         const std::string result = renderer.run(warmupSeconds, measureSeconds,
                                                 UtfString(environment, rawPrefix).string());
         return environment->NewStringUTF(result.c_str());

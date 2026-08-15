@@ -105,6 +105,16 @@ final class DeepDiagnosticsCoordinator {
 
     boolean isActive() { return active; }
 
+    void cancel() {
+        if (!active) return;
+        active = false;
+        handler.removeCallbacksAndMessages(null);
+        killRunner();
+        AppDiagnostics.event("deep_diagnostics_coordinator_cancelled",
+                AppDiagnostics.details("result_file", currentResult == null
+                        ? JSONObject.NULL : currentResult.getName()));
+    }
+
     private void launchNext() {
         if (!active) return;
         if (phaseIndex >= phases.size()) {
@@ -138,7 +148,7 @@ final class DeepDiagnosticsCoordinator {
                     phase.driver.metadata.toString());
             intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_SHA, phase.driver.sha256);
         }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        RunnerTaskIsolation.prepare(intent);
         launchedElapsed = SystemClock.elapsedRealtime();
         activity.startActivity(intent);
         long timeoutSeconds = "soak".equals(mode)

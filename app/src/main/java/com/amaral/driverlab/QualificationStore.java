@@ -297,6 +297,23 @@ final class QualificationStore {
                         .put("recorded_at_ms", System.currentTimeMillis()));
     }
 
+    static void markStepFailedArtifact(File filesDir, JSONObject manifest, String stepId,
+                                       File artifactFile, JSONObject report, String message)
+            throws Exception {
+        if (!ResultFiles.isInside(filesDir, artifactFile)) {
+            throw new IllegalArgumentException("Resultado fora do armazenamento interno");
+        }
+        JSONObject state = requireState(manifest, stepId);
+        state.put("suite_relative_path", relative(filesDir, artifactFile))
+                .put("suite_id", report.optString(
+                        "suite_id", artifactFile.getParentFile().getName()))
+                .put("artifact_relative_path", relative(filesDir, artifactFile))
+                .put("artifact_id", report.optString(
+                        "suite_id", artifactFile.getParentFile().getName()))
+                .put("result_type", "suite");
+        markStepFailed(manifest, stepId, message);
+    }
+
     static void requestPause(JSONObject manifest) throws Exception {
         manifest.getJSONObject("execution").put("pause_requested", true);
     }
