@@ -45,6 +45,10 @@ public final class RunnerActivity extends LocalizedActivity {
     static final String EXTRA_PIXEL_TOLERANCE = "pixel_tolerance";
     static final String EXTRA_MAX_DIVERGENT_BLOCKS = "max_divergent_blocks";
     static final String EXTRA_TRACE_ID = "trace_id";
+    static final String EXTRA_REPETITIONS_PER_SAMPLE = "repetitions_per_sample";
+    static final String EXTRA_EFFECT_INJECTION_PERCENT = "effect_injection_percent";
+
+    private volatile boolean retireRunnerOnDestroy;
 
     private static native String runNativeBenchmark(
             String driverDirectory,
@@ -63,6 +67,9 @@ public final class RunnerActivity extends LocalizedActivity {
 
     private static native String runNativePhase2Workload(
             String workloadId,
+            int workloadVersion,
+            int repetitionsPerSample,
+            int effectInjectionPercent,
             String driverDirectory,
             String driverName,
             String nativeLibraryDirectory,
@@ -72,6 +79,9 @@ public final class RunnerActivity extends LocalizedActivity {
 
     private static native String runNativeTraceReplay(
             String traceId,
+            int workloadVersion,
+            int repetitionsPerSample,
+            int effectInjectionPercent,
             String driverDirectory,
             String driverName,
             String nativeLibraryDirectory,
@@ -87,12 +97,20 @@ public final class RunnerActivity extends LocalizedActivity {
         try {
             resultFile = validateResultPath(getIntent().getStringExtra(EXTRA_RESULT_PATH));
         } catch (Exception error) {
-            finishAndRemoveTask();
+            finish();
             return;
         }
 
         Thread worker = new Thread(() -> execute(resultFile), "vulkan-workload");
         worker.start();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (retireRunnerOnDestroy && isFinishing()) {
+            RunnerProcessLifecycle.retireAfterActivityDestroyed();
+        }
     }
 
     private File validateResultPath(String rawPath) throws Exception {
@@ -113,12 +131,7 @@ public final class RunnerActivity extends LocalizedActivity {
         ScheduledExecutorService sampler = Executors.newSingleThreadScheduledExecutor();
         File rawEvidence = null;
         try {
-            File stateFile = new File(resultFile.getAbsolutePath() + ".state");
-            JSONObject state = new JSONObject();
-            state.put("state", "started");
-            state.put("pid", Process.myPid());
-            state.put("started_at_ms", System.currentTimeMillis());
-            ResultFiles.writeAtomic(stateFile, state.toString(2));
+            RunnerProcessState.start(resultFile, Process.myPid(), executionStartedAt);
 
             String phase = getIntent().getStringExtra(EXTRA_PHASE_LABEL);
             String driverDir = getIntent().getStringExtra(EXTRA_DRIVER_DIR);
@@ -143,8 +156,17 @@ public final class RunnerActivity extends LocalizedActivity {
             } else {
                 traceId = TraceReplayContract.MIXED_TRACE_ID;
             }
-            if (workloadVersion != WorkloadContract.versionFor(workloadId)) {
+            if (!WorkloadContract.isSupportedVersion(workloadId, workloadVersion)) {
                 throw new IllegalArgumentException("Versão de workload incompatível");
+            }
+            int repetitionsPerSample = Math.max(1, Math.min(
+                    BenchmarkCalibrationContract.MAX_REPETITIONS,
+                    getIntent().getIntExtra(EXTRA_REPETITIONS_PER_SAMPLE, 1)));
+            int effectInjectionPercent = Math.max(0, Math.min(10,
+                    getIntent().getIntExtra(EXTRA_EFFECT_INJECTION_PERCENT, 0)));
+            if (workloadVersion < 2 && (repetitionsPerSample != 1
+                    || effectInjectionPercent != 0)) {
+                throw new IllegalArgumentException("Workload v1 não aceita repetição calibrada");
             }
             int round = getIntent().getIntExtra(EXTRA_ROUND, 1);
             int warmup = getIntent().getIntExtra(EXTRA_WARMUP_SECONDS, 3);
@@ -181,12 +203,19 @@ public final class RunnerActivity extends LocalizedActivity {
             } else if (WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
                 workloadConfig.put("warmup_seconds", warmup);
                 workloadConfig.put("measure_seconds", measure);
-                workloadConfig.put("trace", TraceReplayContract.definition(traceId));
+                workloadConfig.put("trace", TraceReplayContract.definition(
+                        traceId, workloadVersion));
                 result.put("trace_id", traceId);
-                result.put("trace_version", TraceReplayContract.TRACE_VERSION);
+                result.put("trace_version", workloadVersion);
             } else {
                 workloadConfig.put("warmup_seconds", warmup);
                 workloadConfig.put("measure_seconds", measure);
+            }
+            if (BenchmarkCalibrationContract.requiresCalibration(workloadId, workloadVersion)) {
+                workloadConfig.put("repetition_unit",
+                        BenchmarkCalibrationContract.repetitionUnit(workloadId));
+                workloadConfig.put("repetitions_per_sample", repetitionsPerSample);
+                workloadConfig.put("effect_injection_percent", effectInjectionPercent);
             }
             result.put("workload_config", workloadConfig);
             String driverMode = "system".equals(driverModeOverride)
@@ -206,20 +235,33 @@ public final class RunnerActivity extends LocalizedActivity {
                             ? JSONObject.NULL : driverDisplayName);
             result.put("driver_sha256", driverSha == null || driverSha.isEmpty()
                     ? JSONObject.NULL : driverSha);
+            result.put("requested_library_sha256",
+                    DriverExecutionIdentity.requestedLibrarySha256(driverDir, driverName));
             result.put("driver_metadata", driverMeta == null || driverMeta.isEmpty()
                     ? JSONObject.NULL : new JSONObject(driverMeta));
+            RunnerProcessState.checkpoint(resultFile, "runner_inputs_validated",
+                    new JSONObject()
+                            .put("phase", result.optString("phase"))
+                            .put("workload_id", workloadId)
+                            .put("workload_version", workloadVersion)
+                            .put("driver_mode", driverMode)
+                            .put("driver_role", result.optString("driver_role"))
+                            .put("driver_display_name", result.opt("driver_display_name"))
+                            .put("driver_sha256", result.opt("driver_sha256")));
             beforeSnapshot = DeviceSnapshot.capture(this);
             result.put("device_before", beforeSnapshot);
 
             sampler.scheduleAtFixedRate(
                     () -> samples.add(DeviceSnapshot.captureTelemetry(this)), 0, 1, TimeUnit.SECONDS);
 
+            RunnerProcessState.checkpoint(resultFile, "jni_library_load", null);
             System.loadLibrary("driverlab");
             File temporary = new File(getCacheDir(), "driver-runner-temp");
             if (!temporary.isDirectory() && !temporary.mkdirs()) {
                 throw new IllegalStateException("Falha ao criar pasta temporária nativa");
             }
 
+            RunnerProcessState.checkpoint(resultFile, "native_vulkan_call", null);
             String nativeJson;
             if (WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
                 rawEvidence = siblingEvidence(resultFile, ".rgba");
@@ -233,6 +275,9 @@ public final class RunnerActivity extends LocalizedActivity {
                 rawEvidence = siblingEvidence(resultFile, ".trace.raw");
                 nativeJson = runNativeTraceReplay(
                         traceId,
+                        workloadVersion,
+                        repetitionsPerSample,
+                        effectInjectionPercent,
                         driverDir == null ? "" : driverDir,
                         driverName == null ? "" : driverName,
                         getApplicationInfo().nativeLibraryDir,
@@ -243,6 +288,9 @@ public final class RunnerActivity extends LocalizedActivity {
             } else if (WorkloadContract.isPhase2(workloadId)) {
                 nativeJson = runNativePhase2Workload(
                         workloadId,
+                        workloadVersion,
+                        repetitionsPerSample,
+                        effectInjectionPercent,
                         driverDir == null ? "" : driverDir,
                         driverName == null ? "" : driverName,
                         getApplicationInfo().nativeLibraryDir,
@@ -259,8 +307,12 @@ public final class RunnerActivity extends LocalizedActivity {
                         measure);
             }
 
+            RunnerProcessState.checkpoint(resultFile, "native_vulkan_returned", null);
             JSONObject nativeResult = new JSONObject(nativeJson);
+            DriverExecutionIdentity.normalizeRuntimeCapabilities(nativeResult);
             result.put("native", nativeResult);
+            result.put("runtime_driver_identity",
+                    ValidationDriverIdentity.runtimeIdentity(nativeResult));
             boolean nativeSuccess = nativeResult.optBoolean("success", false);
             if (nativeSuccess && WorkloadContract.RENDER_CORRECTNESS_ID.equals(workloadId)) {
                 result.put("evidence", finalizeRenderEvidence(resultFile, rawEvidence, nativeResult));
@@ -309,19 +361,14 @@ public final class RunnerActivity extends LocalizedActivity {
                     if (validationErrors.length() > 0) result.put("validation_errors", validationErrors);
                 }
                 ResultFiles.writeAtomic(resultFile, result.toString(2));
-                JSONObject completed = new JSONObject();
-                completed.put("state", "completed");
-                completed.put("pid", Process.myPid());
-                completed.put("success", result.optBoolean("success", false));
-                ResultFiles.writeAtomic(new File(resultFile.getAbsolutePath() + ".state"),
-                        completed.toString(2));
+                RunnerProcessState.complete(resultFile, Process.myPid(),
+                        result.optBoolean("success", false));
             } catch (Exception ignored) {
                 // The controller classifies a missing file as a crashed phase.
             }
             new Handler(Looper.getMainLooper()).post(() -> {
-                finishAndRemoveTask();
-                new Handler(Looper.getMainLooper()).postDelayed(
-                        () -> Process.killProcess(Process.myPid()), 350);
+                retireRunnerOnDestroy = true;
+                finish();
             });
         }
     }

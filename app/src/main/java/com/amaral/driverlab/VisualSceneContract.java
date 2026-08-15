@@ -12,7 +12,8 @@ final class VisualSceneContract {
     static final String MATERIALS_ID = "visual_scene_materials";
     static final String POSTPROCESS_ID = "visual_scene_postprocess";
     static final String GPU_STRESS_ID = "visual_scene_gpu_stress";
-    static final int VERSION = 1;
+    static final int LEGACY_VERSION = 1;
+    static final int VERSION = 2;
     static final int WIDTH = 960;
     static final int HEIGHT = 540;
     static final int INSTANCE_COUNT = 144;
@@ -40,11 +41,18 @@ final class VisualSceneContract {
     }
 
     static String labelFor(String workloadId) {
-        if (GEOMETRY_ID.equals(workloadId)) return "Cena visível · geometria e depth v1";
-        if (MATERIALS_ID.equals(workloadId)) return "Cena visível · materiais procedurais v1";
-        if (POSTPROCESS_ID.equals(workloadId)) return "Cena visível · pós-processamento v1";
+        return labelFor(workloadId, VERSION);
+    }
+
+    static String labelFor(String workloadId, int version) {
+        if (version != LEGACY_VERSION && version != VERSION) {
+            throw new IllegalArgumentException("Versão de cena desconhecida: " + version);
+        }
+        if (GEOMETRY_ID.equals(workloadId)) return "Cena visível · geometria e depth v" + version;
+        if (MATERIALS_ID.equals(workloadId)) return "Cena visível · materiais procedurais v" + version;
+        if (POSTPROCESS_ID.equals(workloadId)) return "Cena visível · pós-processamento v" + version;
         if (GPU_STRESS_ID.equals(workloadId)) {
-            return "Cena avançada: GPU Stress 3D v1";
+            return "Cena avançada: GPU Stress 3D v" + version;
         }
         throw new IllegalArgumentException("Cena visual desconhecida: " + workloadId);
     }
@@ -96,10 +104,17 @@ final class VisualSceneContract {
     }
 
     static JSONObject definition(String workloadId) throws Exception {
+        return definition(workloadId, VERSION);
+    }
+
+    static JSONObject definition(String workloadId, int version) throws Exception {
+        if (version != LEGACY_VERSION && version != VERSION) {
+            throw new IllegalArgumentException("Versão de cena desconhecida: " + version);
+        }
         JSONObject definition = new JSONObject()
                 .put("scene_id", workloadId)
-                .put("scene_version", VERSION)
-                .put("label", labelFor(workloadId))
+                .put("scene_version", version)
+                .put("label", labelFor(workloadId, version))
                 .put("internal_width", widthFor(workloadId))
                 .put("internal_height", heightFor(workloadId))
                 .put("instance_count", instanceCountFor(workloadId))
@@ -130,11 +145,19 @@ final class VisualSceneContract {
     static JSONObject workloadConfig(String workloadId, int warmupSeconds, int measureSeconds,
                                      int pixelTolerance, int maximumDivergentBlocks)
             throws Exception {
+        return workloadConfig(workloadId, VERSION, warmupSeconds, measureSeconds,
+                pixelTolerance, maximumDivergentBlocks);
+    }
+
+    static JSONObject workloadConfig(String workloadId, int version,
+                                     int warmupSeconds, int measureSeconds,
+                                     int pixelTolerance, int maximumDivergentBlocks)
+            throws Exception {
         return new JSONObject()
                 .put("warmup_seconds", warmupSeconds)
                 .put("measure_seconds", measureSeconds)
                 .put("primary_metric", PRIMARY_METRIC)
-                .put("scene", definition(workloadId))
+                .put("scene", definition(workloadId, version))
                 .put("pixel_tolerance", pixelTolerance)
                 .put("block_size_px", BLOCK_SIZE)
                 .put("minimum_block_match_percent", MINIMUM_BLOCK_MATCH_PERCENT)

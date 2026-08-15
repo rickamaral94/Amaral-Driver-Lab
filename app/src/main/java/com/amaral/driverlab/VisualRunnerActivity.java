@@ -48,17 +48,22 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
     private static native String runNativeVisualScene(
             Surface surface,
             String sceneId,
+            int workloadVersion,
+            int repetitionsPerSample,
+            int effectInjectionPercent,
             String driverDirectory,
             String driverName,
             String nativeLibraryDirectory,
             String temporaryDirectory,
             int warmupSeconds,
             int measureSeconds,
-            String rawPrefix);
+            String rawPrefix,
+            String diagnosticLogPath);
 
     private final AtomicBoolean started = new AtomicBoolean(false);
     private File resultFile;
     private TextView overlay;
+    private volatile boolean retireRunnerOnDestroy;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,9 +77,17 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         try {
             resultFile = validateResultPath(getIntent().getStringExtra(RunnerActivity.EXTRA_RESULT_PATH));
         } catch (Exception error) {
-            finishAndRemoveTask();
+            AppDiagnostics.event("visual_runner_invalid_result_path",
+                    AppDiagnostics.details("error", error.toString()));
+            finish();
             return;
         }
+        AppDiagnostics.event("visual_runner_created", AppDiagnostics.details(
+                "result_file", resultFile.getName(),
+                "workload_id", getIntent().getStringExtra(RunnerActivity.EXTRA_WORKLOAD_ID),
+                "workload_version", getIntent().getIntExtra(
+                        RunnerActivity.EXTRA_WORKLOAD_VERSION, -1),
+                "phase", getIntent().getStringExtra(RunnerActivity.EXTRA_PHASE_LABEL)));
 
         FrameLayout root = new FrameLayout(this);
         SurfaceView surfaceView = new SurfaceView(this);
@@ -89,6 +102,9 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         overlay.setBackgroundColor(0x99000000);
         overlay.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         String workloadId = getIntent().getStringExtra(RunnerActivity.EXTRA_WORKLOAD_ID);
+        int displayedWorkloadVersion = getIntent().getIntExtra(
+                RunnerActivity.EXTRA_WORKLOAD_VERSION,
+                WorkloadContract.versionFor(workloadId));
         String phase = getIntent().getStringExtra(RunnerActivity.EXTRA_PHASE_LABEL);
         String role = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_ROLE);
         String displayName = getIntent().getStringExtra(
@@ -112,7 +128,8 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         }
         overlay.setText("Amaral Driver Lab · cena Vulkan visível\n"
                 + LanguageManager.translateLegacy(
-                        this, VisualSceneContract.labelFor(workloadId)) + " · " + armLabel
+                        this, VisualSceneContract.labelFor(
+                                workloadId, displayedWorkloadVersion)) + " · " + armLabel
                 + "\nCheckpoints: frames 30, 90 e 150");
         FrameLayout.LayoutParams overlayParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -142,14 +159,40 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        if (!started.compareAndSet(false, true)) return;
+        // surfaceChanged supplies the first dimensions that are safe for swapchain creation.
+        AppDiagnostics.event("visual_surface_created", AppDiagnostics.details(
+                "valid", holder.getSurface() != null && holder.getSurface().isValid()));
+    }
+
+    @Override
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         Surface surface = holder.getSurface();
+        AppDiagnostics.event("visual_surface_changed", AppDiagnostics.details(
+                "format", format,
+                "width", width,
+                "height", height,
+                "valid", surface != null && surface.isValid(),
+                "already_started", started.get()));
+        if (width <= 0 || height <= 0 || surface == null || !surface.isValid()
+                || !started.compareAndSet(false, true)) {
+            return;
+        }
         Thread worker = new Thread(() -> execute(surface), "visible-vulkan-scene");
         worker.start();
     }
 
-    @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
-    @Override public void surfaceDestroyed(SurfaceHolder holder) {}
+    @Override public void surfaceDestroyed(SurfaceHolder holder) {
+        AppDiagnostics.event("visual_surface_destroyed", AppDiagnostics.details(
+                "runner_started", started.get()));
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (retireRunnerOnDestroy && isFinishing()) {
+            RunnerProcessLifecycle.retireAfterActivityDestroyed();
+        }
+    }
 
     private File validateResultPath(String rawPath) throws Exception {
         if (rawPath == null) throw new IllegalArgumentException("Caminho de resultado ausente");
@@ -169,12 +212,7 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
         ScheduledExecutorService sampler = Executors.newSingleThreadScheduledExecutor();
         String rawPrefix = null;
         try {
-            JSONObject state = new JSONObject()
-                    .put("state", "started")
-                    .put("pid", Process.myPid())
-                    .put("started_at_ms", startedAt);
-            ResultFiles.writeAtomic(new File(resultFile.getAbsolutePath() + ".state"),
-                    state.toString(2));
+            RunnerProcessState.start(resultFile, Process.myPid(), startedAt);
 
             String workloadId = getIntent().getStringExtra(RunnerActivity.EXTRA_WORKLOAD_ID);
             if (!VisualSceneContract.isVisualScene(workloadId)) {
@@ -183,8 +221,19 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             int workloadVersion = getIntent().getIntExtra(
                     RunnerActivity.EXTRA_WORKLOAD_VERSION,
                     WorkloadContract.versionFor(workloadId));
-            if (workloadVersion != WorkloadContract.versionFor(workloadId)) {
+            if (!WorkloadContract.isSupportedVersion(workloadId, workloadVersion)) {
                 throw new IllegalArgumentException("Versão da cena visual incompatível");
+            }
+            int repetitionsPerSample = Math.max(1, Math.min(
+                    BenchmarkCalibrationContract.MAX_REPETITIONS,
+                    getIntent().getIntExtra(
+                            RunnerActivity.EXTRA_REPETITIONS_PER_SAMPLE, 1)));
+            int effectInjectionPercent = Math.max(0, Math.min(10,
+                    getIntent().getIntExtra(
+                            RunnerActivity.EXTRA_EFFECT_INJECTION_PERCENT, 0)));
+            if (workloadVersion < 2 && (repetitionsPerSample != 1
+                    || effectInjectionPercent != 0)) {
+                throw new IllegalArgumentException("Cena v1 não aceita repetição calibrada");
             }
             String phase = getIntent().getStringExtra(RunnerActivity.EXTRA_PHASE_LABEL);
             String driverDir = getIntent().getStringExtra(RunnerActivity.EXTRA_DRIVER_DIR);
@@ -215,8 +264,13 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                     .put("workload_version", workloadVersion)
                     .put("metric_limitations", WorkloadContract.limitationFor(workloadId))
                     .put("workload_config", VisualSceneContract.workloadConfig(
-                            workloadId, warmup, measure, pixelTolerance,
-                            maximumDivergentBlocks))
+                            workloadId, workloadVersion, warmup, measure, pixelTolerance,
+                            maximumDivergentBlocks)
+                            .put("repetition_unit", workloadVersion >= 2
+                                    ? BenchmarkCalibrationContract.repetitionUnit(workloadId)
+                                    : JSONObject.NULL)
+                            .put("repetitions_per_sample", repetitionsPerSample)
+                            .put("effect_injection_percent", effectInjectionPercent))
                     .put("driver_mode", "system".equals(driverModeOverride)
                             || "custom".equals(driverModeOverride)
                             ? driverModeOverride
@@ -230,32 +284,55 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                                     ? JSONObject.NULL : driverDisplayName)
                     .put("driver_sha256", driverSha == null || driverSha.isEmpty()
                             ? JSONObject.NULL : driverSha)
+                    .put("requested_library_sha256",
+                            DriverExecutionIdentity.requestedLibrarySha256(
+                                    driverDir, driverName))
                     .put("driver_metadata", driverMetadata == null || driverMetadata.isEmpty()
                             ? JSONObject.NULL : new JSONObject(driverMetadata));
+            RunnerProcessState.checkpoint(resultFile, "runner_inputs_validated",
+                    new JSONObject()
+                            .put("phase", result.optString("phase"))
+                            .put("workload_id", workloadId)
+                            .put("workload_version", workloadVersion)
+                            .put("driver_mode", result.optString("driver_mode"))
+                            .put("driver_role", result.optString("driver_role"))
+                            .put("driver_display_name", result.opt("driver_display_name"))
+                            .put("driver_sha256", result.opt("driver_sha256")));
             beforeSnapshot = DeviceSnapshot.capture(this);
             result.put("device_before", beforeSnapshot);
             sampler.scheduleAtFixedRate(
                     () -> telemetry.add(DeviceSnapshot.captureTelemetry(this)),
                     0, 1, TimeUnit.SECONDS);
 
+            RunnerProcessState.checkpoint(resultFile, "jni_library_load", null);
             System.loadLibrary("driverlab");
             File temporary = new File(getCacheDir(), "visual-runner-temp");
             if (!temporary.isDirectory() && !temporary.mkdirs()) {
                 throw new IllegalStateException("Falha ao criar pasta temporária visual");
             }
             rawPrefix = rawPrefix(resultFile);
+            RunnerProcessState.checkpoint(resultFile, "native_vulkan_call", null);
             String nativeJson = runNativeVisualScene(
                     surface,
                     workloadId,
+                    workloadVersion,
+                    repetitionsPerSample,
+                    effectInjectionPercent,
                     driverDir == null ? "" : driverDir,
                     driverName == null ? "" : driverName,
                     getApplicationInfo().nativeLibraryDir,
                     temporary.getAbsolutePath(),
                     warmup,
                     measure,
-                    rawPrefix);
+                    rawPrefix,
+                    new File(AppDiagnostics.logsDirectory(this),
+                            "app-runner.log").getAbsolutePath());
+            RunnerProcessState.checkpoint(resultFile, "native_vulkan_returned", null);
             JSONObject nativeResult = new JSONObject(nativeJson);
+            DriverExecutionIdentity.normalizeRuntimeCapabilities(nativeResult);
             result.put("native", nativeResult);
+            result.put("runtime_driver_identity",
+                    ValidationDriverIdentity.runtimeIdentity(nativeResult));
             boolean success = nativeResult.optBoolean("success", false);
             if (success) {
                 result.put("evidence", finalizeCheckpoints(
@@ -306,21 +383,16 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                     }
                 }
                 ResultFiles.writeAtomic(resultFile, result.toString(2));
-                ResultFiles.writeAtomic(new File(resultFile.getAbsolutePath() + ".state"),
-                        new JSONObject()
-                                .put("state", "completed")
-                                .put("pid", Process.myPid())
-                                .put("success", result.optBoolean("success", false))
-                                .toString(2));
+                RunnerProcessState.complete(resultFile, Process.myPid(),
+                        result.optBoolean("success", false));
             } catch (Exception ignored) {
                 // Controller classifies a missing result as a crashed phase.
             }
             runOnUiThread(() -> overlay.setText("Cena concluída · consolidando resultados…"));
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                finishAndRemoveTask();
-                new Handler(Looper.getMainLooper()).postDelayed(
-                        () -> Process.killProcess(Process.myPid()), 350);
-            }, 250);
+                retireRunnerOnDestroy = true;
+                finish();
+            }, RunnerProcessLifecycle.VISUAL_COMPLETION_DELAY_MS);
         }
     }
 

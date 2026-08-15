@@ -13,5 +13,6 @@ public final class DriverLabApplication extends Application {
     public void onCreate() {
         super.onCreate();
         LanguageManager.initialize(this);
+        AppDiagnostics.initialize(this);
     }
 }

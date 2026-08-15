@@ -25,7 +25,10 @@ final class QualificationReport {
             QualificationProfile.Step definition = QualificationProfile.step(profileVersion, stepId);
             JSONObject scored = new JSONObject()
                     .put("step_id", stepId)
-                    .put("status", state.optString("status"));
+                    .put("status", state.optString("status"))
+                    .put("expected_identity_process_count", definition == null ? 0
+                            : QualificationProfile.KIND_SUITE.equals(definition.kind)
+                            ? Math.max(1, definition.rounds) * 2 : 2);
             JSONObject compact = new JSONObject()
                     .put("step_id", stepId)
                     .put("step_kind", definition == null ? state.optString("step_kind", "unknown")
@@ -44,9 +47,16 @@ final class QualificationReport {
                 if (resultFile != null && resultFile.isFile()) {
                     JSONObject result = new JSONObject(ResultFiles.readUtf8(resultFile));
                     scored.put("report", result);
+                    compact.put("driver_identity_audit",
+                            result.has("driver_identity_audit")
+                                    ? result.opt("driver_identity_audit") : JSONObject.NULL);
                     if (definition != null && QualificationProfile.KIND_SUITE.equals(definition.kind)) {
                         compact.put("workload_id", result.optString("workload_id"))
                                 .put("workload_version", result.optInt("workload_version", 1))
+                                .put("workload_version_audit",
+                                        result.opt("workload_version_audit"))
+                                .put("dynamic_range_calibration",
+                                        result.opt("dynamic_range_calibration"))
                                 .put("verdict", result.optString("verdict", "unknown"))
                                 .put("validity_warnings", result.optJSONArray("validity_warnings"))
                                 .put("failure_catalog", result.optJSONArray("failure_catalog"))
@@ -78,9 +88,12 @@ final class QualificationReport {
                     .put("device_key", "unknown");
         }
 
+        JSONObject driverIdentityAudit = ValidationDriverIdentity.aggregateQualification(
+                scoredSteps);
         JSONObject score = QualificationScore.evaluate(
                 manifest.getJSONObject("profile"), scoredSteps,
-                manifest.getJSONObject("preflight"), environmentComparison);
+                manifest.getJSONObject("preflight"), environmentComparison,
+                driverIdentityAudit);
         JSONObject driver = manifest.getJSONObject("driver");
         String comparisonMode = manifest.optString("comparison_mode", "system_vs_turnip");
         JSONObject referenceDriver = manifest.optJSONObject("reference_driver");
@@ -91,10 +104,17 @@ final class QualificationReport {
         JSONObject human = humanSummary(driver, referenceDriver, comparisonMode, score);
         JSONObject optimization = QualificationOptimizationReport.build(
                 manifest, scoredSteps, hardware, score);
-        int reportVersion = profileVersion >= 3 ? Phase11Contract.REPORT_VERSION
+        optimization.put("driver_identity_audit", driverIdentityAudit);
+        optimization.put("format_change_note",
+                "Campos de identidade são aditivos; format_version permanece 2.");
+        int reportVersion = profileVersion >= Phase15DynamicRangeContract.PROFILE_VERSION
+                ? Phase15DynamicRangeContract.REPORT_VERSION
+                : profileVersion >= 3 ? Phase11Contract.REPORT_VERSION
                 : profileVersion >= 2 ? Phase8Contract.CURRENT_QUALIFICATION_REPORT_VERSION
                 : Phase7Contract.REPORT_VERSION;
-        String limitation = profileVersion >= 4
+        String limitation = profileVersion >= Phase15DynamicRangeContract.PROFILE_VERSION
+                ? Phase15DynamicRangeContract.LIMITATION
+                : profileVersion >= 4
                 ? Phase13ValidationContract.limitationForVersion(profileVersion)
                 : profileVersion >= 3 ? Phase11Contract.LIMITATION
                 : profileVersion >= 2 ? Phase8Contract.LIMITATION : Phase7Contract.LIMITATION;
@@ -114,14 +134,29 @@ final class QualificationReport {
                         ? Phase11Contract.contractJson() : JSONObject.NULL)
                 .put("phase12_contract", Phase12Contract.contractJson())
                 .put("phase13_validation_contract", profileVersion >= 4
+                        && profileVersion <= Phase13ValidationContract.PROFILE_VERSION
                         ? Phase13ValidationContract.contractJson(profileVersion) : JSONObject.NULL)
+                .put("phase15_dynamic_range_contract", profileVersion
+                        == Phase15DynamicRangeContract.PROFILE_VERSION
+                        ? Phase15DynamicRangeContract.contractJson() : JSONObject.NULL)
                 .put("profile_id", Phase7Contract.PROFILE_ID)
                 .put("profile_version", profileVersion)
                 .put("profile_sha256", manifest.getString("profile_sha256"))
+                .put("workload_version_audit",
+                        WorkloadVersionIdentity.aggregateQualification(scoredSteps))
                 .put("driver", driver)
                 .put("comparison_mode", comparisonMode)
                 .put("reference_driver", referenceDriver == null
                         ? JSONObject.NULL : referenceDriver)
+                .put("driver_identity_audit", driverIdentityAudit)
+                .put("driver_identity_confidence",
+                        driverIdentityAudit.getString("driver_identity_confidence"))
+                .put("driver_identity_policy_version",
+                        driverIdentityAudit.getInt("driver_identity_policy_version"))
+                .put("identity_observation_coverage",
+                        driverIdentityAudit.getJSONObject("identity_observation_coverage"))
+                .put("loader_isolation_verified",
+                        driverIdentityAudit.get("loader_isolation_verified"))
                 .put("hardware_identity", hardware)
                 .put("preflight", manifest.getJSONObject("preflight"))
                 .put("final_environment", finalEnvironment)

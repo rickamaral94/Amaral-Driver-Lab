@@ -12,12 +12,18 @@ import static org.junit.Assert.assertTrue;
 
 public final class VisualSceneContractTest {
     @Test
-    public void allVisibleScenesAreIndependentVersionOneSeries() throws Exception {
+    public void allVisibleScenesKeepIndependentCurrentAndHistoricalSeries() throws Exception {
         assertEquals(4, VisualSceneContract.IDS.size());
         Set<String> hashes = new HashSet<>();
         for (String workloadId : VisualSceneContract.IDS) {
             JSONObject definition = VisualSceneContract.definition(workloadId);
-            assertEquals(1, definition.getInt("scene_version"));
+            JSONObject legacy = VisualSceneContract.definition(
+                    workloadId, VisualSceneContract.LEGACY_VERSION);
+            assertEquals(VisualSceneContract.VERSION, definition.getInt("scene_version"));
+            assertEquals(VisualSceneContract.LEGACY_VERSION,
+                    legacy.getInt("scene_version"));
+            assertNotEquals(legacy.getString("definition_sha256"),
+                    definition.getString("definition_sha256"));
             assertEquals(VisualSceneContract.widthFor(workloadId),
                     definition.getInt("internal_width"));
             assertEquals(VisualSceneContract.heightFor(workloadId),

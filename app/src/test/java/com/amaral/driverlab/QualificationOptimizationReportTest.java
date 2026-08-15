@@ -1,6 +1,7 @@
 package com.amaral.driverlab;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -75,6 +76,7 @@ public final class QualificationOptimizationReportTest {
                         .put("state", "completed")
                         .put("steps", new JSONArray()))
                 .put("report", new JSONObject()
+                        .put("driver_identity_audit", confirmedAudit())
                         .put("hardware_identity", new JSONObject()
                                 .put("model", "Odin 2 Portal")
                                 .put("gpu_model", "Adreno 740"))
@@ -133,6 +135,7 @@ public final class QualificationOptimizationReportTest {
                         .put("sha256", "candidate-sha"))
                 .put("execution", new JSONObject().put("state", "completed"))
                 .put("report", new JSONObject()
+                        .put("driver_identity_audit", confirmedAudit())
                         .put("hardware_identity", new JSONObject()
                                 .put("model", "Odin 2 Portal"))
                         .put("optimization_report", new JSONObject()
@@ -145,5 +148,24 @@ public final class QualificationOptimizationReportTest {
         assertTrue(identity.contains("Driver do sistema Android"));
         assertTrue(identity.contains("system / system"));
         assertTrue(title.contains("REFERÊNCIA Sistema Android"));
+    }
+
+    @Test
+    public void unconfirmedQualificationTitleNeverUsesPackageName() throws Exception {
+        JSONObject manifest = new JSONObject()
+                .put("driver", new JSONObject().put("name", "Nome não confiável"))
+                .put("execution", new JSONObject().put("state", "completed"))
+                .put("report", new JSONObject().put("schema_version", 13)
+                        .put("hardware_identity", new JSONObject().put("model", "Odin")));
+
+        String title = GitHubIssuePublisher.qualificationIssueTitle(manifest);
+        assertTrue(title.contains("[driver-unconfirmed]"));
+        assertFalse(title.contains("Nome não confiável"));
+    }
+
+    private static JSONObject confirmedAudit() throws Exception {
+        return new JSONObject()
+                .put("driver_identity_confidence", "runtime_confirmed")
+                .put("eligible_for_aggregation", true);
     }
 }

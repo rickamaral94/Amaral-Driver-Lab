@@ -1,0 +1,78 @@
+{
+  "driver_identity_policy_version": 1,
+  "source": "Sanitized excerpts already published in Amaral-Driver-Lab GitHub Issues",
+  "issues": [
+    {
+      "issue": 27,
+      "published_driver": "Turnip (Mesa Freedreno)",
+      "evidence": [
+        "L4: Driver: Turnip (Mesa Freedreno)",
+        "L9: Driver Name: turnip Mesa driver",
+        "L10: Driver Info: Mesa 26.3.0-devel (git-f321d7ebf4)"
+      ]
+    },
+    {
+      "issue": 28,
+      "published_driver": "Unknown",
+      "evidence": [
+        "L3: AdrenoGLES-0: QUALCOMM build : 69e13475cb",
+        "L11: Driver Path : /vendor/lib64/egl/libGLESv2_adreno.so",
+        "L12: Driver Version : 0676.53"
+      ]
+    },
+    {
+      "issue": 29,
+      "published_driver": "Turnip Adreno (TM) 740",
+      "evidence": [
+        "L16: Loaded custom driver",
+        "L19: Using GPU: Turnip Adreno (TM) 740",
+        "L20: Driver version: Mesa 26.3.0-devel (git-f321d7ebf4)"
+      ]
+    },
+    {
+      "issue": 31,
+      "published_driver": "Turnip (Mesa Freedreno)",
+      "evidence": [
+        "L4: Driver: Turnip (Mesa Freedreno)",
+        "L9: Driver Name: turnip Mesa driver",
+        "L10: Driver Info: Mesa 26.3.0-devel (git-32fab1ad09)"
+      ]
+    },
+    {
+      "issue": 32,
+      "published_driver": "Turnip (Mesa Freedreno)",
+      "evidence": [
+        "L15: Vulkan Driver: - 512.676.53",
+        "L53: Device: Disabling shader float controls and 64-bit integer features on Qualcomm proprietary drivers",
+        "L58: [GPU Logging] Initialized with level: Standard, driver: Qualcomm Proprietary"
+      ]
+    },
+    {
+      "issue": 39,
+      "published_driver": "Turnip (Mesa Freedreno)",
+      "evidence": [
+        "L4: Driver: Turnip (Mesa Freedreno)",
+        "L9: Driver Name: turnip Mesa driver",
+        "L10: Driver Info: Mesa 26.3.0-devel (git-32fab1ad09)"
+      ]
+    },
+    {
+      "issue": 40,
+      "published_driver": "Qualcomm Technologies Inc. Adreno Vulkan Driver",
+      "evidence": [
+        "L4: Driver: Qualcomm Proprietary",
+        "L9: Driver Name: Qualcomm Technologies Inc. Adreno Vulkan Driver",
+        "L10: Driver Info: Driver Build: 69e13475cb"
+      ]
+    },
+    {
+      "issue": 43,
+      "published_driver": "turnip Mesa driver 26.2.99",
+      "evidence": [
+        "L15: Vulkan Driver: - 512.676.53",
+        "L44: Device: Disabling shader float controls and 64-bit integer features on Qualcomm proprietary drivers",
+        "L49: [GPU Logging] Initialized with level: Standard, driver: Qualcomm Proprietary"
+      ]
+    }
+  ]
+}

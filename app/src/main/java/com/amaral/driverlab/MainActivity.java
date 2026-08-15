@@ -23,6 +23,7 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,6 +31,7 @@ import java.util.List;
 public final class MainActivity extends LocalizedActivity {
     private static final int REQUEST_IMPORT_DRIVER = 1310;
     private static final int REQUEST_IMPORT_EMULATOR_LOG = 1311;
+    private static final int REQUEST_EXPORT_APP_LOGS = 1312;
     private static final String ISSUE_OWNER = "rickamaral94";
     private static final String ISSUE_REPOSITORY = "Amaral-Driver-Lab";
 
@@ -76,6 +78,7 @@ public final class MainActivity extends LocalizedActivity {
         addHeader();
         addRecommendedTest();
         addEmulatorLogSection();
+        addAppDiagnosticsSection();
         addLatestSummary();
         if (uxPreferences.advancedMode()) addIndividualTests();
         addResultsSection();
@@ -103,6 +106,14 @@ public final class MainActivity extends LocalizedActivity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         titleParams.setMargins(dp(12), 0, dp(8), 0);
         header.addView(titles, titleParams);
+
+        Button logs = AppTheme.iconButton(this,
+                "LOGS",
+                logText("Exportar logs do ADL", "Export ADL logs"),
+                view -> chooseAppDiagnosticsExport());
+        LinearLayout.LayoutParams logsParams = new LinearLayout.LayoutParams(dp(64), dp(52));
+        logsParams.setMargins(0, 0, dp(6), 0);
+        header.addView(logs, logsParams);
 
         Button language = AppTheme.iconButton(this,
                 LanguageManager.current(this).flag,
@@ -303,7 +314,7 @@ public final class MainActivity extends LocalizedActivity {
         intent.putExtra(QualificationActivity.EXTRA_AUTOSTART, true);
         intent.putExtra(QualificationActivity.EXTRA_OPEN_LOG_ON_COMPLETE, true);
         intent.putExtra(QualificationActivity.EXTRA_PROFILE_VERSION,
-                Phase13ValidationContract.PROFILE_VERSION);
+                Phase15DynamicRangeContract.PROFILE_VERSION);
         intent.putExtra(QualificationActivity.EXTRA_DRIVER_SHA, candidate.sha256);
         intent.putExtra(QualificationActivity.EXTRA_COMPARISON_MODE,
                 isTurnipVsTurnip() ? "turnip_vs_turnip" : "system_vs_turnip");
@@ -327,6 +338,10 @@ public final class MainActivity extends LocalizedActivity {
         Uri uri = data.getData();
         if (requestCode == REQUEST_IMPORT_EMULATOR_LOG) {
             importEmulatorLog(uri);
+            return;
+        }
+        if (requestCode == REQUEST_EXPORT_APP_LOGS) {
+            exportAppDiagnostics(uri);
             return;
         }
         if (requestCode != REQUEST_IMPORT_DRIVER) return;
@@ -389,6 +404,54 @@ public final class MainActivity extends LocalizedActivity {
         emulatorLogIssueButton.setEnabled(emulatorLogReport != null);
         card.addView(emulatorLogIssueButton);
         root.addView(card, AppTheme.matchWrap(this, 0, 20));
+    }
+
+    private void addAppDiagnosticsSection() {
+        sectionTitleText(logText("Logs do próprio Driver Lab", "Driver Lab app logs"));
+        LinearLayout card = AppTheme.card(this);
+        File directory = AppDiagnostics.logsDirectory(this);
+        card.addView(AppTheme.heading(this,
+                logText("Diagnóstico persistente", "Persistent diagnostics"), 18));
+        TextView description = AppTheme.body(this, logText(
+                "O app grava lifecycle, checkpoints do runner Vulkan, exceções Java e motivos de encerramento fornecidos pelo Android. Os arquivos permanecem após o app fechar.",
+                "The app records lifecycle events, Vulkan runner checkpoints, Java exceptions and Android-provided exit reasons. Files remain after the app closes."));
+        card.addView(description, AppTheme.matchWrap(this, 8, 10));
+        TextView path = AppTheme.caption(this, directory.getAbsolutePath());
+        path.setTextIsSelectable(true);
+        path.setTypeface(Typeface.MONOSPACE);
+        card.addView(path, AppTheme.matchWrap(this, 0, 12));
+        card.addView(AppTheme.secondaryButton(this,
+                logText("EXPORTAR LOGS DO APP (.ZIP)", "EXPORT APP LOGS (.ZIP)"),
+                view -> chooseAppDiagnosticsExport()));
+        root.addView(card, AppTheme.matchWrap(this, 0, 20));
+    }
+
+    private void chooseAppDiagnosticsExport() {
+        AppDiagnostics.captureHistoricalExitReasonsAsync(this);
+        Intent create = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        create.addCategory(Intent.CATEGORY_OPENABLE);
+        create.setType("application/zip");
+        create.putExtra(Intent.EXTRA_TITLE,
+                "Amaral-Driver-Lab-" + BuildConfig.VERSION_NAME + "-logs.zip");
+        startActivityForResult(create, REQUEST_EXPORT_APP_LOGS);
+    }
+
+    private void exportAppDiagnostics(Uri uri) {
+        new Thread(() -> {
+            try (OutputStream output = getContentResolver().openOutputStream(uri, "wt")) {
+                if (output == null) throw new IllegalStateException("Destino indisponível");
+                AppDiagnostics.writeZip(this, output);
+                runOnUiThread(() -> Toast.makeText(this, logText(
+                        "Logs exportados. Envie o ZIP para análise.",
+                        "Logs exported. Send the ZIP for analysis."), Toast.LENGTH_LONG).show());
+            } catch (Throwable error) {
+                AppDiagnostics.event("diagnostic_export_failed",
+                        AppDiagnostics.details("error", error.toString()));
+                runOnUiThread(() -> Toast.makeText(this, logText(
+                        "Falha ao exportar logs: ", "Failed to export logs: ")
+                        + error.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        }, "driverlab-log-export").start();
     }
 
     private void chooseEmulatorLog() {

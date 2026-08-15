@@ -2,13 +2,15 @@
 
 Cada suíte grava `files/runs/suite-<timestamp>/suite.json`. Cada processo isolado grava um `phase-*.json`; workloads de correção também preservam um `phase-*.png` lossless como evidência visual.
 
-## Versão atual: `schema_version = 13`
+## Versão atual: `schema_version = 15`
 
-A versão 13 é uma evolução **aditiva e compatível** das versões anteriores. Leitores antigos podem continuar consumindo os campos do workload de transferência. Leitores novos devem selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
+A versão 15 adiciona calibração de faixa dinâmica e auditoria da versão realmente observada no
+runtime. A versão 14 já havia tornado a identidade do driver um gate. Leitores novos devem
+selecionar séries por `workload_id` **e** `workload_version`, nunca somente pelo nome da métrica.
 
 | Campo | Significado |
 |---|---|
-| `schema_version` | Versão do formato do resultado; atualmente `13` |
+| `schema_version` | Versão do formato do resultado; atualmente `15` |
 | `suite_id` | Identificador local imutável da suíte |
 | `app_version` | Versão do APK que gerou o resultado |
 | `mode` | `system_only`, `candidate_only` ou `ab_system_vs_candidate` |
@@ -26,6 +28,12 @@ A versão 13 é uma evolução **aditiva e compatível** das versões anteriores
 | `failure_catalog[]` | Crashes, timeouts, erros Vulkan, validation errors e mismatches |
 | `verdict` | Veredito explícito da suíte |
 | `validity_warnings[]` | Condições que pedem repetição ou cautela |
+| `driver_identity_audit` | Reconciliação do pacote solicitado com propriedades Vulkan observadas por processo |
+| `identity_observation_coverage` | Quantidade de processos esperados, observados e ausentes |
+| `loader_isolation_verified` | `true`, `false` ou `not_determinable` |
+| `dynamic_range_calibration` | Multiplicador, linearidade, unidade de repetição e gates de deriva |
+| `sample_size_plan` | Piloto independente, n planejado e `completed_paired_rounds` |
+| `workload_version_audit` | Igualdade entre versão declarada e cada observação nativa |
 
 ## Contrato do workload legado de transferência
 
@@ -652,6 +660,247 @@ O manifesto e o relatório Full adicionam `comparison_mode` (`system_vs_turnip` 
 
 ### Recommended Validation v2 · profile v5
 
-O schema permanece 13. O perfil `turnip_full_qualification/v5` adiciona `visual_scene_gpu_stress/v1` como a nona etapa do Teste Full Recomendado. A etapa usa `step_id = visual_gpu_stress`, peso 20 e `compatibility_gate = true`. Os pesos do perfil somam 100; seis das sete categorias de performance precisam ser válidas para uma recomendação.
+O perfil `turnip_full_qualification/v5` nasceu no schema 13 e adiciona `visual_scene_gpu_stress/v1` como a nona etapa do Teste Full Recomendado. A etapa usa `step_id = visual_gpu_stress`, peso 20 e `compatibility_gate = true`. Os pesos do perfil somam 100; seis das sete categorias de performance precisam ser válidas para uma recomendação. Novas execuções usam schema 14 somente por causa da auditoria de identidade; o perfil e sua metodologia permanecem v5.
 
 O perfil v4 continua verificável com sua definição, hash, oito etapas e limiares originais. Resultados v4 e v5 nunca entram no mesmo ranking. Full v1–v3 também permanecem séries históricas independentes.
+
+## Emulator log schema v2 — identidade do driver
+
+O relatório de log de emulador usa schema próprio e passa de `schema_version = 1` para
+`schema_version = 2`. Esse schema é independente do `suite.json` de validação, atualmente em
+schema 14, e não modifica qualquer `workload_version`.
+
+```json
+{
+  "schema_version": 2,
+  "driver": "qualcomm_blob",
+  "driver_display_name": "Qualcomm Proprietary",
+  "driver_identity_confidence": "runtime_confirmed",
+  "driver_identity_policy_version": 2,
+  "driver_identity_evidence": [
+    {
+      "block": 1,
+      "source": "runtime_emulator",
+      "priority": 1,
+      "line": 49,
+      "content": "[GPU Logging] ... driver: Qualcomm Proprietary",
+      "identity": "qualcomm_blob",
+      "strength": "identity"
+    }
+  ],
+  "driver_identity_blocks": [
+    {
+      "block": 1,
+      "start_line": 1,
+      "end_line": 60,
+      "driver": "qualcomm_blob",
+      "driver_identity_confidence": "runtime_confirmed"
+    }
+  ]
+}
+```
+
+Valores canônicos de `driver`: `qualcomm_blob`, `turnip`, `other`, `unknown`.
+
+Valores de confiança:
+
+- `runtime_confirmed`: identidade nominal confirmada por evidência de runtime/Vulkan;
+- `inferred`: apenas configuração ou ausência de evidência conclusiva;
+- `disputed`: fontes ou blocos discordam, ou só existe padrão de versão ambíguo;
+- `unaudited`: valor produzido pelo leitor ao abrir relatório schema v1 sem auditoria.
+
+A ordem das fontes é runtime do emulador, propriedades Vulkan e configuração. Vendor explícito
+`Qualcomm Proprietary`/`Qualcomm Technologies` tem veto sobre a identidade canônica, mas qualquer
+evidência contrária permanece publicada e torna a confiança `disputed`. Versão de blob ou Mesa,
+isoladamente, nunca determina a identidade.
+
+Relatórios schema v1 continuam legíveis, porém a identidade neles é `unaudited`. Consultas e
+agregações por driver aceitam somente identidade conhecida com `runtime_confirmed`; `unknown`,
+`inferred`, `disputed` e `unaudited` ficam de fora. Portanto, séries históricas baseadas no rótulo
+livre de schema v1 não são comparáveis com agregações de identidade auditada do schema v2.
+
+Essa métrica identifica o driver declarado no log; ela não prova causalidade entre o driver e um
+erro do emulador, nem desempenho em jogos.
+
+## Fase 1b — identidade runtime da validação
+
+O `suite.json` passa para schema 14 e registra, em cada processo `:runner`, o pacote solicitado, o
+SHA-256 da biblioteca solicitada e as propriedades Vulkan retornadas depois da inicialização. O
+`meta.json` continua sendo evidência não confiável de intenção; nunca confirma identidade sozinho.
+
+```json
+{
+  "schema_version": 14,
+  "driver_identity_confidence": "runtime_confirmed",
+  "identity_observation_coverage": {
+    "expected_process_count": 18,
+    "observed_process_count": 18,
+    "missing_process_count": 0,
+    "coverage_percent": 100.0,
+    "coverage_class": "full"
+  },
+  "loader_isolation_verified": "not_determinable",
+  "driver_identity_audit": {
+    "driver_identity_policy_version": 2,
+    "eligible_for_aggregation": true,
+    "candidate": {
+      "driver": "turnip",
+      "driver_identity_confidence": "runtime_confirmed",
+      "requested_package_sha256": "...",
+      "effective_loaded_library_sha256": null
+    },
+    "reference": {},
+    "runtime_observations": []
+  }
+}
+```
+
+### Tabela-verdade de cobertura
+
+| Cobertura | Identidades runtime | Conflito com pacote | Saída |
+|---|---|---|---|
+| 100% | uma identidade conhecida | não | `runtime_confirmed` |
+| parcial | uma identidade conhecida | não | `inferred` |
+| qualquer | divergentes | qualquer | `disputed` |
+| qualquer | vendor Qualcomm explícito + outra evidência | qualquer | identidade `qualcomm_blob`, confiança `disputed` |
+| nenhuma | nenhuma | qualquer | identidade `unknown`, confiança `inferred` |
+| relatório schema 1–13 | não auditado | não aplicável | `unaudited` no leitor |
+
+Vendor Qualcomm explícito vence a identidade canônica, mas não apaga o conflito. Um braço
+`qualcomm_blob` solicitado como Turnip permanece `disputed`.
+
+### Família não é build
+
+`runtime_confirmed` prova a família do driver, não o build. Dois pacotes Turnip diferentes podem
+retornar `VK_DRIVER_ID_MESA_TURNIP`, `driverName` e `driverInfo` idênticos. A versão fixada do
+`libadrenotools` não expõe o caminho/hash do DSO customizado efetivamente carregado; por isso
+`effective_loaded_library_sha256` é `null` e o caso v1 × v3 idêntico usa
+`loader_isolation_verified = not_determinable`. O SHA-256 da biblioteca solicitada prova somente o
+arquivo entregue ao loader. O sistema nunca converte essa evidência em prova do build carregado.
+
+`driverVersion` é preservado em `driver_version_raw` e `driver_version_decoded`. O valor bruto tem
+codificação específica por fornecedor e nunca é comparado entre fornecedores diferentes.
+`conformance_version` é `null` quando `VK_KHR_driver_properties`/Vulkan 1.2 não o expõe; nunca se
+inventa `0.0.0.0`.
+
+### Integridade do loader
+
+- `true`: propriedades runtime diferentes demonstram que os braços não reutilizaram a mesma
+  identidade observável;
+- `false`: reservado para contradição futura comprovada pelo hash do DSO efetivamente carregado;
+- `not_determinable`: as propriedades são idênticas e não existe hash efetivo para separar builds.
+
+### Elegibilidade e histórico
+
+Somente `runtime_confirmed` entra em score, ranking, bisect ou dataset público. Resultados schema
+1–13 são lidos como `unaudited` e permanecem visíveis no histórico. Rankings v2 exibem
+`excluded_by_identity_count`, a contagem por `unaudited`/`inferred`/`disputed` e apontam este
+critério, evitando que o ranking encolha silenciosamente.
+
+### Versionamento da Fase 1b
+
+| Contrato | Antes → agora | Motivo |
+|---|---:|---|
+| `suite.json schema_version` | 13 → 14 | formato aditivo: novos blocos de identidade |
+| `qualification_schema_version` | 3 → 4 | formato: manifesto novo declara política auditada; v3 segue legível |
+| `qualification_report_version` | 3 → 4 | significado: recomendação passa a exigir identidade confirmada |
+| `qualification_score_version` | 3 → 4 | significado: identidade não confirmada bloqueia score/recomendação |
+| `ranking_version` | 1 → 2 | significado: exclui resultados não confirmados e publica contagens |
+| `public_dataset_schema_version` | 1 → 2 | significado: publicação exige identidade confirmada |
+| `optimization_report.format_version` | 2 → 2 | sem bump: apenas campos aditivos, sem mudança de interpretação existente |
+
+O Full Recomendado permanece `profile_version = 5`; `workload_version`, comandos, shaders,
+resoluções, amostras e fórmulas permanecem inalterados. Esta fase não recalibra workloads nem
+corrige a estatística das fases seguintes.
+
+## Fase 15 — faixa dinâmica e identidade de workload
+
+O `suite.json` passa para schema 15. Perfis Full v1–v5 continuam a declarar e executar workloads
+v1. O Recommended v6 fixa `workload_version` por passo e usa v2 nas etapas de performance; correção
+continua v1. O runner recusa combinação incompatível em vez de selecionar a versão mais recente.
+
+```json
+{
+  "schema_version": 15,
+  "workload_id": "renderpass_tiling_gmem",
+  "workload_version": 2,
+  "dynamic_range_calibration": {
+    "repetition_unit": "renderpass",
+    "repetitions_per_sample": 22,
+    "linearity": {
+      "observed_time_ratio": 2.01,
+      "status": "linear",
+      "normalized_duration_allowed": true
+    },
+    "sample_duration_gate": {
+      "median_batch_us": 12040.0,
+      "classification": "within_target",
+      "ranking_eligible": true
+    },
+    "post_run_validation": {"calibration_drift": false},
+    "thermal_drift": {"thermal_drift_detected": false},
+    "ranking_eligible": true
+  },
+  "sample_size_plan": {
+    "pilot_samples_reused": false,
+    "required_paired_rounds": 8,
+    "planned_paired_rounds": 8,
+    "completed_paired_rounds": 8,
+    "optional_stopping_prohibited": true
+  },
+  "workload_version_audit": {
+    "status": "confirmed",
+    "eligible_for_aggregation": true
+  }
+}
+```
+
+### Tabela-verdade de duração
+
+| Mediana em `m` | Razão `2m/m` | Estado | Tempo normalizado | Ranking |
+|---|---:|---|---|---|
+| < 2 ms | válida | `invalid_below_floor` | proibido | não |
+| 2–8 ms | válida | `valid_below_target` | permitido | sim, com aviso |
+| 8–16 ms | válida | `within_target` | permitido | sim |
+| > 16 ms | válida | `valid_above_target` | permitido | sim, com aviso |
+| qualquer | fora de [1,8; 2,2] | `nonlinear_scaling` | proibido (`null`) | não |
+| ausente/inválida | qualquer | `not_calibrated` | proibido (`null`) | não |
+
+Visual e tiling repetem render passes completos, incluindo load/store e setup de bin. Compute usa
+`dispatch`; cena estável e trace usam `frame`; shader compile usa `draw_batch`. Shader cold v2 cria
+variantes distintas, começa com `VkPipelineCache` vazio e desativa o cache de disco do Mesa antes do
+loader. Injeção de 1%/3%/10% adiciona unidades GPU dentro do timestamp original; shader compile
+adiciona pipelines dentro de seu tempo nativo de criação. CPU sleep/busy-wait é inválido.
+
+O multiplicador é persistido por modelo/SoC/GPU, workload/versão/configuração, fonte de timestamp e
+perfil térmico. É único para ambos os braços. Calibração fria não vale automaticamente a quente;
+uma referência que começou em 8–16 ms e sai da faixa gera `calibration_drift`. Se `m=1` já excedia
+16 ms, aplica-se o baseline registrado com tolerância relativa de 20%. Deriva >5% entre primeiro e
+último terço gera `thermal_drift_detected`. O teto operacional padrão é 2.700 s.
+
+O n é fixado depois de três pares piloto independentes. O piloto não entra na estimativa final e o
+delta parcial nunca reabre o dimensionamento. `statistical_analysis.analysis_version` permanece 1:
+o estimador não mudou. Consumidores devem ler `completed_paired_rounds`, pois n não é mais
+constante.
+
+Com multiplicadores diferentes por `hardware_key`, A740 e A825 só são comparáveis por tamanho de
+efeito pareado; tempo absoluto normalizado entre aparelhos é proibido.
+
+### Versionamento da Fase 15
+
+| Contrato | Antes → agora | Motivo |
+|---|---:|---|
+| `suite.json schema_version` | 14 → 15 | formato: calibração, repetição e auditoria de workload |
+| `workload_version` performance | 1 → 2 | significado: unidade repetida e domínio medido mudaram |
+| `qualification_profile_version` | 5 → 6 | significado: passos fixam v1/v2 e n adaptativo |
+| `qualification_schema_version` | 4 → 5 | formato: versão por passo e novos blocos |
+| `qualification_report_version` | 4 → 5 | significado: novos gates bloqueiam recomendação |
+| `qualification_score_version` | 4 → 5 | significado: faixa dinâmica e identidade bloqueiam score |
+| `ranking_version` | 2 → 3 | significado: versão indeterminável/mismatch é excluída |
+| `public_dataset_schema_version` | 2 → 3 | significado: publicação exige versão confirmada |
+| `statistical_analysis.analysis_version` | 1 → 1 | sem bump: estimador igual; ler `completed_paired_rounds` |
+| `optimization_report.format_version` | 2 → 2 | sem bump: somente campos aditivos |
+
+O estado da implementação e o protocolo físico A740 estão separados em
+`docs/PHASE15_DYNAMIC_RANGE.md`. O histórico publicado está em
+`docs/WORKLOAD_VERSION_AUDIT.md`; resultados `undeterminable` não entram em ranking ou bisect.

@@ -9,7 +9,7 @@ final class Phase4TestData {
     static JSONObject report(String suiteId, String sha, String name, double score,
                              String classification, long finishedAtMs) throws Exception {
         JSONObject report = new JSONObject();
-        report.put("schema_version", 8);
+        report.put("schema_version", 15);
         report.put("suite_id", suiteId);
         report.put("app_version", "0.7.0-alpha1");
         report.put("finished_at_ms", finishedAtMs);
@@ -33,16 +33,20 @@ final class Phase4TestData {
                         .put("success", true)
                         .put("driver_mode", "system")
                         .put("round", 1)
+                        .put("workload_version", 1)
                         .put("native", new JSONObject()
                                 .put("success", true)
+                                .put("workload_version", 1)
                                 .put("throughput_gops", 100.0)
                                 .put("capabilities", capabilities)))
                 .put(new JSONObject()
                         .put("success", true)
                         .put("driver_mode", "custom")
                         .put("round", 1)
+                        .put("workload_version", 1)
                         .put("native", new JSONObject()
                                 .put("success", true)
+                                .put("workload_version", 1)
                                 .put("throughput_gops", 100.0 + score)
                                 .put("capabilities", capabilities))));
         report.put("candidate", new JSONObject()
@@ -65,6 +69,18 @@ final class Phase4TestData {
                 .put("probability_of_superiority_percent", score >= 0.0 ? 100.0 : 0.0));
         report.put("validity_warnings", new JSONArray());
         report.put("failure_catalog", new JSONArray());
+        report.put("driver_identity_audit", new JSONObject()
+                .put("driver", DriverIdentityPolicy.TURNIP)
+                .put("driver_identity_confidence", DriverIdentityPolicy.RUNTIME_CONFIRMED)
+                .put("eligible_for_aggregation", true)
+                .put("loader_isolation_verified", true)
+                .put("identity_observation_coverage", new JSONObject()
+                        .put("expected_process_count", 2)
+                        .put("observed_process_count", 2)
+                        .put("missing_process_count", 0)
+                        .put("coverage_percent", 100.0)
+                        .put("coverage_class", "full")));
+        report.put("workload_version_audit", WorkloadVersionIdentity.audit(report));
         report.put("verdict", verdict(classification));
         report.put("hardware_identity", HardwareIdentity.fromReport(report));
         return report;

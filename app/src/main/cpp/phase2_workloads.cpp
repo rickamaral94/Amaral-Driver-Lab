@@ -8,6 +8,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
@@ -36,7 +37,8 @@ constexpr uint32_t kTraceVersion = 1;
 constexpr uint32_t kTraceWidth = 320;
 constexpr uint32_t kTraceHeight = 180;
 constexpr uint32_t kTraceComputeWords = 65536;
-constexpr uint32_t kWorkloadVersion = 1;
+constexpr uint32_t kLegacyWorkloadVersion = 1;
+constexpr uint32_t kWorkloadVersion = 2;
 constexpr uint32_t kShaderPipelineCount = 24;
 constexpr uint32_t kTilingDrawCount = 2048;
 constexpr uint32_t kStableDrawCount = 512;
@@ -47,6 +49,20 @@ constexpr uint32_t kComputeIterations = 256;
 constexpr uint32_t kComputeDispatchesPerSample = 4;
 constexpr uint32_t kComputeOperationsPerIteration = 8;
 constexpr uint32_t kThermalWindowSeconds = 5;
+
+uint32_t effectiveRepetitions(uint32_t repetitions, uint32_t effectPercent) {
+    repetitions = std::clamp(repetitions, 1U, 512U);
+    effectPercent = std::min(effectPercent, 10U);
+    const uint32_t injected = static_cast<uint32_t>(std::ceil(
+            static_cast<double>(repetitions) * static_cast<double>(effectPercent) / 100.0));
+    return repetitions + injected;
+}
+
+double realizedEffectPercent(uint32_t requested, uint32_t effective) {
+    return requested > 0U
+            ? (static_cast<double>(effective) / static_cast<double>(requested) - 1.0) * 100.0
+            : 0.0;
+}
 
 static const uint32_t kDrawVertexSpirv[] =
 #include "phase2_draw_vert.inc"
@@ -680,7 +696,8 @@ public:
         check(vkEndCommandBuffer(command), "vkEndCommandBuffer");
     }
 
-    std::string failureJson(const std::string &workloadId, const std::exception &error) const {
+    std::string failureJson(const std::string &workloadId, const std::exception &error,
+                            uint32_t workloadVersion = kWorkloadVersion) const {
         std::string type = "native_error";
         int resultCode = std::numeric_limits<int>::max();
         std::string operation;
@@ -693,7 +710,7 @@ public:
         std::ostringstream json;
         json << "{\"success\":false"
              << ",\"workload_id\":\"" << jsonEscape(workloadId) << "\""
-             << ",\"workload_version\":" << kWorkloadVersion
+             << ",\"workload_version\":" << workloadVersion
              << ",\"custom_driver\":" << (customDriver ? "true" : "false")
              << ",\"failure_type\":\"" << type << "\""
              << ",\"failure_stage\":\"" << jsonEscape(stage) << "\""
@@ -1004,34 +1021,61 @@ public:
         if (drawVertex != VK_NULL_HANDLE) context.vkDestroyShaderModule(context.device, drawVertex, nullptr);
     }
 
-    std::string run(const std::string &workloadId, int warmupSeconds, int measureSeconds) {
-        if (workloadId == kShaderCompileId) return runShaderCompile();
+    std::string run(const std::string &workloadId, uint32_t workloadVersion,
+                    uint32_t repetitions, uint32_t effectPercent,
+                    int warmupSeconds, int measureSeconds) {
+        requireVersion(workloadVersion, repetitions, effectPercent);
+        const uint32_t effective = workloadVersion >= 2
+                ? effectiveRepetitions(repetitions, effectPercent) : 1U;
+        if (workloadId == kShaderCompileId) {
+            return runShaderCompile(workloadVersion, repetitions, effectPercent);
+        }
         if (workloadId == kRenderPassTilingId) {
-            return runRenderPassTiling(std::max(0, warmupSeconds), std::max(1, measureSeconds));
+            return runRenderPassTiling(workloadVersion, repetitions, effective, effectPercent,
+                    std::max(0, warmupSeconds), std::max(1, measureSeconds));
         }
         if (workloadId == kComputeArithmeticId) {
-            return runCompute(std::max(0, warmupSeconds), std::max(1, measureSeconds), false);
+            return runCompute(workloadVersion, repetitions, effective, effectPercent,
+                    std::max(0, warmupSeconds), std::max(1, measureSeconds), false);
         }
         if (workloadId == kStableSceneId) {
-            return runStableScene(std::max(0, warmupSeconds), std::max(1, measureSeconds));
+            return runStableScene(workloadVersion, repetitions, effective, effectPercent,
+                    std::max(0, warmupSeconds), std::max(1, measureSeconds));
         }
         if (workloadId == kThermalSustainId) {
-            return runCompute(std::max(0, warmupSeconds),
+            return runCompute(workloadVersion, repetitions, effective, effectPercent,
+                              std::max(0, warmupSeconds),
                               std::max(30, std::min(measureSeconds, 900)), true);
         }
         throw std::invalid_argument("Unsupported phase two workload: " + workloadId);
     }
 
-    std::string runTrace(const std::string &traceId, int warmupSeconds, int measureSeconds,
+    std::string runTrace(const std::string &traceId, uint32_t workloadVersion,
+                         uint32_t repetitions, uint32_t effectPercent,
+                         int warmupSeconds, int measureSeconds,
                          const std::string &rawOutputPath) {
         if (traceId != kMixedTraceId && traceId != kComputeChainTraceId) {
             throw std::invalid_argument("Unsupported trace: " + traceId);
         }
-        return runTraceReplay(traceId, std::max(0, warmupSeconds),
+        requireVersion(workloadVersion, repetitions, effectPercent);
+        const uint32_t effective = workloadVersion >= 2
+                ? effectiveRepetitions(repetitions, effectPercent) : 1U;
+        return runTraceReplay(traceId, workloadVersion, repetitions, effective, effectPercent,
+                              std::max(0, warmupSeconds),
                               std::max(1, measureSeconds), rawOutputPath);
     }
 
 private:
+    static void requireVersion(uint32_t version, uint32_t repetitions,
+                               uint32_t effectPercent) {
+        if (version != kLegacyWorkloadVersion && version != kWorkloadVersion) {
+            throw std::invalid_argument("Unsupported workload version");
+        }
+        if (version == kLegacyWorkloadVersion
+                && (repetitions != 1U || effectPercent != 0U)) {
+            throw std::invalid_argument("Workload v1 does not accept calibrated repetition");
+        }
+    }
     VkPipelineLayout createDrawLayout() {
         VkPushConstantRange range{};
         range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -1252,20 +1296,24 @@ private:
         return data;
     }
 
-    VkPipeline createCompilePipeline(uint32_t index, VkPipelineCache cache,
+    VkPipeline createCompilePipeline(uint32_t index, uint32_t corpusOffset,
+                                     VkPipelineCache cache,
                                      VkRenderPass renderPass, VkPipelineLayout drawLayout,
                                      VkPipelineLayout computeLayout,
                                      VkPipelineCreateFlags flags = 0) {
-        if (index < kShaderPipelineCount / 2) {
+        const uint32_t selector = index % kShaderPipelineCount;
+        const uint32_t variant = corpusOffset + index;
+        if (selector < kShaderPipelineCount / 2) {
             VkShaderModule fragment = (index & 1U) == 0 ? aluFragment : branchFragment;
-            return createGraphicsPipeline(cache, renderPass, drawLayout, index, fragment,
+            return createGraphicsPipeline(cache, renderPass, drawLayout, variant, fragment,
                                           VK_SAMPLE_COUNT_1_BIT, false, flags);
         }
-        return createComputePipeline(cache, computeLayout, 64U + (index % 6U) * 32U,
-                                     index, flags);
+        return createComputePipeline(cache, computeLayout, 64U + (selector % 6U) * 32U,
+                                     variant, flags);
     }
 
-    std::string runShaderCompile() {
+    std::string runShaderCompile(uint32_t workloadVersion, uint32_t requestedRepetitions,
+                                 uint32_t effectPercent) {
         context.setStage("shader_compile_setup");
         VkRenderPass renderPass = createSimpleRenderPass(VK_FORMAT_R8G8B8A8_UNORM);
         VkPipelineLayout drawLayout = createDrawLayout();
@@ -1280,12 +1328,21 @@ private:
         int cacheHits = 0;
         int cacheMisses = 0;
         bool hitRateAvailable = false;
+        const uint32_t requestedPipelineCount =
+                kShaderPipelineCount * requestedRepetitions;
+        const uint32_t injectedPipelineCount = workloadVersion >= 2
+                ? static_cast<uint32_t>(std::ceil(
+                        static_cast<double>(requestedPipelineCount)
+                        * static_cast<double>(effectPercent) / 100.0)) : 0U;
+        const uint32_t pipelineCount = requestedPipelineCount + injectedPipelineCount;
+        const double effectiveDrawBatches = static_cast<double>(pipelineCount)
+                / static_cast<double>(kShaderPipelineCount);
         try {
             context.setStage("shader_compile_cold");
             coldCache = createPipelineCache();
-            for (uint32_t index = 0; index < kShaderPipelineCount; ++index) {
+            for (uint32_t index = 0; index < pipelineCount; ++index) {
                 auto start = Clock::now();
-                VkPipeline pipeline = createCompilePipeline(index, coldCache, renderPass,
+                VkPipeline pipeline = createCompilePipeline(index, 0U, coldCache, renderPass,
                                                             drawLayout, computeLayout);
                 coldTimes.push_back(elapsedMs(start));
                 context.vkDestroyPipeline(context.device, pipeline, nullptr);
@@ -1296,9 +1353,9 @@ private:
 
             context.setStage("shader_compile_warm");
             warmCache = createPipelineCache(cacheData);
-            for (uint32_t index = 0; index < kShaderPipelineCount; ++index) {
+            for (uint32_t index = 0; index < pipelineCount; ++index) {
                 auto start = Clock::now();
-                VkPipeline pipeline = createCompilePipeline(index, warmCache, renderPass,
+                VkPipeline pipeline = createCompilePipeline(index, 0U, warmCache, renderPass,
                                                             drawLayout, computeLayout);
                 warmTimes.push_back(elapsedMs(start));
                 context.vkDestroyPipeline(context.device, pipeline, nullptr);
@@ -1309,11 +1366,11 @@ private:
                 context.setStage("shader_compile_cache_probe");
                 hitRateAvailable = true;
                 probeCache = createPipelineCache(cacheData);
-                for (uint32_t index = 0; index < kShaderPipelineCount; ++index) {
+                for (uint32_t index = 0; index < pipelineCount; ++index) {
                     VkPipeline pipeline = VK_NULL_HANDLE;
                     try {
                         pipeline = createCompilePipeline(
-                                index, probeCache, renderPass, drawLayout, computeLayout,
+                                index, 0U, probeCache, renderPass, drawLayout, computeLayout,
                                 VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT);
                         ++cacheHits;
                     } catch (const VulkanFailure &failure) {
@@ -1348,13 +1405,29 @@ private:
         std::ostringstream json;
         json << "{\"success\":true"
              << ",\"workload_id\":\"" << kShaderCompileId << "\""
-             << ",\"workload_version\":" << kWorkloadVersion
+             << ",\"workload_version\":" << workloadVersion
              << ",\"custom_driver\":" << (context.isCustomDriver() ? "true" : "false")
-             << ",\"pipeline_count\":" << kShaderPipelineCount
-             << ",\"graphics_pipeline_count\":" << kShaderPipelineCount / 2
-             << ",\"compute_pipeline_count\":" << kShaderPipelineCount / 2
-             << ",\"cold_definition\":\"empty application VkPipelineCache in a fresh runner process\""
+             << ",\"pipeline_count\":" << coldTimes.size()
+             << ",\"graphics_pipeline_count\":" << coldTimes.size() / 2
+             << ",\"compute_pipeline_count\":" << coldTimes.size() / 2
+             << ",\"repetition_unit\":\"draw_batch\""
+             << ",\"repetitions_per_sample\":" << requestedRepetitions
+             << ",\"effective_repetitions_per_sample\":" << effectiveDrawBatches
+             << ",\"requested_pipeline_count\":" << requestedPipelineCount
+             << ",\"effective_pipeline_count\":" << pipelineCount
+             << ",\"effect_injection_percent\":" << effectPercent
+             << ",\"effect_injection_domain\":\"pipeline_creation\""
+             << ",\"realized_workload_effect_percent\":"
+             << realizedEffectPercent(requestedPipelineCount, pipelineCount)
+             << ",\"cold_definition\":\""
+             << (workloadVersion >= 2
+                     ? "distinct specialization corpus, empty application VkPipelineCache and Mesa disk cache disabled before loader initialization"
+                     : "empty application VkPipelineCache in a fresh runner process")
+             << "\""
+             << ",\"mesa_disk_cache_disabled\":"
+             << (workloadVersion >= 2 ? "true" : "false")
              << ",\"cold_total_ms\":" << coldTotal
+             << ",\"median_batch_us\":" << coldTotal * 1000.0
              << ",\"cold_p50_pipeline_ms\":" << percentile(coldTimes, 0.50)
              << ",\"cold_p95_pipeline_ms\":" << percentile(coldTimes, 0.95)
              << ",\"warm_total_ms\":" << warmTotal
@@ -1389,7 +1462,8 @@ private:
     }
 
     RenderSetup createRenderSetup(VkSampleCountFlagBits samples, bool depthEnabled,
-                                  uint32_t drawCount, VkShaderModule fragment) {
+                                  uint32_t drawCount, VkShaderModule fragment,
+                                  uint32_t repetitions = 1U) {
         RenderSetup setup;
         const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
         setup.color = context.createImage(
@@ -1472,30 +1546,35 @@ private:
         begin.renderArea.extent = {kRenderWidth, kRenderHeight};
         begin.clearValueCount = depthEnabled ? 2U : 1U;
         begin.pClearValues = clears.data();
-        context.vkCmdBeginRenderPass(setup.command, &begin, VK_SUBPASS_CONTENTS_INLINE);
-        context.vkCmdBindPipeline(setup.command, VK_PIPELINE_BIND_POINT_GRAPHICS, setup.pipeline);
         const uint32_t columns = 32;
         const uint32_t rows = std::max(1U, (drawCount + columns - 1U) / columns);
-        for (uint32_t index = 0; index < drawCount; ++index) {
-            const uint32_t column = index % columns;
-            const uint32_t row = index / columns;
-            DrawPush push{};
-            push.transform[0] = 1.7F / static_cast<float>(columns);
-            push.transform[1] = 1.7F / static_cast<float>(rows);
-            push.transform[2] = -0.85F + (static_cast<float>(column) + 0.5F) * 1.7F /
-                    static_cast<float>(columns);
-            push.transform[3] = -0.85F + (static_cast<float>(row) + 0.5F) * 1.7F /
-                    static_cast<float>(rows);
-            push.color[0] = static_cast<float>((index * 17U) & 255U) / 255.0F;
-            push.color[1] = static_cast<float>((index * 29U) & 255U) / 255.0F;
-            push.color[2] = static_cast<float>((index * 43U) & 255U) / 255.0F;
-            push.color[3] = 1.0F;
-            context.vkCmdPushConstants(setup.command, setup.layout,
-                                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                                       0, sizeof(push), &push);
-            context.vkCmdDraw(setup.command, 3, 1, 0, 0);
+        for (uint32_t repetition = 0; repetition < repetitions; ++repetition) {
+            // A complete render pass is the repetition unit. Clear/load/store and bin setup
+            // therefore occur for every repetition instead of being amortized across draws.
+            context.vkCmdBeginRenderPass(setup.command, &begin, VK_SUBPASS_CONTENTS_INLINE);
+            context.vkCmdBindPipeline(setup.command, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                      setup.pipeline);
+            for (uint32_t index = 0; index < drawCount; ++index) {
+                const uint32_t column = index % columns;
+                const uint32_t row = index / columns;
+                DrawPush push{};
+                push.transform[0] = 1.7F / static_cast<float>(columns);
+                push.transform[1] = 1.7F / static_cast<float>(rows);
+                push.transform[2] = -0.85F + (static_cast<float>(column) + 0.5F) * 1.7F /
+                        static_cast<float>(columns);
+                push.transform[3] = -0.85F + (static_cast<float>(row) + 0.5F) * 1.7F /
+                        static_cast<float>(rows);
+                push.color[0] = static_cast<float>((index * 17U) & 255U) / 255.0F;
+                push.color[1] = static_cast<float>((index * 29U) & 255U) / 255.0F;
+                push.color[2] = static_cast<float>((index * 43U) & 255U) / 255.0F;
+                push.color[3] = 1.0F;
+                context.vkCmdPushConstants(setup.command, setup.layout,
+                                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                           0, sizeof(push), &push);
+                context.vkCmdDraw(setup.command, 3, 1, 0, 0);
+            }
+            context.vkCmdEndRenderPass(setup.command);
         }
-        context.vkCmdEndRenderPass(setup.command);
         context.endTimedCommand(setup.command, setup.query);
         return setup;
     }
@@ -1528,7 +1607,11 @@ private:
         return samples;
     }
 
-    std::string runRenderPassTiling(int warmupSeconds, int measureSeconds) {
+    std::string runRenderPassTiling(uint32_t workloadVersion,
+                                    uint32_t requestedRepetitions,
+                                    uint32_t effectiveRepetitionCount,
+                                    uint32_t effectPercent,
+                                    int warmupSeconds, int measureSeconds) {
         context.setStage("renderpass_tiling_setup");
         struct Variant {
             VkSampleCountFlagBits samples;
@@ -1549,7 +1632,8 @@ private:
         for (size_t index = 0; index < variants.size(); ++index) {
             context.setStage(std::string("renderpass_tiling_") + variants[index].name);
             RenderSetup setup = createRenderSetup(variants[index].samples, variants[index].depth,
-                                                  kTilingDrawCount, aluFragment);
+                                                  kTilingDrawCount, aluFragment,
+                                                  effectiveRepetitionCount);
             std::vector<double> samples;
             try {
                 samples = sampleRender(setup,
@@ -1577,11 +1661,19 @@ private:
         std::ostringstream json;
         json << "{\"success\":true"
              << ",\"workload_id\":\"" << kRenderPassTilingId << "\""
-             << ",\"workload_version\":" << kWorkloadVersion
+             << ",\"workload_version\":" << workloadVersion
              << ",\"custom_driver\":" << (context.isCustomDriver() ? "true" : "false")
              << ",\"width\":" << kRenderWidth
              << ",\"height\":" << kRenderHeight
              << ",\"draws_per_frame\":" << kTilingDrawCount
+             << ",\"repetition_unit\":\"renderpass\""
+             << ",\"repetitions_per_sample\":" << requestedRepetitions
+             << ",\"effective_repetitions_per_sample\":" << effectiveRepetitionCount
+             << ",\"effect_injection_percent\":" << effectPercent
+             << ",\"effect_injection_domain\":\"gpu_workload\""
+             << ",\"realized_workload_effect_percent\":"
+             << realizedEffectPercent(requestedRepetitions, effectiveRepetitionCount)
+             << ",\"median_batch_us\":" << median(aggregate) * 1000.0
              << ",\"variant_count\":" << variants.size()
              << ",\"median_frame_ms\":" << median(aggregate)
              << ",\"p95_frame_ms\":" << percentile(aggregate, 0.95)
@@ -1610,7 +1702,7 @@ private:
         TimestampQuery query;
     };
 
-    ComputeSetup createComputeSetup() {
+    ComputeSetup createComputeSetup(uint32_t dispatchCount) {
         ComputeSetup setup;
         const VkDeviceSize bytes = static_cast<VkDeviceSize>(kComputeElementCount) * sizeof(uint32_t);
         setup.buffer = context.createBuffer(bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -1689,7 +1781,7 @@ private:
         context.vkCmdBindPipeline(setup.command, VK_PIPELINE_BIND_POINT_COMPUTE, setup.pipeline);
         context.vkCmdBindDescriptorSets(setup.command, VK_PIPELINE_BIND_POINT_COMPUTE,
                                         setup.layout, 0, 1, &setup.descriptorSet, 0, nullptr);
-        for (uint32_t index = 0; index < kComputeDispatchesPerSample; ++index) {
+        for (uint32_t index = 0; index < dispatchCount; ++index) {
             context.vkCmdDispatch(setup.command, kComputeElementCount / 256U, 1, 1);
         }
         VkBufferMemoryBarrier after{};
@@ -1742,18 +1834,24 @@ private:
         return checksum;
     }
 
-    double operationsPerSampleGiga() const {
+    double operationsPerSampleGiga(uint32_t dispatchCount) const {
         const double operations = static_cast<double>(kComputeElementCount)
                 * static_cast<double>(kComputeIterations)
                 * static_cast<double>(kComputeOperationsPerIteration)
-                * static_cast<double>(kComputeDispatchesPerSample);
+                * static_cast<double>(dispatchCount);
         return operations / 1.0e9;
     }
 
-    std::string runCompute(int warmupSeconds, int measureSeconds, bool thermal) {
+    std::string runCompute(uint32_t workloadVersion, uint32_t requestedRepetitions,
+                           uint32_t effectiveRepetitionCount, uint32_t effectPercent,
+                           int warmupSeconds, int measureSeconds, bool thermal) {
         context.setStage(thermal ? "thermal_compute_setup" : "compute_setup");
-        ComputeSetup setup = createComputeSetup();
-        const double operationGiga = operationsPerSampleGiga();
+        // v1 remains byte-for-byte comparable at four dispatches per sample. In v2 a
+        // calibrated repetition is exactly one full dispatch, matching repetition_unit.
+        const uint32_t dispatchCount = workloadVersion == kLegacyWorkloadVersion
+                ? kComputeDispatchesPerSample : effectiveRepetitionCount;
+        ComputeSetup setup = createComputeSetup(dispatchCount);
+        const double operationGiga = operationsPerSampleGiga(dispatchCount);
         try {
             auto warmStart = Clock::now();
             do {
@@ -1777,11 +1875,22 @@ private:
                 std::ostringstream json;
                 json << "{\"success\":true"
                      << ",\"workload_id\":\"" << kComputeArithmeticId << "\""
-                     << ",\"workload_version\":" << kWorkloadVersion
+                     << ",\"workload_version\":" << workloadVersion
                      << ",\"custom_driver\":" << (context.isCustomDriver() ? "true" : "false")
                      << ",\"element_count\":" << kComputeElementCount
                      << ",\"iterations_per_dispatch\":" << kComputeIterations
-                     << ",\"dispatches_per_sample\":" << kComputeDispatchesPerSample
+                     << ",\"dispatches_per_sample\":"
+                     << dispatchCount
+                     << ",\"base_dispatches_per_repetition\":"
+                     << (workloadVersion >= 2 ? 1U : kComputeDispatchesPerSample)
+                     << ",\"repetition_unit\":\"dispatch\""
+                     << ",\"repetitions_per_sample\":" << requestedRepetitions
+                     << ",\"effective_repetitions_per_sample\":" << effectiveRepetitionCount
+                     << ",\"effect_injection_percent\":" << effectPercent
+                     << ",\"effect_injection_domain\":\"gpu_workload\""
+                     << ",\"realized_workload_effect_percent\":"
+                     << realizedEffectPercent(requestedRepetitions,
+                                              effectiveRepetitionCount)
                      << ",\"declared_operations_per_iteration\":"
                      << kComputeOperationsPerIteration
                      << ",\"operation_counting\":\"source-level floating-point operations; compiler fusion may differ\""
@@ -1790,6 +1899,7 @@ private:
                      << ",\"p50_throughput_gops\":" << percentile(throughputs, 0.50)
                      << ",\"p95_throughput_gops\":" << percentile(throughputs, 0.95)
                      << ",\"median_dispatch_ms\":" << median(durations)
+                     << ",\"median_batch_us\":" << median(durations) * 1000.0
                      << ",\"validation_checksum\":" << checksum
                      << ",\"gpu_timestamps_used\":" << (timestamps ? "true" : "false")
                      << ",\"sample_durations_ms\":";
@@ -1812,6 +1922,7 @@ private:
             };
             std::vector<Window> windows;
             std::vector<double> windowThroughputs;
+            std::vector<double> allDurations;
             auto testStart = Clock::now();
             double totalOperationsGiga = 0.0;
             while (elapsedMs(testStart) < static_cast<double>(measureSeconds) * 1000.0) {
@@ -1820,7 +1931,7 @@ private:
                 double windowOperations = 0.0;
                 size_t count = 0;
                 do {
-                    context.submitTimed(setup.command, setup.query);
+                    allDurations.push_back(context.submitTimed(setup.command, setup.query));
                     windowOperations += operationGiga;
                     ++count;
                 } while (elapsedMs(windowClock) < static_cast<double>(kThermalWindowSeconds) * 1000.0
@@ -1859,9 +1970,18 @@ private:
             std::ostringstream json;
             json << "{\"success\":true"
                  << ",\"workload_id\":\"" << kThermalSustainId << "\""
-                 << ",\"workload_version\":" << kWorkloadVersion
+                 << ",\"workload_version\":" << workloadVersion
                  << ",\"custom_driver\":" << (context.isCustomDriver() ? "true" : "false")
                  << ",\"duration_seconds\":" << measureSeconds
+                 << ",\"repetition_unit\":\"dispatch\""
+                 << ",\"repetitions_per_sample\":" << requestedRepetitions
+                 << ",\"effective_repetitions_per_sample\":" << effectiveRepetitionCount
+                 << ",\"effect_injection_percent\":" << effectPercent
+                 << ",\"effect_injection_domain\":\"gpu_workload\""
+                 << ",\"realized_workload_effect_percent\":"
+                 << realizedEffectPercent(requestedRepetitions,
+                                          effectiveRepetitionCount)
+                 << ",\"median_batch_us\":" << median(allDurations) * 1000.0
                  << ",\"window_seconds\":" << kThermalWindowSeconds
                  << ",\"window_count\":" << windows.size()
                  << ",\"sustained_throughput_gops\":" << median(last)
@@ -2050,7 +2170,7 @@ private:
         return pipeline;
     }
 
-    TraceSetup createTraceSetup(const std::string &traceId) {
+    TraceSetup createTraceSetup(const std::string &traceId, uint32_t repetitions) {
         TraceSetup setup;
         setup.graphics = traceId == kMixedTraceId;
         setup.drawCount = setup.graphics ? 64U : 0U;
@@ -2175,9 +2295,11 @@ private:
         setup.command = context.allocateCommandBuffer(setup.commandPool);
         setup.query = context.createTimestampQuery();
         context.beginTimedCommand(setup.command, setup.query);
-        VkBufferCopy seedCopy{0, 0, setup.computeBytes};
-        context.vkCmdCopyBuffer(setup.command, setup.seed.buffer, setup.working.buffer,
-                                1, &seedCopy);
+        for (uint32_t repetition = 0; repetition < repetitions; ++repetition) {
+            // Every repetition restarts from the immutable seed and replays the complete trace.
+            VkBufferCopy seedCopy{0, 0, setup.computeBytes};
+            context.vkCmdCopyBuffer(setup.command, setup.seed.buffer, setup.working.buffer,
+                                    1, &seedCopy);
         VkBufferMemoryBarrier toCompute{};
         toCompute.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
         toCompute.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -2280,6 +2402,7 @@ private:
         context.vkCmdPipelineBarrier(setup.command, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                      VK_PIPELINE_STAGE_HOST_BIT, 0,
                                      0, nullptr, 1, &toHost, 0, nullptr);
+        }
         context.endTimedCommand(setup.command, setup.query);
         return setup;
     }
@@ -2302,11 +2425,14 @@ private:
         setup = {};
     }
 
-    std::string runTraceReplay(const std::string &traceId, int warmupSeconds,
+    std::string runTraceReplay(const std::string &traceId, uint32_t workloadVersion,
+                               uint32_t requestedRepetitions,
+                               uint32_t effectiveRepetitionCount,
+                               uint32_t effectPercent, int warmupSeconds,
                                int measureSeconds, const std::string &rawOutputPath) {
         context.setStage("trace_replay_setup");
         if (rawOutputPath.empty()) throw std::invalid_argument("Trace output path is missing");
-        TraceSetup setup = createTraceSetup(traceId);
+        TraceSetup setup = createTraceSetup(traceId, effectiveRepetitionCount);
         try {
             auto warmStart = Clock::now();
             do {
@@ -2365,13 +2491,23 @@ private:
             std::ostringstream json;
             json << "{\"success\":true"
                  << ",\"workload_id\":\"" << kTraceReplayId << "\""
-                 << ",\"workload_version\":" << kWorkloadVersion
+                 << ",\"workload_version\":" << workloadVersion
                  << ",\"trace_id\":\"" << jsonEscape(traceId) << "\""
-                 << ",\"trace_version\":" << kTraceVersion
+                 << ",\"trace_version\":" << workloadVersion
                  << ",\"trace_format_version\":" << kTraceFormatVersion
                  << ",\"custom_driver\":" << (context.isCustomDriver() ? "true" : "false")
                  << ",\"sample_count\":" << durations.size()
+                 << ",\"repetition_unit\":\"frame\""
+                 << ",\"repetitions_per_sample\":" << requestedRepetitions
+                 << ",\"effective_repetitions_per_sample\":" << effectiveRepetitionCount
+                 << ",\"effect_injection_percent\":" << effectPercent
+                 << ",\"effect_injection_domain\":\"gpu_workload\""
+                 << ",\"realized_workload_effect_percent\":"
+                 << realizedEffectPercent(requestedRepetitions,
+                                          effectiveRepetitionCount)
+                 << ",\"state_reset_per_repetition\":true"
                  << ",\"median_replay_ms\":" << median(durations)
+                 << ",\"median_batch_us\":" << median(durations) * 1000.0
                  << ",\"p95_replay_ms\":" << percentile(durations, 0.95)
                  << ",\"p99_replay_ms\":" << percentile(durations, 0.99)
                  << ",\"gpu_timestamps_used\":" << (timestamps ? "true" : "false")
@@ -2397,10 +2533,15 @@ private:
         }
     }
 
-    std::string runStableScene(int warmupSeconds, int measureSeconds) {
+    std::string runStableScene(uint32_t workloadVersion,
+                               uint32_t requestedRepetitions,
+                               uint32_t effectiveRepetitionCount,
+                               uint32_t effectPercent,
+                               int warmupSeconds, int measureSeconds) {
         context.setStage("stable_scene_setup");
         RenderSetup setup = createRenderSetup(VK_SAMPLE_COUNT_1_BIT, true,
-                                              kStableDrawCount, branchFragment);
+                                              kStableDrawCount, branchFragment,
+                                              effectiveRepetitionCount);
         std::vector<double> samples;
         bool timestamps = false;
         try {
@@ -2416,13 +2557,21 @@ private:
         std::ostringstream json;
         json << "{\"success\":true"
              << ",\"workload_id\":\"" << kStableSceneId << "\""
-             << ",\"workload_version\":" << kWorkloadVersion
+             << ",\"workload_version\":" << workloadVersion
              << ",\"custom_driver\":" << (context.isCustomDriver() ? "true" : "false")
              << ",\"width\":" << kRenderWidth
              << ",\"height\":" << kRenderHeight
              << ",\"draws_per_frame\":" << kStableDrawCount
+             << ",\"repetition_unit\":\"frame\""
+             << ",\"repetitions_per_sample\":" << requestedRepetitions
+             << ",\"effective_repetitions_per_sample\":" << effectiveRepetitionCount
+             << ",\"effect_injection_percent\":" << effectPercent
+             << ",\"effect_injection_domain\":\"gpu_workload\""
+             << ",\"realized_workload_effect_percent\":"
+             << realizedEffectPercent(requestedRepetitions, effectiveRepetitionCount)
              << ",\"sample_count\":" << samples.size()
              << ",\"median_frame_ms\":" << median(samples)
+             << ",\"median_batch_us\":" << median(samples) * 1000.0
              << ",\"p50_frame_ms\":" << percentile(samples, 0.50)
              << ",\"p95_frame_ms\":" << percentile(samples, 0.95)
              << ",\"p99_frame_ms\":" << p99
@@ -3273,6 +3422,9 @@ Java_com_amaral_driverlab_RunnerActivity_runNativePhase2Workload(
         JNIEnv *environment,
         jclass,
         jstring workloadId,
+        jint workloadVersion,
+        jint repetitionsPerSample,
+        jint effectInjectionPercent,
         jstring driverDirectory,
         jstring driverName,
         jstring nativeLibraryDirectory,
@@ -3282,16 +3434,23 @@ Java_com_amaral_driverlab_RunnerActivity_runNativePhase2Workload(
     const std::string workload = UtfString(environment, workloadId).string();
     VulkanContext context;
     try {
+        if (workload == kShaderCompileId && workloadVersion >= 2) {
+            setenv("MESA_SHADER_CACHE_DISABLE", "true", 1);
+        }
         context.initialize(UtfString(environment, driverDirectory).string(),
                            UtfString(environment, driverName).string(),
                            UtfString(environment, nativeLibraryDirectory).string(),
                            UtfString(environment, temporaryDirectory).string());
         Phase2Workloads workloads(context);
         const std::string result = workloads.run(
-                workload, static_cast<int>(warmupSeconds), static_cast<int>(measureSeconds));
+                workload, static_cast<uint32_t>(workloadVersion),
+                static_cast<uint32_t>(repetitionsPerSample),
+                static_cast<uint32_t>(effectInjectionPercent),
+                static_cast<int>(warmupSeconds), static_cast<int>(measureSeconds));
         return environment->NewStringUTF(result.c_str());
     } catch (const std::exception &error) {
-        const std::string result = context.failureJson(workload, error);
+        const std::string result = context.failureJson(
+                workload, error, static_cast<uint32_t>(workloadVersion));
         return environment->NewStringUTF(result.c_str());
     }
 }
@@ -3301,6 +3460,9 @@ Java_com_amaral_driverlab_RunnerActivity_runNativeTraceReplay(
         JNIEnv *environment,
         jclass,
         jstring traceId,
+        jint workloadVersion,
+        jint repetitionsPerSample,
+        jint effectInjectionPercent,
         jstring driverDirectory,
         jstring driverName,
         jstring nativeLibraryDirectory,
@@ -3317,11 +3479,15 @@ Java_com_amaral_driverlab_RunnerActivity_runNativeTraceReplay(
                            UtfString(environment, temporaryDirectory).string());
         Phase2Workloads workloads(context);
         const std::string result = workloads.runTrace(
-                trace, static_cast<int>(warmupSeconds), static_cast<int>(measureSeconds),
+                trace, static_cast<uint32_t>(workloadVersion),
+                static_cast<uint32_t>(repetitionsPerSample),
+                static_cast<uint32_t>(effectInjectionPercent),
+                static_cast<int>(warmupSeconds), static_cast<int>(measureSeconds),
                 UtfString(environment, rawOutputPath).string());
         return environment->NewStringUTF(result.c_str());
     } catch (const std::exception &error) {
-        const std::string result = context.failureJson(kTraceReplayId, error);
+        const std::string result = context.failureJson(
+                kTraceReplayId, error, static_cast<uint32_t>(workloadVersion));
         return environment->NewStringUTF(result.c_str());
     }
 }

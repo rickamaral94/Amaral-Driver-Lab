@@ -53,6 +53,7 @@ final class DeepDiagnosticsCoordinator {
     private File directory;
     private File currentResult;
     private long deadlineElapsed;
+    private long launchedElapsed;
     private int phaseIndex;
     private long startedAt;
     private boolean active;
@@ -138,6 +139,7 @@ final class DeepDiagnosticsCoordinator {
             intent.putExtra(DeepDiagnosticsRunnerActivity.EXTRA_DRIVER_SHA, phase.driver.sha256);
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        launchedElapsed = SystemClock.elapsedRealtime();
         activity.startActivity(intent);
         long timeoutSeconds = "soak".equals(mode)
                 ? Math.max(180L, cycles * 15L + 90L) : 420L;
@@ -151,6 +153,14 @@ final class DeepDiagnosticsCoordinator {
             if (currentResult.isFile()) {
                 results.put(new JSONObject(ResultFiles.readUtf8(currentResult)));
                 phaseIndex++;
+                handler.postDelayed(this::launchNext,
+                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                return;
+            }
+            if (runnerExitedUnexpectedly()) {
+                killRunner();
+                recordSyntheticFailure("crash", "phase10_runner_crash");
+                phaseIndex++;
                 handler.postDelayed(this::launchNext, 1200L);
                 return;
             }
@@ -158,7 +168,8 @@ final class DeepDiagnosticsCoordinator {
                 killRunner();
                 recordSyntheticFailure("timeout", "phase10_runner_timeout");
                 phaseIndex++;
-                handler.postDelayed(this::launchNext, 1200L);
+                handler.postDelayed(this::launchNext,
+                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
                 return;
             }
             handler.postDelayed(this::poll, 500L);
@@ -183,10 +194,20 @@ final class DeepDiagnosticsCoordinator {
                         ? JSONObject.NULL : phase.driver.sha256)
                 .put("success", false)
                 .put("failure_type", type)
-                .put("failure_stage", stage)
+                .put("error", stage)
                 .put("finished_at_ms", System.currentTimeMillis());
+        RunnerProcessState.attachToSyntheticFailure(
+                failure, currentResult, "phase10_runner_process");
         ResultFiles.writeAtomic(currentResult, failure.toString(2));
         results.put(failure);
+    }
+
+    private boolean runnerExitedUnexpectedly() {
+        if (SystemClock.elapsedRealtime() - launchedElapsed < 2000L) return false;
+        JSONObject state = RunnerProcessState.read(currentResult);
+        if (state == null || !"started".equals(state.optString("state"))) return false;
+        int pid = state.optInt("pid", -1);
+        return pid > 0 && !new File("/proc/" + pid).exists();
     }
 
     private void finish() {
@@ -194,6 +215,10 @@ final class DeepDiagnosticsCoordinator {
             JSONObject system = find(false);
             JSONObject candidateResult = find(true);
             JSONObject comparison = DeepDiagnosticsComparison.compare(system, candidateResult);
+            JSONObject candidateJson = candidate.toJson();
+            JSONObject referenceJson = reference == null ? null : reference.toJson();
+            JSONObject driverIdentityAudit = ValidationDriverIdentity.auditPhases(
+                    results, candidateJson, referenceJson);
             String reportId = "phase10-" + startedAt;
             JSONObject report = new JSONObject()
                     .put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION)
@@ -209,12 +234,21 @@ final class DeepDiagnosticsCoordinator {
                     .put("memory_mib", memoryMiB)
                     .put("started_at_ms", startedAt)
                     .put("finished_at_ms", System.currentTimeMillis())
-                    .put("candidate_driver", candidate.toJson())
+                    .put("candidate_driver", candidateJson)
                     .put("reference_driver", reference == null
-                            ? JSONObject.NULL : reference.toJson())
+                            ? JSONObject.NULL : referenceJson)
                     .put("comparison_mode", reference == null
                             ? "system_vs_turnip" : "turnip_vs_turnip")
                     .put("phases", results)
+                    .put("driver_identity_audit", driverIdentityAudit)
+                    .put("driver_identity_confidence",
+                            driverIdentityAudit.getString("driver_identity_confidence"))
+                    .put("driver_identity_policy_version",
+                            driverIdentityAudit.getInt("driver_identity_policy_version"))
+                    .put("identity_observation_coverage",
+                            driverIdentityAudit.getJSONObject("identity_observation_coverage"))
+                    .put("loader_isolation_verified",
+                            driverIdentityAudit.get("loader_isolation_verified"))
                     .put("comparison", comparison)
                     .put("historical_comparability", new JSONObject()
                             .put("series", Phase10Contract.PROFILE_ID + "/v1/" + mode)

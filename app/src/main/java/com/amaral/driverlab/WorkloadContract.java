@@ -5,7 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 final class WorkloadContract {
-    static final int RESULT_SCHEMA_VERSION = 13;
+    static final int RESULT_SCHEMA_VERSION = 15;
 
     static final int STATISTICAL_ANALYSIS_VERSION = 1;
     static final int BOOTSTRAP_ITERATIONS = 5_000;
@@ -32,39 +32,39 @@ final class WorkloadContract {
                     + "outros shaders, APIs ou workloads.";
 
     static final String SHADER_COMPILE_ID = "shader_compile_pipeline";
-    static final int SHADER_COMPILE_VERSION = 1;
+    static final int SHADER_COMPILE_VERSION = 2;
     static final String SHADER_COMPILE_METRIC = "cold_total_ms";
     static final String SHADER_COMPILE_LIMITATION =
             "Mede criação de pipelines para um conjunto SPIR-V fixo; não reproduz todos os "
                     + "shaders, caches ou padrões de stutter de jogos e emuladores.";
 
     static final String RENDERPASS_TILING_ID = "renderpass_tiling_gmem";
-    static final int RENDERPASS_TILING_VERSION = 1;
+    static final int RENDERPASS_TILING_VERSION = 2;
     static final String RENDERPASS_TILING_METRIC = "median_frame_ms";
     static final String RENDERPASS_TILING_LIMITATION =
             "Estressa muitos draws, attachments, MSAA e caminhos sensíveis a depth/LRZ; "
                     + "não confirma o estado interno de LRZ/GMEM nem prevê FPS em jogos.";
 
     static final String COMPUTE_ARITHMETIC_ID = "compute_arithmetic";
-    static final int COMPUTE_ARITHMETIC_VERSION = 1;
+    static final int COMPUTE_ARITHMETIC_VERSION = 2;
     static final String COMPUTE_ARITHMETIC_METRIC = "throughput_gops";
     static final String COMPUTE_ARITHMETIC_LIMITATION =
             "Mede uma carga aritmética compute fixa e validada; não representa transferência, "
                     + "IA, física, shaders gráficos ou desempenho geral da GPU.";
 
     static final String STABLE_SCENE_ID = "stable_scene_frametime";
-    static final int STABLE_SCENE_VERSION = 1;
+    static final int STABLE_SCENE_VERSION = 2;
     static final String STABLE_SCENE_METRIC = "p99_frame_ms";
     static final String STABLE_SCENE_LIMITATION =
             "Mede a distribuição de frametime de uma cena offscreen estável; não inclui CPU, "
                     + "I/O, compilação dinâmica de jogos nem prova ganho de FPS real.";
 
     static final String THERMAL_SUSTAIN_ID = "thermal_sustain_efficiency";
-    static final int THERMAL_SUSTAIN_VERSION = 1;
+    static final int THERMAL_SUSTAIN_VERSION = 2;
     static final String THERMAL_SUSTAIN_METRIC = "sustained_throughput_gops";
 
     static final String TRACE_REPLAY_ID = "vulkan_command_trace_replay";
-    static final int TRACE_REPLAY_VERSION = 1;
+    static final int TRACE_REPLAY_VERSION = 2;
     static final String TRACE_REPLAY_METRIC = "median_replay_ms";
     static final String TRACE_REPLAY_LIMITATION =
             "Reexecuta command traces Vulkan próprios e determinísticos do APK; não importa "
@@ -141,6 +141,14 @@ final class WorkloadContract {
         throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
     }
 
+    static boolean isSupportedVersion(String workloadId, int version) {
+        if (!isSupported(workloadId)) return false;
+        if (TRANSFER_ID.equals(workloadId) || RENDER_CORRECTNESS_ID.equals(workloadId)) {
+            return version == 1;
+        }
+        return version == 1 || version == 2;
+    }
+
     static String limitationFor(String workloadId) {
         if (TRANSFER_ID.equals(workloadId)) return TRANSFER_LIMITATION;
         if (RENDER_CORRECTNESS_ID.equals(workloadId)) return RENDER_CORRECTNESS_LIMITATION;
@@ -157,25 +165,39 @@ final class WorkloadContract {
     }
 
     static String labelFor(String workloadId) {
+        return labelFor(workloadId, versionFor(workloadId));
+    }
+
+    static String labelFor(String workloadId, int version) {
+        if (!isSupportedVersion(workloadId, version)) {
+            throw new IllegalArgumentException("Versão de workload desconhecida: "
+                    + workloadId + "/v" + version);
+        }
         if (TRANSFER_ID.equals(workloadId)) return "transferência fill/copy v1";
         if (RENDER_CORRECTNESS_ID.equals(workloadId)) return "correção offscreen v1";
-        if (SHADER_COMPILE_ID.equals(workloadId)) return "compilação de shaders v1";
-        if (RENDERPASS_TILING_ID.equals(workloadId)) return "render pass / tiling v1";
-        if (COMPUTE_ARITHMETIC_ID.equals(workloadId)) return "compute aritmético v1";
-        if (STABLE_SCENE_ID.equals(workloadId)) return "frametime estável v1";
-        if (THERMAL_SUSTAIN_ID.equals(workloadId)) return "sustentação térmica v1";
-        if (TRACE_REPLAY_ID.equals(workloadId)) return "trace replay Vulkan v1";
+        if (SHADER_COMPILE_ID.equals(workloadId)) return "compilação de shaders v" + version;
+        if (RENDERPASS_TILING_ID.equals(workloadId)) return "render pass / tiling v" + version;
+        if (COMPUTE_ARITHMETIC_ID.equals(workloadId)) return "compute aritmético v" + version;
+        if (STABLE_SCENE_ID.equals(workloadId)) return "frametime estável v" + version;
+        if (THERMAL_SUSTAIN_ID.equals(workloadId)) return "sustentação térmica v" + version;
+        if (TRACE_REPLAY_ID.equals(workloadId)) return "trace replay Vulkan v" + version;
         if (VisualSceneContract.isVisualScene(workloadId)) {
-            return VisualSceneContract.labelFor(workloadId);
+            return VisualSceneContract.labelFor(workloadId, version);
         }
         throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
     }
 
     static String nativeNameFor(String workloadId) {
+        return nativeNameFor(workloadId, versionFor(workloadId));
+    }
+
+    static String nativeNameFor(String workloadId, int version) {
+        if (!isSupportedVersion(workloadId, version)) {
+            throw new IllegalArgumentException("Versão de workload desconhecida: "
+                    + workloadId + "/v" + version);
+        }
         if (TRANSFER_ID.equals(workloadId)) return TRANSFER_NATIVE_NAME;
-        if (TRACE_REPLAY_ID.equals(workloadId)) return "vulkan_command_trace_replay_v1";
-        if (VisualSceneContract.isVisualScene(workloadId)) return workloadId + "_v1";
-        return workloadId + "_v" + versionFor(workloadId);
+        return workloadId + "_v" + version;
     }
 
     static String primaryMetricFor(String workloadId) {

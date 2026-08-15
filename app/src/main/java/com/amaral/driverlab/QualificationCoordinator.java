@@ -121,8 +121,9 @@ final class QualificationCoordinator {
 
     private void launchSuite(QualificationProfile.Step step, int ordinal,
                              int profileVersion, int stepCount) throws Exception {
-        int schemaVersion = profileVersion >= 3
-                ? Phase11Contract.QUALIFICATION_SCHEMA_VERSION
+        int schemaVersion = profileVersion >= Phase15DynamicRangeContract.PROFILE_VERSION
+                ? Phase15DynamicRangeContract.QUALIFICATION_SCHEMA_VERSION
+                : profileVersion >= 3 ? Phase11Contract.QUALIFICATION_SCHEMA_VERSION
                 : Phase7Contract.QUALIFICATION_SCHEMA_VERSION;
         JSONObject context = new JSONObject()
                 .put("qualification_schema_version", schemaVersion)
@@ -139,7 +140,7 @@ final class QualificationCoordinator {
         currentRun = new RunCoordinator(activity, driver, referenceDriver,
                 RunCoordinator.MODE_AB,
                 step.rounds, step.warmupSeconds, step.measureSeconds,
-                step.workloadId, step.traceId,
+                step.workloadId, step.workloadVersion, step.traceId,
                 VisualSceneContract.isVisualScene(step.workloadId)
                         ? VisualSceneContract.DEFAULT_PIXEL_TOLERANCE
                         : WorkloadContract.DEFAULT_PIXEL_TOLERANCE,

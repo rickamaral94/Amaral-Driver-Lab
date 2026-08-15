@@ -1,0 +1,11 @@
+=== Eden GPU Logging Started ===
+Driver: Turnip (Mesa Freedreno)
+[ 197.237524] [Driver] Device: Turnip Adreno (TM) 740
+Driver Name: turnip Mesa driver
+Driver Info: Mesa 26.3.0-devel (git-32fab1ad09)
+Driver Version: 26.2.99
+Vulkan API Version: 1.4.358
+Driver ID: 18
+=== Loaded Vulkan Extensions ===
+- VK_KHR_driver_properties
+[ 205.191679] [Vulkan] vkCmdDrawIndexed(vertices=6, instances=1) -> 0

@@ -6,6 +6,8 @@
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <dlfcn.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
@@ -135,6 +137,27 @@ Function requireInstance(PFN_vkGetInstanceProcAddr getter, VkInstance instance, 
 }
 
 template <typename Function>
+Function optionalInstance(PFN_vkGetInstanceProcAddr getter, VkInstance instance, const char *name) {
+    return reinterpret_cast<Function>(getter(instance, name));
+}
+
+std::string versionString(uint32_t value) {
+    return std::to_string(VK_VERSION_MAJOR(value)) + "."
+            + std::to_string(VK_VERSION_MINOR(value)) + "."
+            + std::to_string(VK_VERSION_PATCH(value));
+}
+
+const char *driverIdName(VkDriverId id) {
+    switch (id) {
+        case VK_DRIVER_ID_QUALCOMM_PROPRIETARY: return "QUALCOMM_PROPRIETARY";
+        case VK_DRIVER_ID_MESA_TURNIP: return "MESA_TURNIP";
+        case VK_DRIVER_ID_GOOGLE_SWIFTSHADER: return "GOOGLE_SWIFTSHADER";
+        case VK_DRIVER_ID_MESA_LLVMPIPE: return "MESA_LLVMPIPE";
+        default: return "OTHER_OR_UNKNOWN";
+    }
+}
+
+template <typename Function>
 Function requireDevice(PFN_vkGetDeviceProcAddr getter, VkDevice device, const char *name) {
     auto function = reinterpret_cast<Function>(getter(device, name));
     if (function == nullptr) {
@@ -180,11 +203,31 @@ public:
     void initialize(JNIEnv *environment,
                     jobject surfaceObject,
                     const std::string &sceneIdValue,
+                    uint32_t workloadVersionValue,
+                    uint32_t repetitionsValue,
+                    uint32_t effectPercentValue,
                     const std::string &driverDirectory,
                     const std::string &driverName,
                     const std::string &nativeLibraryDirectory,
-                    const std::string &temporaryDirectory) {
+                    const std::string &temporaryDirectory,
+                    const std::string &diagnosticLogPathValue) {
+        diagnosticLogPath = diagnosticLogPathValue;
         sceneId = sceneIdValue;
+        if (workloadVersionValue != 1U && workloadVersionValue != 2U) {
+            throw std::runtime_error("Unsupported visual workload version");
+        }
+        if (workloadVersionValue == 1U
+                && (repetitionsValue != 1U || effectPercentValue != 0U)) {
+            throw std::runtime_error("Visual workload v1 does not accept calibrated repetition");
+        }
+        workloadVersion = workloadVersionValue;
+        requestedRepetitions = std::clamp(repetitionsValue, 1U, 512U);
+        effectPercent = std::min(effectPercentValue, 10U);
+        const uint32_t injected = static_cast<uint32_t>(std::ceil(
+                static_cast<double>(requestedRepetitions)
+                * static_cast<double>(effectPercent) / 100.0));
+        effectiveRepetitions = workloadVersion >= 2U
+                ? requestedRepetitions + injected : 1U;
         if (sceneId == "visual_scene_geometry") sceneKind = 0;
         else if (sceneId == "visual_scene_materials") sceneKind = 1;
         else if (sceneId == "visual_scene_postprocess") sceneKind = 2;
@@ -197,7 +240,7 @@ public:
         }
         else throw std::runtime_error("Unknown visual scene: " + sceneId);
 
-        stage = "open_loader";
+        setStage("open_loader");
         customDriver = !driverDirectory.empty();
         if (customDriver) {
             if (driverName.empty()) throw std::runtime_error("Custom driver library name is missing");
@@ -255,7 +298,7 @@ public:
         instanceInfo.pApplicationInfo = &appInfo;
         instanceInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
         instanceInfo.ppEnabledExtensionNames = instanceExtensions.data();
-        stage = "create_instance";
+        setStage("create_instance");
         check(createInstance(&instanceInfo, nullptr, &instance), "vkCreateInstance");
         loadInstanceFunctions();
 
@@ -264,7 +307,7 @@ public:
         VkAndroidSurfaceCreateInfoKHR surfaceInfo{};
         surfaceInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
         surfaceInfo.window = nativeWindow;
-        stage = "create_android_surface";
+        setStage("create_android_surface");
         check(vkCreateAndroidSurfaceKHR(instance, &surfaceInfo, nullptr, &surface),
               "vkCreateAndroidSurfaceKHR");
 
@@ -283,12 +326,24 @@ public:
         check(vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr,
                                                    &deviceExtensionCount, nullptr),
               "vkEnumerateDeviceExtensionProperties(count)");
-        std::vector<VkExtensionProperties> deviceExtensions(deviceExtensionCount);
+        deviceExtensions.resize(deviceExtensionCount);
         check(vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr,
                                                    &deviceExtensionCount, deviceExtensions.data()),
               "vkEnumerateDeviceExtensionProperties(list)");
         if (!hasExtension(deviceExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
             throw std::runtime_error("Driver does not expose VK_KHR_swapchain");
+        }
+        if (vkGetPhysicalDeviceProperties2 != nullptr
+                && (properties.apiVersion >= VK_API_VERSION_1_2
+                    || hasExtension(deviceExtensions,
+                                    VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME))) {
+            driverProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+            VkPhysicalDeviceProperties2 properties2{};
+            properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            properties2.pNext = &driverProperties;
+            vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
+            properties = properties2.properties;
+            hasDriverProperties = true;
         }
 
         uint32_t familyCount = 0;
@@ -324,7 +379,7 @@ public:
         deviceInfo.pQueueCreateInfos = &queueInfo;
         deviceInfo.enabledExtensionCount = 1;
         deviceInfo.ppEnabledExtensionNames = &swapchainExtension;
-        stage = "create_device";
+        setStage("create_device");
         check(vkCreateDevice(physicalDevice, &deviceInfo, nullptr, &device), "vkCreateDevice");
         loadDeviceFunctions();
         vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
@@ -380,14 +435,30 @@ public:
         std::ostringstream json;
         json << std::fixed << std::setprecision(6)
              << "{\"success\":true"
-             << ",\"workload\":\"" << jsonEscape(sceneId) << "_v1\""
+             << ",\"workload\":\"" << jsonEscape(sceneId) << "_v"
+             << workloadVersion << "\""
+             << ",\"workload_id\":\"" << jsonEscape(sceneId) << "\""
+             << ",\"workload_version\":" << workloadVersion
              << ",\"visual_scene_id\":\"" << jsonEscape(sceneId) << "\""
-             << ",\"visual_scene_version\":1"
+             << ",\"visual_scene_version\":" << workloadVersion
+             << ",\"repetition_unit\":\"renderpass\""
+             << ",\"repetitions_per_sample\":" << requestedRepetitions
+             << ",\"effective_repetitions_per_sample\":" << effectiveRepetitions
+             << ",\"effect_injection_percent\":" << effectPercent
+             << ",\"effect_injection_domain\":\"gpu_workload\""
+             << ",\"realized_workload_effect_percent\":"
+             << (static_cast<double>(effectiveRepetitions)
+                     / static_cast<double>(requestedRepetitions) - 1.0) * 100.0
+             << ",\"renderpasses_per_repetition\":2"
+             << ",\"presentation_per_sample\":1"
              << ",\"custom_driver\":" << (customDriver ? "true" : "false")
              << ",\"gpu_name\":\"" << jsonEscape(properties.deviceName) << "\""
              << ",\"vendor_id\":" << properties.vendorID
              << ",\"device_id\":" << properties.deviceID
              << ",\"driver_version_raw\":" << properties.driverVersion
+             << ",\"driver_version_decoded\":\""
+             << versionString(properties.driverVersion) << "\""
+             << ",\"capabilities\":" << capabilitiesJson()
              << ",\"image_width\":" << renderWidth
              << ",\"image_height\":" << renderHeight
              << ",\"vertices_per_instance\":" << vertexCount
@@ -400,6 +471,7 @@ public:
              << ",\"timed_frame_count\":" << measuredFrameTimes.size()
              << ",\"gpu_timestamps_used\":" << (timestampsSupported ? "true" : "false")
              << ",\"p50_gpu_frame_ms\":" << p50
+             << ",\"median_batch_us\":" << p50 * 1000.0
              << ",\"p95_gpu_frame_ms\":" << p95
              << ",\"p99_gpu_frame_ms\":" << p99
              << ",\"mean_gpu_frame_ms\":" << mean
@@ -419,6 +491,8 @@ public:
         json << "{\"success\":false"
              << ",\"failure_type\":\"visual_scene_failure\""
              << ",\"failure_stage\":\"" << jsonEscape(stage) << "\""
+             << ",\"workload_id\":\"" << jsonEscape(sceneId) << "\""
+             << ",\"workload_version\":" << workloadVersion
              << ",\"visual_scene_id\":\"" << jsonEscape(sceneId) << "\""
              << ",\"error\":\"" << jsonEscape(error.what()) << "\"";
         const auto *vulkan = dynamic_cast<const VulkanFailure *>(&error);
@@ -434,6 +508,36 @@ public:
     }
 
 private:
+    std::string capabilitiesJson() const {
+        std::ostringstream json;
+        json << '{'
+             << "\"gpu_name\":\"" << jsonEscape(properties.deviceName) << "\""
+             << ",\"vendor_id\":" << properties.vendorID
+             << ",\"device_id\":" << properties.deviceID
+             << ",\"api_version_raw\":" << properties.apiVersion
+             << ",\"api_version\":\"" << versionString(properties.apiVersion) << "\""
+             << ",\"driver_version_raw\":" << properties.driverVersion
+             << ",\"driver_version_decoded\":\""
+             << versionString(properties.driverVersion) << "\"";
+        if (hasDriverProperties) {
+            json << ",\"driver_id\":" << static_cast<int>(driverProperties.driverID)
+                 << ",\"driver_id_name\":\"" << driverIdName(driverProperties.driverID) << "\""
+                 << ",\"driver_name\":\"" << jsonEscape(driverProperties.driverName) << "\""
+                 << ",\"driver_info\":\"" << jsonEscape(driverProperties.driverInfo) << "\""
+                 << ",\"conformance_version\":\""
+                 << static_cast<unsigned int>(driverProperties.conformanceVersion.major) << '.'
+                 << static_cast<unsigned int>(driverProperties.conformanceVersion.minor) << '.'
+                 << static_cast<unsigned int>(driverProperties.conformanceVersion.subminor) << '.'
+                 << static_cast<unsigned int>(driverProperties.conformanceVersion.patch) << "\"";
+        } else {
+            json << ",\"driver_id\":null,\"driver_id_name\":null"
+                 << ",\"driver_name\":null,\"driver_info\":null"
+                 << ",\"conformance_version\":null";
+        }
+        json << '}';
+        return json.str();
+    }
+
     void loadInstanceFunctions() {
         vkDestroyInstance = requireInstance<PFN_vkDestroyInstance>(getInstanceProcAddr, instance,
                                                                    "vkDestroyInstance");
@@ -441,6 +545,15 @@ private:
                 getInstanceProcAddr, instance, "vkEnumeratePhysicalDevices");
         vkGetPhysicalDeviceProperties = requireInstance<PFN_vkGetPhysicalDeviceProperties>(
                 getInstanceProcAddr, instance, "vkGetPhysicalDeviceProperties");
+        vkGetPhysicalDeviceProperties2 = optionalInstance<PFN_vkGetPhysicalDeviceProperties2>(
+                getInstanceProcAddr, instance, "vkGetPhysicalDeviceProperties2");
+        if (vkGetPhysicalDeviceProperties2 == nullptr) {
+            vkGetPhysicalDeviceProperties2 =
+                    reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+                            optionalInstance<PFN_vkGetPhysicalDeviceProperties2KHR>(
+                                    getInstanceProcAddr, instance,
+                                    "vkGetPhysicalDeviceProperties2KHR"));
+        }
         vkGetPhysicalDeviceMemoryProperties = requireInstance<PFN_vkGetPhysicalDeviceMemoryProperties>(
                 getInstanceProcAddr, instance, "vkGetPhysicalDeviceMemoryProperties");
         vkGetPhysicalDeviceQueueFamilyProperties = requireInstance<PFN_vkGetPhysicalDeviceQueueFamilyProperties>(
@@ -541,7 +654,7 @@ private:
     }
 
     void createSwapchain() {
-        stage = "create_swapchain";
+        setStage("create_swapchain");
         VkSurfaceCapabilitiesKHR capabilities{};
         check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &capabilities),
               "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
@@ -566,20 +679,9 @@ private:
             }
         }
 
-        uint32_t presentCount = 0;
-        check(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentCount,
-                                                        nullptr),
-              "vkGetPhysicalDeviceSurfacePresentModesKHR(count)");
-        std::vector<VkPresentModeKHR> modes(presentCount);
-        check(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentCount,
-                                                        modes.data()),
-              "vkGetPhysicalDeviceSurfacePresentModesKHR(list)");
+        // FIFO is required by Vulkan and is the most predictable mode across Android
+        // compositors. The visual workload measures GPU timestamps, not display latency.
         presentMode = VK_PRESENT_MODE_FIFO_KHR;
-        if (std::find(modes.begin(), modes.end(), VK_PRESENT_MODE_MAILBOX_KHR) != modes.end()) {
-            presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-        } else if (std::find(modes.begin(), modes.end(), VK_PRESENT_MODE_IMMEDIATE_KHR) != modes.end()) {
-            presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
-        }
 
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
             surfaceExtent = capabilities.currentExtent;
@@ -683,7 +785,7 @@ private:
     }
 
     void createOffscreenResources() {
-        stage = "create_offscreen_images";
+        setStage("create_offscreen_images");
         VkFormatProperties colorProperties{};
         vkGetPhysicalDeviceFormatProperties(physicalDevice, kOffscreenFormat, &colorProperties);
         const VkFormatFeatureFlags needed = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT
@@ -752,7 +854,7 @@ private:
     }
 
     void createRenderPasses() {
-        stage = "create_render_passes";
+        setStage("create_render_passes");
         VkAttachmentDescription sceneAttachments[2]{};
         sceneAttachments[0].format = kOffscreenFormat;
         sceneAttachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
@@ -773,21 +875,29 @@ private:
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorReference;
         subpass.pDepthStencilAttachment = &depthReference;
-        VkSubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        std::array<VkSubpassDependency, 2> sceneDependencies{};
+        sceneDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+        sceneDependencies[0].dstSubpass = 0;
+        sceneDependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        sceneDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        sceneDependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        sceneDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        sceneDependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        sceneDependencies[1].srcSubpass = 0;
+        sceneDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+        sceneDependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        sceneDependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        sceneDependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        sceneDependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        sceneDependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
         VkRenderPassCreateInfo sceneInfo{};
         sceneInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         sceneInfo.attachmentCount = 2;
         sceneInfo.pAttachments = sceneAttachments;
         sceneInfo.subpassCount = 1;
         sceneInfo.pSubpasses = &subpass;
-        sceneInfo.dependencyCount = 1;
-        sceneInfo.pDependencies = &dependency;
+        sceneInfo.dependencyCount = static_cast<uint32_t>(sceneDependencies.size());
+        sceneInfo.pDependencies = sceneDependencies.data();
         check(vkCreateRenderPass(device, &sceneInfo, nullptr, &sceneRenderPass),
               "vkCreateRenderPass(scene)");
 
@@ -803,20 +913,29 @@ private:
         finalSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         finalSubpass.colorAttachmentCount = 1;
         finalSubpass.pColorAttachments = &finalReference;
-        VkSubpassDependency finalDependency{};
-        finalDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        finalDependency.dstSubpass = 0;
-        finalDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        finalDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        finalDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        std::array<VkSubpassDependency, 2> finalDependencies{};
+        finalDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+        finalDependencies[0].dstSubpass = 0;
+        finalDependencies[0].srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        finalDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        finalDependencies[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        finalDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        finalDependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        finalDependencies[1].srcSubpass = 0;
+        finalDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+        finalDependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        finalDependencies[1].dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        finalDependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        finalDependencies[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        finalDependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
         VkRenderPassCreateInfo finalInfo{};
         finalInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         finalInfo.attachmentCount = 1;
         finalInfo.pAttachments = &finalAttachment;
         finalInfo.subpassCount = 1;
         finalInfo.pSubpasses = &finalSubpass;
-        finalInfo.dependencyCount = 1;
-        finalInfo.pDependencies = &finalDependency;
+        finalInfo.dependencyCount = static_cast<uint32_t>(finalDependencies.size());
+        finalInfo.pDependencies = finalDependencies.data();
         check(vkCreateRenderPass(device, &finalInfo, nullptr, &finalRenderPass),
               "vkCreateRenderPass(final)");
 
@@ -967,7 +1086,7 @@ private:
     }
 
     void createPipelines() {
-        stage = "create_visual_pipelines";
+        setStage("create_visual_pipelines");
         VkPushConstantRange push{};
         push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         push.offset = 0;
@@ -1052,7 +1171,9 @@ private:
     }
 
     double renderFrame(uint32_t frame, bool checkpoint, const std::string &checkpointFile) {
-        stage = "render_visible_frame";
+        setStage("render_visible_frame");
+        const bool diagnosticFrame = frame == 0U || checkpoint;
+        if (diagnosticFrame) appendDiagnostic("native_visual_frame_begin", frame, 0);
         check(vkWaitForFences(device, 1, &frameFence, VK_TRUE, UINT64_MAX), "vkWaitForFences");
         check(vkResetFences(device, 1, &frameFence), "vkResetFences");
         uint32_t imageIndex = 0;
@@ -1061,6 +1182,8 @@ private:
         if (acquire != VK_SUCCESS && acquire != VK_SUBOPTIMAL_KHR) {
             check(acquire, "vkAcquireNextImageKHR");
         }
+        if (diagnosticFrame) appendDiagnostic(
+                "native_visual_image_acquired", frame, static_cast<int64_t>(acquire));
         check(vkResetCommandBuffer(commandBuffer, 0), "vkResetCommandBuffer");
         VkCommandBufferBeginInfo begin{};
         begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1086,14 +1209,6 @@ private:
         sceneBegin.renderArea.extent = {renderWidth, renderHeight};
         sceneBegin.clearValueCount = 2;
         sceneBegin.pClearValues = sceneClears;
-        vkCmdBeginRenderPass(commandBuffer, &sceneBegin, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, scenePipeline);
-        vkCmdPushConstants(commandBuffer, scenePipelineLayout,
-                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, sizeof(push), &push);
-        vkCmdDraw(commandBuffer, vertexCount, instanceCount, 0, 0);
-        vkCmdEndRenderPass(commandBuffer);
-
         VkClearValue finalClear{};
         finalClear.color = {{0.0F, 0.0F, 0.0F, 1.0F}};
         VkRenderPassBeginInfo finalBegin{};
@@ -1103,15 +1218,27 @@ private:
         finalBegin.renderArea.extent = {renderWidth, renderHeight};
         finalBegin.clearValueCount = 1;
         finalBegin.pClearValues = &finalClear;
-        vkCmdBeginRenderPass(commandBuffer, &finalBegin, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, finalPipeline);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                finalPipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-        vkCmdPushConstants(commandBuffer, finalPipelineLayout,
-                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, sizeof(push), &push);
-        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-        vkCmdEndRenderPass(commandBuffer);
+        for (uint32_t repetition = 0; repetition < effectiveRepetitions; ++repetition) {
+            // The calibrated repetition unit is a complete render pass. Load/store, depth
+            // clear and driver binning decisions are paid on every repetition.
+            vkCmdBeginRenderPass(commandBuffer, &sceneBegin, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, scenePipeline);
+            vkCmdPushConstants(commandBuffer, scenePipelineLayout,
+                               VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(push), &push);
+            vkCmdDraw(commandBuffer, vertexCount, instanceCount, 0, 0);
+            vkCmdEndRenderPass(commandBuffer);
+
+            vkCmdBeginRenderPass(commandBuffer, &finalBegin, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, finalPipeline);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    finalPipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+            vkCmdPushConstants(commandBuffer, finalPipelineLayout,
+                               VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(push), &push);
+            vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+            vkCmdEndRenderPass(commandBuffer);
+        }
 
         if (checkpoint) {
             VkBufferImageCopy copy{};
@@ -1174,6 +1301,7 @@ private:
         submit.signalSemaphoreCount = 1;
         submit.pSignalSemaphores = &renderFinished;
         check(vkQueueSubmit(queue, 1, &submit, frameFence), "vkQueueSubmit");
+        if (diagnosticFrame) appendDiagnostic("native_visual_queue_submitted", frame, 0);
         VkPresentInfoKHR present{};
         present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         present.waitSemaphoreCount = 1;
@@ -1185,10 +1313,16 @@ private:
         if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
             check(presentResult, "vkQueuePresentKHR");
         }
+        if (diagnosticFrame) appendDiagnostic(
+                "native_visual_present_returned", frame, static_cast<int64_t>(presentResult));
         check(vkWaitForFences(device, 1, &frameFence, VK_TRUE, UINT64_MAX),
               "vkWaitForFences(frame)");
+        if (diagnosticFrame) appendDiagnostic("native_visual_fence_completed", frame, 0);
 
-        if (checkpoint) writeCheckpoint(checkpointFile);
+        if (checkpoint) {
+            writeCheckpoint(checkpointFile);
+            appendDiagnostic("native_visual_checkpoint_written", frame, 0);
+        }
         if (!timestampsSupported) return 0.0;
         uint64_t timestamps[2]{};
         VkResult query = vkGetQueryPoolResults(device, queryPool, 0, 2, sizeof(timestamps),
@@ -1222,6 +1356,43 @@ private:
         output.close();
         vkUnmapMemory(device, readbackMemory);
         if (!output) throw std::runtime_error("Unable to write visual checkpoint output");
+    }
+
+    void setStage(const std::string &value) {
+        if (stage == value) return;
+        stage = value;
+        appendDiagnostic("native_visual_stage", -1, 0);
+    }
+
+    void appendDiagnostic(const char *event, int64_t frame, int64_t value) const {
+        if (diagnosticLogPath.empty()) return;
+        const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+        std::ostringstream line;
+        line << "{\"diagnostic_schema_version\":1"
+             << ",\"timestamp_ms\":" << now
+             << ",\"event\":\"" << event << "\""
+             << ",\"pid\":" << getpid()
+             << ",\"thread\":\"visible-vulkan-scene\""
+             << ",\"process_name\":\"com.amaral.driverlab:runner\""
+             << ",\"details\":{\"stage\":\"" << jsonEscape(stage) << "\"";
+        if (frame >= 0) line << ",\"frame\":" << frame;
+        line << ",\"value\":" << value << "}}\n";
+        const std::string data = line.str();
+        const int descriptor = open(diagnosticLogPath.c_str(),
+                                    O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+        if (descriptor < 0) return;
+        size_t written = 0;
+        while (written < data.size()) {
+            const ssize_t count = write(descriptor, data.data() + written,
+                                        data.size() - written);
+            if (count <= 0) break;
+            written += static_cast<size_t>(count);
+        }
+        const int syncResult = fsync(descriptor);
+        const int closeResult = close(descriptor);
+        (void) syncResult;
+        (void) closeResult;
     }
 
     static std::string checkpointPath(const std::string &prefix, uint32_t frame) {
@@ -1281,11 +1452,16 @@ private:
 
     std::string sceneId;
     int sceneKind = -1;
+    uint32_t workloadVersion = 1U;
+    uint32_t requestedRepetitions = 1U;
+    uint32_t effectiveRepetitions = 1U;
+    uint32_t effectPercent = 0U;
     uint32_t renderWidth = kLegacyWidth;
     uint32_t renderHeight = kLegacyHeight;
     uint32_t instanceCount = kLegacyInstanceCount;
     uint32_t vertexCount = kLegacyVertexCount;
     std::string stage = "not_started";
+    std::string diagnosticLogPath;
     bool customDriver = false;
     void *library = nullptr;
     ANativeWindow *nativeWindow = nullptr;
@@ -1297,6 +1473,9 @@ private:
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties properties{};
+    VkPhysicalDeviceDriverProperties driverProperties{};
+    bool hasDriverProperties = false;
+    std::vector<VkExtensionProperties> deviceExtensions;
     VkPhysicalDeviceMemoryProperties memoryProperties{};
     VkQueueFamilyProperties queueFamilyProperties{};
     uint32_t queueFamilyIndex = 0;
@@ -1338,6 +1517,7 @@ private:
     PFN_vkDestroyInstance vkDestroyInstance = nullptr;
     PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
     PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = nullptr;
+    PFN_vkGetPhysicalDeviceProperties2 vkGetPhysicalDeviceProperties2 = nullptr;
     PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties = nullptr;
     PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties = nullptr;
     PFN_vkEnumerateDeviceExtensionProperties vkEnumerateDeviceExtensionProperties = nullptr;
@@ -1429,21 +1609,29 @@ Java_com_amaral_driverlab_VisualRunnerActivity_runNativeVisualScene(
         jclass,
         jobject surface,
         jstring sceneId,
+        jint workloadVersion,
+        jint repetitionsPerSample,
+        jint effectInjectionPercent,
         jstring driverDirectory,
         jstring driverName,
         jstring nativeLibraryDirectory,
         jstring temporaryDirectory,
         jint warmupSeconds,
         jint measureSeconds,
-        jstring rawPrefix) {
+        jstring rawPrefix,
+        jstring diagnosticLogPath) {
     VisualRenderer renderer;
     try {
         renderer.initialize(environment, surface,
                             UtfString(environment, sceneId).string(),
+                            static_cast<uint32_t>(workloadVersion),
+                            static_cast<uint32_t>(repetitionsPerSample),
+                            static_cast<uint32_t>(effectInjectionPercent),
                             UtfString(environment, driverDirectory).string(),
                             UtfString(environment, driverName).string(),
                             UtfString(environment, nativeLibraryDirectory).string(),
-                            UtfString(environment, temporaryDirectory).string());
+                            UtfString(environment, temporaryDirectory).string(),
+                            UtfString(environment, diagnosticLogPath).string());
         const std::string result = renderer.run(warmupSeconds, measureSeconds,
                                                 UtfString(environment, rawPrefix).string());
         return environment->NewStringUTF(result.c_str());

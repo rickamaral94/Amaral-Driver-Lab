@@ -4,10 +4,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 final class Phase11Contract {
-    static final int QUALIFICATION_SCHEMA_VERSION = 3;
+    static final int QUALIFICATION_SCHEMA_VERSION = 4;
     static final int PROFILE_VERSION = 3;
-    static final int REPORT_VERSION = 3;
-    static final int SCORE_VERSION = 3;
+    static final int REPORT_VERSION = 4;
+    static final int SCORE_VERSION = 4;
     static final int BUNDLE_VERSION = 3;
     static final int DEEP_DIAGNOSTIC_SCORE_BRIDGE_VERSION = 1;
     static final int MINIMUM_VALID_PERFORMANCE_CATEGORIES = 10;

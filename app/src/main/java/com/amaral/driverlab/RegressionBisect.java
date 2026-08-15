@@ -71,7 +71,9 @@ final class RegressionBisect {
     }
 
     private static State state(SuiteRecord record) {
-        if (record.blockingValidity || !Double.isFinite(record.rankingScorePercent)) {
+        if (!record.identityEligibleForAggregation
+                || !record.workloadVersionEligibleForAggregation || record.blockingValidity
+                || !Double.isFinite(record.rankingScorePercent)) {
             return State.UNKNOWN;
         }
         if ("candidate_worse".equals(record.classification)

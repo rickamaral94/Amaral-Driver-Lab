@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public final class RegressionBisectTest {
@@ -41,5 +42,24 @@ public final class RegressionBisectTest {
         JSONObject result = RegressionBisect.analyze(records);
         assertEquals("probe_required", result.getString("status"));
         assertEquals(1, result.getInt("next_probe_index"));
+    }
+
+    @Test
+    public void undeterminableWorkloadVersionCannotDefineRegressionBoundary() throws Exception {
+        SuiteRecord good = SuiteRecord.parse(null, Phase4TestData.report("good",
+                Phase4TestData.sha('a'), "mesa-1", 4.0,
+                "candidate_better", 1L));
+        JSONObject badReport = Phase4TestData.report("bad", Phase4TestData.sha('b'),
+                "mesa-2", -8.0, "candidate_worse", 2L);
+        badReport.remove("workload_version_audit");
+        badReport.getJSONArray("phases").getJSONObject(0)
+                .getJSONObject("native").remove("workload_version");
+        SuiteRecord undeterminable = SuiteRecord.parse(null, badReport);
+
+        JSONObject result = RegressionBisect.analyze(
+                java.util.Arrays.asList(good, undeterminable));
+
+        assertFalse(result.getBoolean("available"));
+        assertEquals("no_known_bad_after_good", result.getString("reason"));
     }
 }

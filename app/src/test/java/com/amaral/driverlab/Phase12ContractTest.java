@@ -13,7 +13,7 @@ public final class Phase12ContractTest {
     public void contractPreservesTechnicalJsonAndHistoricalProfiles() throws Exception {
         JSONObject contract = Phase12Contract.contractJson();
         assertEquals(1, contract.getInt("localization_schema_version"));
-        assertEquals(13, contract.getInt("result_schema_version"));
+        assertEquals(14, contract.getInt("result_schema_version"));
         assertEquals("en", contract.getString("default_fallback_language"));
         assertTrue(contract.getBoolean("system_language_option"));
         assertTrue(contract.getBoolean("html_report_localized"));

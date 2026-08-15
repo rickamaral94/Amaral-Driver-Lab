@@ -22,11 +22,13 @@ public final class WorkloadContractTest {
     }
 
     @Test
-    public void phaseTwoSeriesRemainVersionOneWhileSchemaAdvancesAdditively() {
-        assertEquals(13, WorkloadContract.RESULT_SCHEMA_VERSION);
+    public void phaseTwoSeriesAdvanceToVersionTwoWhileV1RemainsSupported() {
+        assertEquals(15, WorkloadContract.RESULT_SCHEMA_VERSION);
         assertEquals(5, WorkloadContract.PHASE2_IDS.size());
         for (String workloadId : WorkloadContract.PHASE2_IDS) {
-            assertEquals(1, WorkloadContract.versionFor(workloadId));
+            assertEquals(2, WorkloadContract.versionFor(workloadId));
+            assertTrue(WorkloadContract.isSupportedVersion(workloadId, 1));
+            assertTrue(WorkloadContract.isSupportedVersion(workloadId, 2));
             assertTrue(WorkloadContract.isSupported(workloadId));
             assertTrue(WorkloadContract.isPhase2(workloadId));
             assertFalse(WorkloadContract.limitationFor(workloadId).isEmpty());
@@ -58,11 +60,11 @@ public final class WorkloadContractTest {
     public void phaseFourVersionsCatalogWithoutChangingWorkloads() {
         assertEquals(1, Phase4Contract.CATALOG_VERSION);
         assertEquals(1, Phase4Contract.SUITE_DIFF_VERSION);
-        assertEquals(1, Phase4Contract.RANKING_VERSION);
+        assertEquals(3, Phase4Contract.RANKING_VERSION);
         assertEquals(1, Phase4Contract.BISECT_VERSION);
-        assertEquals(1, Phase4Contract.PUBLIC_DATASET_SCHEMA_VERSION);
-        assertEquals(1, WorkloadContract.COMPUTE_ARITHMETIC_VERSION);
-        assertEquals(1, WorkloadContract.STABLE_SCENE_VERSION);
+        assertEquals(3, Phase4Contract.PUBLIC_DATASET_SCHEMA_VERSION);
+        assertEquals(2, WorkloadContract.COMPUTE_ARITHMETIC_VERSION);
+        assertEquals(2, WorkloadContract.STABLE_SCENE_VERSION);
     }
     @Test
     public void phaseSixCampaignVersionsDoNotRedefineWorkloads() {
@@ -70,8 +72,9 @@ public final class WorkloadContractTest {
         assertEquals(1, Phase6Contract.SCHEDULER_VERSION);
         assertEquals(1, Phase6Contract.SUMMARY_VERSION);
         assertEquals("rotating_serpentine_v1", Phase6Contract.ORDER_POLICY);
-        assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
-        assertEquals(1, WorkloadContract.COMPUTE_ARITHMETIC_VERSION);
+        assertTrue(WorkloadContract.isSupportedVersion(WorkloadContract.TRACE_REPLAY_ID, 1));
+        assertTrue(WorkloadContract.isSupportedVersion(
+                WorkloadContract.COMPUTE_ARITHMETIC_ID, 1));
     }
 
     @Test
@@ -82,7 +85,7 @@ public final class WorkloadContractTest {
         assertEquals(1, Phase7Contract.SCORE_VERSION);
         assertEquals(1, Phase7Contract.BUNDLE_VERSION);
         assertEquals(1, WorkloadContract.RENDER_CORRECTNESS_VERSION);
-        assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
+        assertTrue(WorkloadContract.isSupportedVersion(WorkloadContract.TRACE_REPLAY_ID, 1));
         assertEquals(1, WorkloadContract.STATISTICAL_ANALYSIS_VERSION);
     }
 
@@ -93,26 +96,29 @@ public final class WorkloadContractTest {
         assertEquals(2, Phase8Contract.CURRENT_FULL_PROFILE_VERSION);
         assertEquals(4, VisualSceneContract.IDS.size());
         for (String workloadId : VisualSceneContract.IDS) {
-            assertEquals(1, WorkloadContract.versionFor(workloadId));
+            assertEquals(2, WorkloadContract.versionFor(workloadId));
+            assertTrue(WorkloadContract.isSupportedVersion(workloadId, 1));
             assertEquals("p99_gpu_frame_ms", WorkloadContract.primaryMetricFor(workloadId));
             assertTrue(WorkloadContract.lowerIsBetter(workloadId));
         }
         assertEquals("visual_scene_gpu_stress_v1",
-                WorkloadContract.nativeNameFor(VisualSceneContract.GPU_STRESS_ID));
+                WorkloadContract.nativeNameFor(VisualSceneContract.GPU_STRESS_ID, 1));
         assertEquals(1, WorkloadContract.RENDER_CORRECTNESS_VERSION);
-        assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
+        assertEquals(2, WorkloadContract.TRACE_REPLAY_VERSION);
     }
 
     @Test
     public void phaseElevenAddsFullV3WithoutRedefiningEarlierSeries() {
         assertEquals(3, Phase11Contract.PROFILE_VERSION);
-        assertEquals(3, Phase11Contract.QUALIFICATION_SCHEMA_VERSION);
+        assertEquals(4, Phase11Contract.QUALIFICATION_SCHEMA_VERSION);
+        assertEquals(4, Phase11Contract.REPORT_VERSION);
+        assertEquals(4, Phase11Contract.SCORE_VERSION);
         assertEquals(5, Phase11Contract.FULL_SOAK_CYCLES);
         assertEquals(128, Phase11Contract.RECOMMENDED_MEMORY_MIB);
         assertEquals(2, Phase8Contract.CURRENT_FULL_PROFILE_VERSION);
         assertEquals(1, Phase10Contract.PROFILE_VERSION);
         assertEquals(1, WorkloadContract.RENDER_CORRECTNESS_VERSION);
-        assertEquals(1, WorkloadContract.TRACE_REPLAY_VERSION);
+        assertTrue(WorkloadContract.isSupportedVersion(WorkloadContract.TRACE_REPLAY_ID, 1));
     }
 
 }

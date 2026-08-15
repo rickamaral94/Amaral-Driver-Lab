@@ -1,0 +1,18 @@
+{
+  "workload_version_audit_policy_version": 1,
+  "source": "Completed Full Qualification reports published in Amaral-Driver-Lab GitHub Issues",
+  "results": [
+    {"issue": 16, "qualification_id": "qualification-1785925938453", "app_version": "0.13.0-alpha7", "declared_profile_version": 4, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null},
+    {"issue": 17, "qualification_id": "qualification-1785926706147", "app_version": "0.13.0-alpha7", "declared_profile_version": 4, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null},
+    {"issue": 18, "qualification_id": "qualification-1785927615001", "app_version": "0.13.0-alpha7", "declared_profile_version": 4, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null},
+    {"issue": 19, "qualification_id": "qualification-1785938825112", "app_version": "0.13.0-alpha7", "declared_profile_version": 4, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null},
+    {"issue": 20, "qualification_id": "qualification-1785939545017", "app_version": "0.13.0-alpha7", "declared_profile_version": 4, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null},
+    {"issue": 21, "qualification_id": "qualification-1785939989641", "app_version": "0.13.0-alpha7", "declared_profile_version": 4, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null},
+    {"issue": 22, "qualification_id": "qualification-1785940481459", "app_version": "0.13.0-alpha7", "declared_profile_version": 4, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null},
+    {"issue": 30, "qualification_id": "qualification-1786215503223", "app_version": "0.13.0-alpha10", "declared_profile_version": 4, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null},
+    {"issue": 37, "qualification_id": "qualification-1786370514371", "app_version": "0.13.0-alpha12", "declared_profile_version": 5, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null},
+    {"issue": 38, "qualification_id": "qualification-1786407085541", "app_version": "0.13.0-alpha12", "declared_profile_version": 5, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null},
+    {"issue": 41, "qualification_id": "qualification-1786408543260", "app_version": "0.13.0-alpha12", "declared_profile_version": 5, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null},
+    {"issue": 42, "qualification_id": "qualification-1786427681704", "app_version": "0.13.0-alpha12", "declared_profile_version": 5, "declared_workload_version": 1, "probably_executed_workload_version": 1, "runtime_workload_version_observed": null}
+  ]
+}
