@@ -75,12 +75,29 @@ final class QualificationCoordinator {
 
     boolean isActive() { return active; }
 
+    void stop() {
+        if (!active && currentRun == null && currentDeepDiagnostics == null) return;
+        active = false;
+        handler.removeCallbacksAndMessages(null);
+        if (currentRun != null) currentRun.cancel();
+        if (currentDeepDiagnostics != null) currentDeepDiagnostics.cancel();
+        currentRun = null;
+        currentDeepDiagnostics = null;
+        AppDiagnostics.event("qualification_coordinator_stopped",
+                AppDiagnostics.details("host_finishing", activity.isFinishing(),
+                        "host_destroyed", activity.isDestroyed()));
+    }
+
+    private boolean canContinue() {
+        return active && !activity.isFinishing() && !activity.isDestroyed();
+    }
+
     private boolean hasCurrentWork() {
         return currentRun != null || currentDeepDiagnostics != null;
     }
 
     private void launchNext() {
-        if (!active) return;
+        if (!canContinue()) return;
         String launchingStep = null;
         try {
             if (QualificationStore.pauseRequested(manifest)) {
@@ -153,7 +170,11 @@ final class QualificationCoordinator {
                     }
                     @Override public void onComplete(File reportFile, JSONObject report) {
                         currentRun = null;
-                        completeSuiteStep(step, reportFile, report);
+                        if (report.optBoolean("qualification_abort_recommended", false)) {
+                            abortAfterRunnerFailure(step, reportFile, report);
+                        } else {
+                            completeSuiteStep(step, reportFile, report);
+                        }
                     }
                     @Override public void onFailure(String message, Throwable error) {
                         currentRun = null;
@@ -225,6 +246,31 @@ final class QualificationCoordinator {
         } catch (Throwable error) {
             active = false;
             listener.onFailure("Falha ao registrar erro da etapa", error);
+        }
+    }
+
+    private void abortAfterRunnerFailure(QualificationProfile.Step step, File reportFile,
+                                         JSONObject report) {
+        try {
+            String reason = report.optString(
+                    "qualification_abort_reason", "calibration_runner_failure");
+            String message = "Falha no runner durante a calibração (" + reason + ")";
+            QualificationStore.markStepFailedArtifact(activity.getFilesDir(), manifest,
+                    step.stepId, reportFile, report, message);
+            manifest.getJSONObject("execution")
+                    .put("state", "paused_after_runner_failure")
+                    .put("pause_requested", false)
+                    .put("abort_reason", reason)
+                    .put("aborted_at_ms", System.currentTimeMillis());
+            QualificationStore.save(qualificationFile, manifest);
+            active = false;
+            handler.removeCallbacksAndMessages(null);
+            listener.onUpdated(qualificationFile, manifest);
+            listener.onFailure("Teste interrompido com segurança após o crash do runner; "
+                    + "o relatório e os logs foram preservados", null);
+        } catch (Throwable error) {
+            active = false;
+            listener.onFailure("Falha ao registrar a interrupção segura", error);
         }
     }
 

@@ -210,8 +210,10 @@ public:
                     const std::string &driverName,
                     const std::string &nativeLibraryDirectory,
                     const std::string &temporaryDirectory,
-                    const std::string &diagnosticLogPathValue) {
+                    const std::string &diagnosticLogPathValue,
+                    const std::string &nativeStagePathValue) {
         diagnosticLogPath = diagnosticLogPathValue;
+        nativeStagePath = nativeStagePathValue;
         sceneId = sceneIdValue;
         if (workloadVersionValue != 1U && workloadVersionValue != 2U) {
             throw std::runtime_error("Unsupported visual workload version");
@@ -269,6 +271,14 @@ public:
         createInstance = requireSymbol<PFN_vkCreateInstance>(library, "vkCreateInstance");
         enumerateInstanceExtensionProperties = requireSymbol<PFN_vkEnumerateInstanceExtensionProperties>(
                 library, "vkEnumerateInstanceExtensionProperties");
+        auto enumerateInstanceVersion = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(
+                dlsym(library, "vkEnumerateInstanceVersion"));
+
+        uint32_t loaderApiVersion = VK_API_VERSION_1_0;
+        if (enumerateInstanceVersion != nullptr
+                && enumerateInstanceVersion(&loaderApiVersion) != VK_SUCCESS) {
+            loaderApiVersion = VK_API_VERSION_1_0;
+        }
 
         uint32_t extensionCount = 0;
         check(enumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr),
@@ -280,10 +290,21 @@ public:
                 || !hasExtension(extensions, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)) {
             throw std::runtime_error("Driver does not expose Android Vulkan surface extensions");
         }
-        const std::array<const char *, 2> instanceExtensions{{
+        std::vector<const char *> instanceExtensions{
                 VK_KHR_SURFACE_EXTENSION_NAME,
                 VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
-        }};
+        };
+        const bool properties2Extension = hasExtension(
+                extensions, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        const uint32_t instanceApiVersion = loaderApiVersion >= VK_API_VERSION_1_1
+                ? VK_API_VERSION_1_1 : VK_API_VERSION_1_0;
+        properties2Core = instanceApiVersion >= VK_API_VERSION_1_1;
+        properties2Enabled = properties2Core;
+        if (!properties2Enabled && properties2Extension) {
+            instanceExtensions.push_back(
+                    VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+            properties2Enabled = true;
+        }
 
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -291,7 +312,7 @@ public:
         appInfo.applicationVersion = VK_MAKE_VERSION(0, 8, 0);
         appInfo.pEngineName = "Visible deterministic Vulkan scenes";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_0;
+        appInfo.apiVersion = instanceApiVersion;
 
         VkInstanceCreateInfo instanceInfo{};
         instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -302,38 +323,35 @@ public:
         check(createInstance(&instanceInfo, nullptr, &instance), "vkCreateInstance");
         loadInstanceFunctions();
 
-        nativeWindow = ANativeWindow_fromSurface(environment, surfaceObject);
-        if (nativeWindow == nullptr) throw std::runtime_error("Unable to acquire ANativeWindow");
-        VkAndroidSurfaceCreateInfoKHR surfaceInfo{};
-        surfaceInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
-        surfaceInfo.window = nativeWindow;
-        setStage("create_android_surface");
-        check(vkCreateAndroidSurfaceKHR(instance, &surfaceInfo, nullptr, &surface),
-              "vkCreateAndroidSurfaceKHR");
-
+        setStage("enumerate_physical_devices_count");
         uint32_t physicalCount = 0;
         check(vkEnumeratePhysicalDevices(instance, &physicalCount, nullptr),
               "vkEnumeratePhysicalDevices(count)");
         if (physicalCount == 0) throw std::runtime_error("Driver exposed no physical device");
         std::vector<VkPhysicalDevice> devices(physicalCount);
+        setStage("enumerate_physical_devices_list");
         check(vkEnumeratePhysicalDevices(instance, &physicalCount, devices.data()),
               "vkEnumeratePhysicalDevices(list)");
         physicalDevice = devices.front();
+        setStage("query_physical_device");
         vkGetPhysicalDeviceProperties(physicalDevice, &properties);
         vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
 
         uint32_t deviceExtensionCount = 0;
+        setStage("enumerate_device_extensions_count");
         check(vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr,
                                                    &deviceExtensionCount, nullptr),
               "vkEnumerateDeviceExtensionProperties(count)");
         deviceExtensions.resize(deviceExtensionCount);
+        setStage("enumerate_device_extensions_list");
         check(vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr,
                                                    &deviceExtensionCount, deviceExtensions.data()),
               "vkEnumerateDeviceExtensionProperties(list)");
         if (!hasExtension(deviceExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
             throw std::runtime_error("Driver does not expose VK_KHR_swapchain");
         }
-        if (vkGetPhysicalDeviceProperties2 != nullptr
+        if (properties2Enabled
+                && vkGetPhysicalDeviceProperties2 != nullptr
                 && (properties.apiVersion >= VK_API_VERSION_1_2
                     || hasExtension(deviceExtensions,
                                     VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME))) {
@@ -341,10 +359,23 @@ public:
             VkPhysicalDeviceProperties2 properties2{};
             properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
             properties2.pNext = &driverProperties;
+            setStage("query_driver_properties2_call");
             vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
+            setStage("query_driver_properties2_returned");
             properties = properties2.properties;
             hasDriverProperties = true;
         }
+
+        setStage("acquire_android_window");
+        nativeWindow = ANativeWindow_fromSurface(environment, surfaceObject);
+        if (nativeWindow == nullptr) throw std::runtime_error("Unable to acquire ANativeWindow");
+        VkAndroidSurfaceCreateInfoKHR surfaceInfo{};
+        surfaceInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+        surfaceInfo.window = nativeWindow;
+        setStage("create_android_surface_call");
+        check(vkCreateAndroidSurfaceKHR(instance, &surfaceInfo, nullptr, &surface),
+              "vkCreateAndroidSurfaceKHR");
+        setStage("create_android_surface_returned");
 
         uint32_t familyCount = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &familyCount, nullptr);
@@ -545,9 +576,10 @@ private:
                 getInstanceProcAddr, instance, "vkEnumeratePhysicalDevices");
         vkGetPhysicalDeviceProperties = requireInstance<PFN_vkGetPhysicalDeviceProperties>(
                 getInstanceProcAddr, instance, "vkGetPhysicalDeviceProperties");
-        vkGetPhysicalDeviceProperties2 = optionalInstance<PFN_vkGetPhysicalDeviceProperties2>(
-                getInstanceProcAddr, instance, "vkGetPhysicalDeviceProperties2");
-        if (vkGetPhysicalDeviceProperties2 == nullptr) {
+        if (properties2Core) {
+            vkGetPhysicalDeviceProperties2 = optionalInstance<PFN_vkGetPhysicalDeviceProperties2>(
+                    getInstanceProcAddr, instance, "vkGetPhysicalDeviceProperties2");
+        } else if (properties2Enabled) {
             vkGetPhysicalDeviceProperties2 =
                     reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
                             optionalInstance<PFN_vkGetPhysicalDeviceProperties2KHR>(
@@ -1361,7 +1393,27 @@ private:
     void setStage(const std::string &value) {
         if (stage == value) return;
         stage = value;
+        persistNativeStage();
         appendDiagnostic("native_visual_stage", -1, 0);
+    }
+
+    void persistNativeStage() const {
+        if (nativeStagePath.empty()) return;
+        const std::string data = stage + "\n";
+        const int descriptor = open(nativeStagePath.c_str(),
+                                    O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+        if (descriptor < 0) return;
+        size_t written = 0;
+        while (written < data.size()) {
+            const ssize_t count = write(descriptor, data.data() + written,
+                                        data.size() - written);
+            if (count <= 0) break;
+            written += static_cast<size_t>(count);
+        }
+        const int syncResult = fsync(descriptor);
+        const int closeResult = close(descriptor);
+        (void) syncResult;
+        (void) closeResult;
     }
 
     void appendDiagnostic(const char *event, int64_t frame, int64_t value) const {
@@ -1462,6 +1514,7 @@ private:
     uint32_t vertexCount = kLegacyVertexCount;
     std::string stage = "not_started";
     std::string diagnosticLogPath;
+    std::string nativeStagePath;
     bool customDriver = false;
     void *library = nullptr;
     ANativeWindow *nativeWindow = nullptr;
@@ -1475,6 +1528,8 @@ private:
     VkPhysicalDeviceProperties properties{};
     VkPhysicalDeviceDriverProperties driverProperties{};
     bool hasDriverProperties = false;
+    bool properties2Core = false;
+    bool properties2Enabled = false;
     std::vector<VkExtensionProperties> deviceExtensions;
     VkPhysicalDeviceMemoryProperties memoryProperties{};
     VkQueueFamilyProperties queueFamilyProperties{};
@@ -1619,7 +1674,8 @@ Java_com_amaral_driverlab_VisualRunnerActivity_runNativeVisualScene(
         jint warmupSeconds,
         jint measureSeconds,
         jstring rawPrefix,
-        jstring diagnosticLogPath) {
+        jstring diagnosticLogPath,
+        jstring nativeStagePath) {
     VisualRenderer renderer;
     try {
         renderer.initialize(environment, surface,
@@ -1631,7 +1687,8 @@ Java_com_amaral_driverlab_VisualRunnerActivity_runNativeVisualScene(
                             UtfString(environment, driverName).string(),
                             UtfString(environment, nativeLibraryDirectory).string(),
                             UtfString(environment, temporaryDirectory).string(),
-                            UtfString(environment, diagnosticLogPath).string());
+                            UtfString(environment, diagnosticLogPath).string(),
+                            UtfString(environment, nativeStagePath).string());
         const std::string result = renderer.run(warmupSeconds, measureSeconds,
                                                 UtfString(environment, rawPrefix).string());
         return environment->NewStringUTF(result.c_str());

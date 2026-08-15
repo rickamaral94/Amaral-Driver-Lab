@@ -54,6 +54,12 @@ public final class QualificationActivity extends LocalizedActivity
     private boolean busy;
 
     @Override
+    protected void onDestroy() {
+        if (coordinator != null) coordinator.stop();
+        super.onDestroy();
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         AppTheme.apply(this);
@@ -419,7 +425,7 @@ public final class QualificationActivity extends LocalizedActivity
     @Override
     public void onFailure(String message, Throwable error) {
         setBusy(false);
-        status.setText(message + ": " + (error == null ? "falha desconhecida" : error.getMessage()));
+        status.setText(error == null ? message : message + ": " + error.getMessage());
         updateButtons();
         if (getIntent().getBooleanExtra(EXTRA_OPEN_LOG_ON_COMPLETE, false)
                 && currentQualificationFile != null && currentQualificationFile.isFile()) {

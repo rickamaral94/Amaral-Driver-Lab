@@ -17,6 +17,10 @@ final class RunnerProcessState {
         return new File(resultFile.getAbsolutePath() + ".state");
     }
 
+    static File nativeStageFileFor(File resultFile) {
+        return new File(resultFile.getAbsolutePath() + ".native-stage");
+    }
+
     static void start(File resultFile, int pid, long startedAtMs) throws Exception {
         JSONObject state = new JSONObject()
                 .put("runner_state_schema_version", SCHEMA_VERSION)
@@ -109,8 +113,12 @@ final class RunnerProcessState {
         JSONObject state = read(resultFile);
         String lastStage = state == null
                 ? fallbackStage : state.optString("last_stage", fallbackStage);
-        failure.put("failure_stage", lastStage)
+        String nativeStage = readNativeStage(resultFile);
+        String failureStage = nativeStage == null ? lastStage : nativeStage;
+        failure.put("failure_stage", failureStage)
                 .put("runner_last_stage", lastStage)
+                .put("runner_last_native_stage",
+                        nativeStage == null ? JSONObject.NULL : nativeStage)
                 .put("runner_state", state == null ? JSONObject.NULL : state)
                 .put("process_exit_observation", new JSONObject()
                         .put("classification", "isolated_runner_exit")
@@ -122,6 +130,17 @@ final class RunnerProcessState {
                 .put("last_stage", lastStage)
                 .put("failure_type", failure.optString("failure_type"))
                 .put("error", failure.optString("error")));
+    }
+
+    private static String readNativeStage(File resultFile) {
+        try {
+            File stageFile = nativeStageFileFor(resultFile);
+            if (!stageFile.isFile()) return null;
+            String value = ResultFiles.readUtf8(stageFile).trim();
+            return value.isEmpty() || value.length() > 96 ? null : value;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static JSONObject breadcrumb(String stage, long atMs) throws Exception {

@@ -58,7 +58,8 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             int warmupSeconds,
             int measureSeconds,
             String rawPrefix,
-            String diagnosticLogPath);
+            String diagnosticLogPath,
+            String nativeStagePath);
 
     private final AtomicBoolean started = new AtomicBoolean(false);
     private File resultFile;
@@ -326,7 +327,8 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                     measure,
                     rawPrefix,
                     new File(AppDiagnostics.logsDirectory(this),
-                            "app-runner.log").getAbsolutePath());
+                            "app-runner.log").getAbsolutePath(),
+                    RunnerProcessState.nativeStageFileFor(resultFile).getAbsolutePath());
             RunnerProcessState.checkpoint(resultFile, "native_vulkan_returned", null);
             JSONObject nativeResult = new JSONObject(nativeJson);
             DriverExecutionIdentity.normalizeRuntimeCapabilities(nativeResult);

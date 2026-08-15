@@ -15,6 +15,12 @@ A partir da `v0.13.0-alpha17`, o cabeçalho da página inicial inclui o atalho *
 ao lado do seletor de idioma. O atalho abre a mesma exportação ZIP sem exigir que o usuário role
 até a seção detalhada de diagnóstico.
 
+A `v0.13.0-alpha18` coloca as Activities nativas em uma tarefa Android descartável, separada da
+interface principal. Um crash do driver pode encerrar a cena, mas não deve remover o Driver Lab da
+tela. A qualificação é pausada no primeiro crash de calibração, sem iniciar outra cena. Cada cena
+também mantém um arquivo `*.native-stage` sincronizado em disco; ele identifica a última chamada
+Vulkan iniciada mesmo quando o processo termina antes de produzir o JSON de resultado.
+
 ## Arquivos
 
 | Arquivo | Conteúdo |
