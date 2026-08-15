@@ -271,6 +271,14 @@ public:
         createInstance = requireSymbol<PFN_vkCreateInstance>(library, "vkCreateInstance");
         enumerateInstanceExtensionProperties = requireSymbol<PFN_vkEnumerateInstanceExtensionProperties>(
                 library, "vkEnumerateInstanceExtensionProperties");
+        auto enumerateInstanceVersion = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(
+                dlsym(library, "vkEnumerateInstanceVersion"));
+
+        uint32_t loaderApiVersion = VK_API_VERSION_1_0;
+        if (enumerateInstanceVersion != nullptr
+                && enumerateInstanceVersion(&loaderApiVersion) != VK_SUCCESS) {
+            loaderApiVersion = VK_API_VERSION_1_0;
+        }
 
         uint32_t extensionCount = 0;
         check(enumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr),
@@ -282,10 +290,21 @@ public:
                 || !hasExtension(extensions, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)) {
             throw std::runtime_error("Driver does not expose Android Vulkan surface extensions");
         }
-        const std::array<const char *, 2> instanceExtensions{{
+        std::vector<const char *> instanceExtensions{
                 VK_KHR_SURFACE_EXTENSION_NAME,
                 VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
-        }};
+        };
+        const bool properties2Extension = hasExtension(
+                extensions, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        const uint32_t instanceApiVersion = loaderApiVersion >= VK_API_VERSION_1_1
+                ? VK_API_VERSION_1_1 : VK_API_VERSION_1_0;
+        properties2Core = instanceApiVersion >= VK_API_VERSION_1_1;
+        properties2Enabled = properties2Core;
+        if (!properties2Enabled && properties2Extension) {
+            instanceExtensions.push_back(
+                    VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+            properties2Enabled = true;
+        }
 
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -293,7 +312,7 @@ public:
         appInfo.applicationVersion = VK_MAKE_VERSION(0, 8, 0);
         appInfo.pEngineName = "Visible deterministic Vulkan scenes";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_0;
+        appInfo.apiVersion = instanceApiVersion;
 
         VkInstanceCreateInfo instanceInfo{};
         instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -331,7 +350,8 @@ public:
         if (!hasExtension(deviceExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
             throw std::runtime_error("Driver does not expose VK_KHR_swapchain");
         }
-        if (vkGetPhysicalDeviceProperties2 != nullptr
+        if (properties2Enabled
+                && vkGetPhysicalDeviceProperties2 != nullptr
                 && (properties.apiVersion >= VK_API_VERSION_1_2
                     || hasExtension(deviceExtensions,
                                     VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME))) {
@@ -339,7 +359,9 @@ public:
             VkPhysicalDeviceProperties2 properties2{};
             properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
             properties2.pNext = &driverProperties;
+            setStage("query_driver_properties2_call");
             vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
+            setStage("query_driver_properties2_returned");
             properties = properties2.properties;
             hasDriverProperties = true;
         }
@@ -554,9 +576,10 @@ private:
                 getInstanceProcAddr, instance, "vkEnumeratePhysicalDevices");
         vkGetPhysicalDeviceProperties = requireInstance<PFN_vkGetPhysicalDeviceProperties>(
                 getInstanceProcAddr, instance, "vkGetPhysicalDeviceProperties");
-        vkGetPhysicalDeviceProperties2 = optionalInstance<PFN_vkGetPhysicalDeviceProperties2>(
-                getInstanceProcAddr, instance, "vkGetPhysicalDeviceProperties2");
-        if (vkGetPhysicalDeviceProperties2 == nullptr) {
+        if (properties2Core) {
+            vkGetPhysicalDeviceProperties2 = optionalInstance<PFN_vkGetPhysicalDeviceProperties2>(
+                    getInstanceProcAddr, instance, "vkGetPhysicalDeviceProperties2");
+        } else if (properties2Enabled) {
             vkGetPhysicalDeviceProperties2 =
                     reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
                             optionalInstance<PFN_vkGetPhysicalDeviceProperties2KHR>(
@@ -1505,6 +1528,8 @@ private:
     VkPhysicalDeviceProperties properties{};
     VkPhysicalDeviceDriverProperties driverProperties{};
     bool hasDriverProperties = false;
+    bool properties2Core = false;
+    bool properties2Enabled = false;
     std::vector<VkExtensionProperties> deviceExtensions;
     VkPhysicalDeviceMemoryProperties memoryProperties{};
     VkQueueFamilyProperties queueFamilyProperties{};
