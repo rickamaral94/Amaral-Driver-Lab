@@ -4,6 +4,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
 import static org.junit.Assert.assertEquals;
@@ -37,6 +38,26 @@ public final class RunnerProcessStateTest {
         JSONObject process = failure.getJSONObject("process_exit_observation");
         assertTrue(process.isNull("native_signal"));
         assertTrue(process.getString("native_signal_limitation").contains("tombstone"));
+    }
+
+    @Test
+    public void nativeCrashPromotesLastDurableNativeStage() throws Exception {
+        File directory = Files.createTempDirectory("runner-native-stage").toFile();
+        File result = new File(directory, "visual.json");
+        RunnerProcessState.start(result, 777, 3000L);
+        RunnerProcessState.checkpoint(result, "native_vulkan_call", null);
+        Files.write(RunnerProcessState.nativeStageFileFor(result).toPath(),
+                "create_android_surface_call\n".getBytes(StandardCharsets.UTF_8));
+
+        JSONObject failure = new JSONObject()
+                .put("success", false)
+                .put("failure_type", "crash");
+        RunnerProcessState.attachToSyntheticFailure(failure, result, "runner_process");
+
+        assertEquals("create_android_surface_call", failure.getString("failure_stage"));
+        assertEquals("native_vulkan_call", failure.getString("runner_last_stage"));
+        assertEquals("create_android_surface_call",
+                failure.getString("runner_last_native_stage"));
     }
 
     @Test

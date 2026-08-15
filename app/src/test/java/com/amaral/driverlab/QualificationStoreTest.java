@@ -36,6 +36,33 @@ public final class QualificationStoreTest {
         assertEquals(1, reloaded.getJSONObject("execution").getInt("recovery_count"));
     }
 
+    @Test
+    public void failedRunnerStepKeepsItsSuiteArtifact() throws Exception {
+        File filesDir = temporary.newFolder("failed-files");
+        File driverDir = temporary.newFolder("failed-driver");
+        File zip = temporary.newFile("failed-driver.zip");
+        DriverPackage driver = new DriverPackage(Phase4TestData.sha('b'), "Driver B", "1",
+                "Amaral", "1", 28, "libvulkan_freedreno.so", driverDir, zip,
+                new JSONObject());
+        File file = QualificationStore.create(filesDir, driver, preflight());
+        JSONObject manifest = QualificationStore.load(file);
+        QualificationStore.markRunning(manifest);
+        QualificationStore.markStepRunning(manifest, "correctness_pre");
+        File suiteDirectory = new File(new File(filesDir, "runs"), "suite-123");
+        assertTrue(suiteDirectory.mkdirs());
+        File suite = new File(suiteDirectory, "suite.json");
+        ResultFiles.writeAtomic(suite, "{}");
+
+        QualificationStore.markStepFailedArtifact(filesDir, manifest, "correctness_pre",
+                suite, new JSONObject().put("suite_id", "suite-123"), "runner crash");
+
+        JSONObject state = QualificationStore.stateFor(manifest, "correctness_pre");
+        assertEquals("failed", state.getString("status"));
+        assertEquals("runs/suite-123/suite.json", state.getString("suite_relative_path"));
+        assertEquals("suite-123", state.getString("suite_id"));
+        assertEquals("runner crash", state.getJSONObject("failure").getString("message"));
+    }
+
     private static JSONObject preflight() throws Exception {
         return new JSONObject()
                 .put("device", new JSONObject())

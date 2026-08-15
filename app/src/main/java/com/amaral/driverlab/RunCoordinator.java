@@ -99,6 +99,7 @@ final class RunCoordinator {
     private JSONObject sampleSizePlan;
     private JSONObject calibrationFailure;
     private boolean operationalBudgetExhausted;
+    private boolean cancelled;
 
     RunCoordinator(Activity activity, DriverPackage candidate, int mode, int rounds,
                    int warmupSeconds, int measureSeconds, String workloadId, String traceId,
@@ -176,6 +177,7 @@ final class RunCoordinator {
     }
 
     void start() {
+        if (cancelled) return;
         try {
             if ((mode == MODE_CUSTOM || mode == MODE_AB)
                     && (candidate == null || !candidate.isUsable())) {
@@ -205,6 +207,22 @@ final class RunCoordinator {
         } catch (Throwable error) {
             listener.onFailure("Não foi possível iniciar a suíte", error);
         }
+    }
+
+    void cancel() {
+        if (cancelled) return;
+        cancelled = true;
+        calibrationProbeActive = false;
+        handler.removeCallbacksAndMessages(null);
+        killTimedOutRunner();
+        AppDiagnostics.event("run_coordinator_cancelled", AppDiagnostics.details(
+                "workload_id", workloadId,
+                "result_file", currentResultFile == null
+                        ? JSONObject.NULL : currentResultFile.getName()));
+    }
+
+    private boolean canContinue() {
+        return !cancelled && !activity.isFinishing() && !activity.isDestroyed();
     }
 
     private void startCalibration() throws Exception {
@@ -248,6 +266,7 @@ final class RunCoordinator {
     }
 
     private void launchCalibrationProbe(int repetitions, int effectPercent, String stage) {
+        if (!canContinue()) return;
         try {
             Phase phase = new Phase(false, 0, reference);
             currentResultFile = new File(suiteDirectory,
@@ -284,7 +303,7 @@ final class RunCoordinator {
                         phase.driver.metadata.toString());
                 intent.putExtra(RunnerActivity.EXTRA_DRIVER_SHA, phase.driver.sha256);
             }
-            intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            RunnerTaskIsolation.prepare(intent);
             calibrationProbeActive = true;
             calibrationEffectPercent = effectPercent;
             phaseLaunchedElapsed = SystemClock.elapsedRealtime();
@@ -423,6 +442,7 @@ final class RunCoordinator {
     }
 
     private void startSampleSizePilot() {
+        if (!canContinue()) return;
         sampleSizePilotActive = true;
         finalPlanBuilt = false;
         rounds = BenchmarkCalibrationContract.PILOT_PAIRED_ROUNDS;
@@ -486,6 +506,7 @@ final class RunCoordinator {
     }
 
     private void launchNext() {
+        if (!canContinue()) return;
         if (phaseIndex >= phases.size()) {
             if (sampleSizePilotActive) {
                 finishSampleSizePilot();
@@ -546,7 +567,7 @@ final class RunCoordinator {
             intent.putExtra(RunnerActivity.EXTRA_DRIVER_META, phase.driver.metadata.toString());
             intent.putExtra(RunnerActivity.EXTRA_DRIVER_SHA, phase.driver.sha256);
         }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        RunnerTaskIsolation.prepare(intent);
         phaseLaunchedElapsed = SystemClock.elapsedRealtime();
         long timeoutSeconds = WorkloadContract.timeoutSeconds(
                 workloadId, warmupSeconds, measureSeconds);
@@ -556,6 +577,7 @@ final class RunCoordinator {
     }
 
     private void pollCurrent() {
+        if (!canContinue()) return;
         try {
             if (currentResultFile.isFile()) {
                 JSONObject completed = new JSONObject(ResultFiles.readUtf8(currentResultFile));
@@ -677,6 +699,7 @@ final class RunCoordinator {
     }
 
     private void killTimedOutRunner() {
+        if (currentResultFile == null) return;
         try {
             JSONObject state = RunnerProcessState.read(currentResultFile);
             if (state == null) return;
@@ -688,6 +711,7 @@ final class RunCoordinator {
     }
 
     private void finishSuite() {
+        if (!canContinue()) return;
         try {
             JSONObject candidateJson = candidate == null ? null : candidate.toJson();
             JSONObject referenceJson = reference == null ? null : reference.toJson();
@@ -743,6 +767,10 @@ final class RunCoordinator {
                     driverIdentityAudit.getJSONObject("identity_observation_coverage"));
             report.put("loader_isolation_verified",
                     driverIdentityAudit.get("loader_isolation_verified"));
+            report.put("qualification_abort_recommended", calibrationFailure != null);
+            report.put("qualification_abort_reason", calibrationFailure == null
+                    ? JSONObject.NULL
+                    : calibrationFailure.optString("failure_type", "calibration_failure"));
 
             JSONArray failureCatalog = FailureCatalog.fromPhases(phaseResults);
             JSONObject summary;

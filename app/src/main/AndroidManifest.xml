@@ -57,6 +57,7 @@
             android:exported="false"
             android:noHistory="true"
             android:process=":runner"
+            android:taskAffinity="${applicationId}.runner"
             android:theme="@style/Theme.DriverLab.Runner" />
 
         <activity
@@ -66,6 +67,7 @@
             android:noHistory="true"
             android:process=":runner"
             android:screenOrientation="landscape"
+            android:taskAffinity="${applicationId}.runner"
             android:theme="@style/Theme.DriverLab.VisualRunner" />
 
         <activity
@@ -74,6 +76,7 @@
             android:exported="false"
             android:noHistory="true"
             android:process=":runner"
+            android:taskAffinity="${applicationId}.runner"
             android:theme="@style/Theme.DriverLab.Runner" />
 
         <activity
