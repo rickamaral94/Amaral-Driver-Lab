@@ -11,6 +11,10 @@ O diretório não exige permissão ampla de armazenamento. Em Android 11 ou supe
 gerenciadores bloqueiam a navegação manual em `Android/data`; por isso a tela inicial também oferece
 **EXPORTAR LOGS DO APP (.ZIP)** usando o seletor de documentos do sistema.
 
+A partir da `v0.13.0-alpha17`, o cabeçalho da página inicial inclui o atalho **LOGS** imediatamente
+ao lado do seletor de idioma. O atalho abre a mesma exportação ZIP sem exigir que o usuário role
+até a seção detalhada de diagnóstico.
+
 ## Arquivos
 
 | Arquivo | Conteúdo |

@@ -107,6 +107,14 @@ public final class MainActivity extends LocalizedActivity {
         titleParams.setMargins(dp(12), 0, dp(8), 0);
         header.addView(titles, titleParams);
 
+        Button logs = AppTheme.iconButton(this,
+                "LOGS",
+                logText("Exportar logs do ADL", "Export ADL logs"),
+                view -> chooseAppDiagnosticsExport());
+        LinearLayout.LayoutParams logsParams = new LinearLayout.LayoutParams(dp(64), dp(52));
+        logsParams.setMargins(0, 0, dp(6), 0);
+        header.addView(logs, logsParams);
+
         Button language = AppTheme.iconButton(this,
                 LanguageManager.current(this).flag,
                 getString(R.string.language_selector_content_description),

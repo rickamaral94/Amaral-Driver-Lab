@@ -32,6 +32,19 @@ public final class AppDiagnosticsContractTest {
     }
 
     @Test
+    public void homeHeaderOffersLogExportNextToLanguageSelector() throws Exception {
+        String main = read(source("main/java/com/amaral/driverlab/MainActivity.java"));
+
+        int logsButton = main.indexOf(
+                "logText(\"Exportar logs do ADL\", \"Export ADL logs\")");
+        int languageButton = main.indexOf(
+                "getString(R.string.language_selector_content_description)");
+        assertTrue(logsButton >= 0);
+        assertTrue(languageButton > logsButton);
+        assertTrue(main.contains("view -> chooseAppDiagnosticsExport()"));
+    }
+
+    @Test
     public void androidExitHistoryAndNativeVisualBreadcrumbsArePersisted() throws Exception {
         String exits = read(source("main/java/com/amaral/driverlab/ExitHistoryApi30.java"));
         String runnerState = read(source(
