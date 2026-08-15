@@ -322,11 +322,7 @@ final class RunCoordinator {
     }
 
     private void scheduleCalibrationProbe(int repetitions, int effectPercent, String stage) {
-        // RunnerActivity and VisualRunnerActivity share the :runner process. The activity that
-        // just wrote the result still has a pending self-termination callback, so starting the
-        // next probe immediately lets the old callback kill the new probe in the same process.
-        handler.postDelayed(() -> launchCalibrationProbe(repetitions, effectPercent, stage),
-                RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+        retireCompletedRunner(() -> launchCalibrationProbe(repetitions, effectPercent, stage));
     }
 
     private void handleCalibrationProbe(JSONObject result) throws Exception {
@@ -408,15 +404,14 @@ final class RunCoordinator {
                 calibrationStage = "effect_injection_10";
                 scheduleCalibrationProbe(calibrationRepetitions, 10, calibrationStage);
             } else {
-                handler.postDelayed(this::startSampleSizePilot,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::startSampleSizePilot);
             }
             return;
         }
         if ("post_run_reference_validation".equals(calibrationStage)) {
             postValidationMedianUs = medianUs;
             postCalibrationValidationComplete = true;
-            finishSuite();
+            retireCompletedRunner(this::finishSuite);
             return;
         }
         throw new IllegalStateException("Estado de calibração desconhecido: " + calibrationStage);
@@ -602,8 +597,7 @@ final class RunCoordinator {
                 if (sampleSizePilotActive) sampleSizePilotResults.put(completed);
                 else phaseResults.put(completed);
                 phaseIndex++;
-                handler.postDelayed(this::launchNext,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             if (runnerExitedUnexpectedly()) {
@@ -616,8 +610,7 @@ final class RunCoordinator {
                 }
                 recordSyntheticFailure("crash", "runner_crash", false);
                 phaseIndex++;
-                handler.postDelayed(this::launchNext,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             if (SystemClock.elapsedRealtime() >= phaseDeadlineElapsed) {
@@ -630,8 +623,7 @@ final class RunCoordinator {
                 }
                 recordSyntheticFailure("timeout", "runner_timeout", false);
                 phaseIndex++;
-                handler.postDelayed(this::launchNext,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             handler.postDelayed(this::pollCurrent, 500);
@@ -695,7 +687,26 @@ final class RunCoordinator {
                 .put("failure_stage", failure.optString("failure_stage", "runner_process"))
                 .put("runner_last_stage", failure.opt("runner_last_stage")));
         phaseResults.put(failure);
-        finishSuite();
+        retireCompletedRunner(this::finishSuite);
+    }
+
+    private void retireCompletedRunner(Runnable continuation) {
+        File completedResultFile = currentResultFile;
+        RunnerProcessLifecycle.retireCompletedRunner(handler, completedResultFile,
+                this::canContinue, new RunnerProcessLifecycle.Callback() {
+                    @Override
+                    public void onRetired() {
+                        if (canContinue()) continuation.run();
+                    }
+
+                    @Override
+                    public void onFailure(Throwable error) {
+                        if (!canContinue()) return;
+                        cancelled = true;
+                        handler.removeCallbacksAndMessages(null);
+                        listener.onFailure("Falha ao encerrar o processo isolado", error);
+                    }
+                });
     }
 
     private void killTimedOutRunner() {

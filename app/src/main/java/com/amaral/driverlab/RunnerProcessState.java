@@ -98,6 +98,29 @@ final class RunnerProcessState {
                 .put("success", success));
     }
 
+    static void markActivityDestroyed(File resultFile, int pid) {
+        if (resultFile == null) return;
+        try {
+            JSONObject state = read(resultFile);
+            if (state == null || state.optInt("pid", -1) != pid) return;
+            long now = System.currentTimeMillis();
+            JSONArray breadcrumbs = state.optJSONArray("breadcrumbs");
+            if (breadcrumbs == null) breadcrumbs = new JSONArray();
+            breadcrumbs.put(breadcrumb("activity_destroyed", now));
+            state.put("breadcrumbs", breadcrumbs)
+                    .put("activity_destroyed_at_ms", now);
+            ResultFiles.writeAtomic(fileFor(resultFile), state.toString(2));
+            AppDiagnostics.event("runner_activity_destroyed", new JSONObject()
+                    .put("result_file", resultFile.getName())
+                    .put("pid", pid));
+        } catch (Exception error) {
+            AppDiagnostics.event("runner_activity_destroy_marker_failed",
+                    AppDiagnostics.details("result_file", resultFile.getName(),
+                            "pid", pid,
+                            "error", error.toString()));
+        }
+    }
+
     static JSONObject read(File resultFile) {
         try {
             File stateFile = fileFor(resultFile);

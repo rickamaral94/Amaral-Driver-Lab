@@ -191,7 +191,7 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
     protected void onDestroy() {
         super.onDestroy();
         if (retireRunnerOnDestroy && isFinishing()) {
-            RunnerProcessLifecycle.retireAfterActivityDestroyed();
+            RunnerProcessState.markActivityDestroyed(resultFile, Process.myPid());
         }
     }
 

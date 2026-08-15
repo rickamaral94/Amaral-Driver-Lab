@@ -36,6 +36,7 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
     static final String EXTRA_CYCLES = "cycles";
     static final String EXTRA_MEMORY_MIB = "memory_mib";
 
+    private File resultFile;
     private volatile boolean retireRunnerOnDestroy;
 
     private static native String runNativeDeepDiagnostics(
@@ -57,6 +58,7 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
             finish();
             return;
         }
+        resultFile = result;
         new Thread(() -> execute(result), "phase10-deep-diagnostics").start();
     }
 
@@ -64,7 +66,7 @@ public final class DeepDiagnosticsRunnerActivity extends LocalizedActivity {
     protected void onDestroy() {
         super.onDestroy();
         if (retireRunnerOnDestroy && isFinishing()) {
-            RunnerProcessLifecycle.retireAfterActivityDestroyed();
+            RunnerProcessState.markActivityDestroyed(resultFile, Process.myPid());
         }
     }
 
