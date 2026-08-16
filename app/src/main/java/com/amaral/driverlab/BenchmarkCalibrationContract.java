@@ -42,7 +42,8 @@ final class BenchmarkCalibrationContract {
 
     static String repetitionUnit(String workloadId) {
         if (VisualSceneContract.isVisualScene(workloadId)
-                || WorkloadContract.RENDERPASS_TILING_ID.equals(workloadId)) {
+                || WorkloadContract.RENDERPASS_TILING_ID.equals(workloadId)
+                || WorkloadContract.EMULATOR_FRAME_ID.equals(workloadId)) {
             return "renderpass";
         }
         if (WorkloadContract.STABLE_SCENE_ID.equals(workloadId)
