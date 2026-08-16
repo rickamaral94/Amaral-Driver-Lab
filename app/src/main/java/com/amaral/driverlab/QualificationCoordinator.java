@@ -122,6 +122,8 @@ final class QualificationCoordinator {
             QualificationProfile.Step step = QualificationProfile.step(profileVersion, stepId);
             if (step == null) throw new IllegalStateException("Etapa desconhecida: " + stepId);
             QualificationStore.markStepRunning(manifest, stepId);
+            QualificationStore.recordStepEnvironment(manifest, stepId,
+                    "environment_start", DeviceSnapshot.capture(activity));
             QualificationStore.save(qualificationFile, manifest);
             listener.onUpdated(qualificationFile, manifest);
             int ordinal = stepOrdinal(stepId);
@@ -251,6 +253,8 @@ final class QualificationCoordinator {
     }
 
     private void persistAndContinue(QualificationProfile.Step step) throws Exception {
+        QualificationStore.recordStepEnvironment(manifest, step.stepId,
+                "environment_end", DeviceSnapshot.capture(activity));
         QualificationStore.save(qualificationFile, manifest);
         listener.onUpdated(qualificationFile, manifest);
         continueAfterCooldown(step.cooldownSeconds);
@@ -259,6 +263,8 @@ final class QualificationCoordinator {
     private void failStep(QualificationProfile.Step step, String message) {
         try {
             QualificationStore.markStepFailed(manifest, step.stepId, message);
+            QualificationStore.recordStepEnvironment(manifest, step.stepId,
+                    "environment_end", DeviceSnapshot.capture(activity));
             QualificationStore.save(qualificationFile, manifest);
             listener.onUpdated(qualificationFile, manifest);
             listener.onStatus("Etapa " + step.label + " falhou; o diagnóstico continuará.");

@@ -194,6 +194,7 @@ final class GitHubIssuePublisher {
         }
         body.append(QualificationOptimizationReport.hardwareMarkdown(manifest));
         body.append(QualificationOptimizationReport.driverIdentityMarkdown(manifest));
+        body.append(QualificationOptimizationReport.runtimeIdentityMarkdown(manifest));
         body.append("### Resumo da execução\n\n")
                 .append("| Campo | Valor |\n|---|---|\n")
                 .append("| Qualification | `").append(table(manifest.optString("qualification_id"))).append("` |\n")
@@ -216,6 +217,9 @@ final class GitHubIssuePublisher {
                 .append(QualificationOptimizationReport.comparisonSummaryMarkdown(manifest))
                 .append(QualificationOptimizationReport.metricsMarkdown(manifest))
                 .append(QualificationOptimizationReport.detailedMetricsMarkdown(manifest))
+                .append(QualificationOptimizationReport.thermalMarkdown(manifest))
+                .append(QualificationOptimizationReport.failureBreakdownMarkdown(manifest))
+                .append(QualificationOptimizationReport.capabilityDiffMarkdown(manifest))
                 .append(QualificationOptimizationReport.loaderMarkdown(manifest))
                 .append(QualificationOptimizationReport.findingsMarkdown(manifest));
         if (score != null) {

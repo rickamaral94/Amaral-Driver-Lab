@@ -465,6 +465,39 @@ public:
         const double p99 = percentile(measuredFrameTimes, 0.99);
         const double onePercentLow = p99 > 0.0 ? 1000.0 / p99 : 0.0;
 
+        // Stutter is not described by percentiles. Three long frames in a run of
+        // thousands sit below the p99 cut and are exactly what the player feels,
+        // so count them explicitly, relative to this scene's own median.
+        size_t framesOverTwiceMedian = 0;
+        size_t framesOverFourTimesMedian = 0;
+        size_t bucketUnder1x = 0;
+        size_t bucket1to2x = 0;
+        size_t bucket2to4x = 0;
+        size_t bucketOver4x = 0;
+        double worstFrameMs = 0.0;
+        size_t worstFrameIndex = 0;
+        for (size_t index = 0; index < measuredFrameTimes.size(); ++index) {
+            const double value = measuredFrameTimes[index];
+            if (value > worstFrameMs) {
+                worstFrameMs = value;
+                worstFrameIndex = index;
+            }
+            if (p50 <= 0.0) continue;
+            const double ratio = value / p50;
+            if (ratio > 4.0) {
+                ++framesOverFourTimesMedian;
+                ++framesOverTwiceMedian;
+                ++bucketOver4x;
+            } else if (ratio > 2.0) {
+                ++framesOverTwiceMedian;
+                ++bucket2to4x;
+            } else if (ratio > 1.0) {
+                ++bucket1to2x;
+            } else {
+                ++bucketUnder1x;
+            }
+        }
+
         std::ostringstream json;
         json << std::fixed << std::setprecision(6)
              << "{\"success\":true"
@@ -509,6 +542,15 @@ public:
              << ",\"p99_gpu_frame_ms\":" << p99
              << ",\"mean_gpu_frame_ms\":" << mean
              << ",\"one_percent_low_fps\":" << onePercentLow
+             << ",\"frames_over_2x_median\":" << framesOverTwiceMedian
+             << ",\"frames_over_4x_median\":" << framesOverFourTimesMedian
+             << ",\"worst_frame_ms\":" << worstFrameMs
+             << ",\"worst_frame_index\":" << worstFrameIndex
+             << ",\"frame_time_histogram\":{"
+             << "\"under_1x\":" << bucketUnder1x
+             << ",\"from_1x_to_2x\":" << bucket1to2x
+             << ",\"from_2x_to_4x\":" << bucket2to4x
+             << ",\"over_4x\":" << bucketOver4x << "}"
              << ",\"frame_times_ms\":[";
         for (size_t index = 0; index < measuredFrameTimes.size(); ++index) {
             if (index > 0) json << ',';
