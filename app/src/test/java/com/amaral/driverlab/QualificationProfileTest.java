@@ -17,7 +17,7 @@ public final class QualificationProfileTest {
         JSONObject profile = QualificationProfile.definition();
         assertTrue(QualificationProfile.verify(profile));
         assertEquals(Phase7Contract.PROFILE_ID, profile.getString("profile_id"));
-        assertEquals(6, profile.getInt("profile_version"));
+        assertEquals(7, profile.getInt("profile_version"));
         assertEquals(9, profile.getInt("step_count"));
         assertEquals(9, profile.getInt("automated_logical_test_count"));
         assertEquals(1, profile.getInt("optional_evidence_slot_count"));

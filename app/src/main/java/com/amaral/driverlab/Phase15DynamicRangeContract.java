@@ -6,13 +6,16 @@ import org.json.JSONObject;
 /** Version contract for the dynamic-range recalibration phase. */
 final class Phase15DynamicRangeContract {
     static final int QUALIFICATION_SCHEMA_VERSION = 5;
-    static final int PROFILE_VERSION = 6;
+    static final int LEGACY_PROFILE_VERSION = 6;
+    static final int PROFILE_VERSION = 7;
     static final int REPORT_VERSION = 5;
     static final int SCORE_VERSION = 5;
     static final int RANKING_VERSION = 3;
     static final int PUBLIC_DATASET_SCHEMA_VERSION = 3;
-    static final String PROFILE_LABEL =
+    static final String LEGACY_PROFILE_LABEL =
             "Turnip Recommended Validation v3 · faixa dinâmica calibrada";
+    static final String PROFILE_LABEL =
+            "Turnip Recommended Validation v4 · carga de emulador";
     static final String LIMITATION =
             "Workloads v2 usam lotes calibrados por hardware, unidade de repetição explícita, "
                     + "teste de linearidade, tamanho amostral fixado após piloto independente e "

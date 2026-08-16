@@ -28,6 +28,7 @@ constexpr char kShaderCompileId[] = "shader_compile_pipeline";
 constexpr char kRenderPassTilingId[] = "renderpass_tiling_gmem";
 constexpr char kComputeArithmeticId[] = "compute_arithmetic";
 constexpr char kStableSceneId[] = "stable_scene_frametime";
+constexpr char kEmulatorFrameId[] = "emulator_frame_pattern";
 constexpr char kThermalSustainId[] = "thermal_sustain_efficiency";
 constexpr char kTraceReplayId[] = "vulkan_command_trace_replay";
 constexpr char kMixedTraceId[] = "mixed_graphics_compute_barrier";
@@ -993,7 +994,22 @@ struct DrawPush {
     float color[4];
 };
 
+// What an emulator does to an attachment between passes. The existing workloads
+// always CLEAR then DONT_CARE, which is the case a tiler resolves for free; an
+// emulator constantly LOADs a previous target and STOREs the result, and that is
+// the traffic that makes the GMEM/sysmem decision matter.
+struct AttachmentProfile {
+    // Only the store side varies. LOAD would need the image already in
+    // COLOR_ATTACHMENT_OPTIMAL before the first pass, and storing alone already
+    // produces the resolve traffic that separates GMEM from sysmem.
+    VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    uint32_t width = 0;   // 0 keeps the workload default
+    uint32_t height = 0;
+};
+
 struct RenderSetup {
+    uint32_t width = 0;
+    uint32_t height = 0;
     VkRenderPass renderPass = VK_NULL_HANDLE;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
     VkPipelineLayout layout = VK_NULL_HANDLE;
@@ -1041,6 +1057,10 @@ public:
         if (workloadId == kComputeArithmeticId) {
             return runCompute(workloadVersion, repetitions, effective, effectPercent,
                     std::max(0, warmupSeconds), std::max(1, measureSeconds), false);
+        }
+        if (workloadId == kEmulatorFrameId) {
+            return runEmulatorFrame(workloadVersion, repetitions, effective, effectPercent,
+                    std::max(0, warmupSeconds), std::max(1, measureSeconds));
         }
         if (workloadId == kStableSceneId) {
             return runStableScene(workloadVersion, repetitions, effective, effectPercent,
@@ -1467,19 +1487,30 @@ private:
 
     RenderSetup createRenderSetup(VkSampleCountFlagBits samples, bool depthEnabled,
                                   uint32_t drawCount, VkShaderModule fragment,
-                                  uint32_t repetitions = 1U) {
+                                  uint32_t repetitions = 1U,
+                                  AttachmentProfile profile = AttachmentProfile{}) {
         RenderSetup setup;
+        const uint32_t width = profile.width == 0 ? kRenderWidth : profile.width;
+        const uint32_t height = profile.height == 0 ? kRenderHeight : profile.height;
+        setup.width = width;
+        setup.height = height;
         const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
+        VkImageUsageFlags colorUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        if (profile.storeOp == VK_ATTACHMENT_STORE_OP_STORE) {
+            // A stored target is sampled or copied later, exactly as an emulator
+            // reuses a previous render target.
+            colorUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        }
         setup.color = context.createImage(
-                kRenderWidth, kRenderHeight, colorFormat, samples,
-                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+                width, height, colorFormat, samples,
+                colorUsage, VK_IMAGE_ASPECT_COLOR_BIT);
         VkFormat depthFormat = VK_FORMAT_UNDEFINED;
         if (depthEnabled) {
             depthFormat = context.depthFormat();
             VkImageAspectFlags aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
             if (depthFormat == VK_FORMAT_D24_UNORM_S8_UINT) aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
             setup.depth = context.createImage(
-                    kRenderWidth, kRenderHeight, depthFormat, samples,
+                    width, height, depthFormat, samples,
                     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, aspect);
         }
 
@@ -1487,7 +1518,7 @@ private:
         attachments[0].format = colorFormat;
         attachments[0].samples = samples;
         attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachments[0].storeOp = profile.storeOp;
         attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         attachments[1].format = depthFormat;
@@ -1524,8 +1555,8 @@ private:
         framebufferInfo.renderPass = setup.renderPass;
         framebufferInfo.attachmentCount = depthEnabled ? 2U : 1U;
         framebufferInfo.pAttachments = views.data();
-        framebufferInfo.width = kRenderWidth;
-        framebufferInfo.height = kRenderHeight;
+        framebufferInfo.width = width;
+        framebufferInfo.height = height;
         framebufferInfo.layers = 1;
         check(context.vkCreateFramebuffer(context.device, &framebufferInfo, nullptr,
                                           &setup.framebuffer), "vkCreateFramebuffer(phase2)");
@@ -1547,7 +1578,7 @@ private:
         begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         begin.renderPass = setup.renderPass;
         begin.framebuffer = setup.framebuffer;
-        begin.renderArea.extent = {kRenderWidth, kRenderHeight};
+        begin.renderArea.extent = {width, height};
         begin.clearValueCount = depthEnabled ? 2U : 1U;
         begin.pClearValues = clears.data();
         const uint32_t columns = 32;
@@ -2535,6 +2566,133 @@ private:
             destroyTraceSetup(setup);
             throw;
         }
+    }
+
+
+    /**
+     * The frame shape an emulator actually produces.
+     *
+     * The existing performance workloads render one large pass with thousands of
+     * draws and discard the result. A tiler resolves that for free, which is why
+     * every A/B between our drivers came back a technical tie: the workload gave
+     * the driver no decision worth making.
+     *
+     * An emulator does the opposite — many small passes per frame, few draws each,
+     * and the result of most of them is kept because a later pass samples it. The
+     * store is what forces tile memory back out to system memory, and that traffic
+     * is where GMEM and sysmem stop being equivalent. Sweeping the store operation
+     * and the target size is therefore the minimum needed to make tiling options
+     * such as tu_autotune_algorithm observable at all.
+     */
+    std::string runEmulatorFrame(uint32_t workloadVersion,
+                                 uint32_t requestedRepetitions,
+                                 uint32_t effectiveRepetitionCount,
+                                 uint32_t effectPercent,
+                                 int warmupSeconds, int measureSeconds) {
+        context.setStage("emulator_frame_setup");
+        struct Pass {
+            const char *name;
+            VkAttachmentStoreOp storeOp;
+            uint32_t width;
+            uint32_t height;
+            uint32_t draws;
+            bool depth;
+        };
+        // Sizes and draw counts in the range emulators actually emit: small
+        // offscreen targets, tens of draws, not thousands.
+        const std::vector<Pass> passes{
+            {"discard_small",  VK_ATTACHMENT_STORE_OP_DONT_CARE, 256, 256,  24, false},
+            {"store_small",    VK_ATTACHMENT_STORE_OP_STORE,     256, 256,  24, false},
+            {"store_medium",   VK_ATTACHMENT_STORE_OP_STORE,     512, 512,  48, true},
+            {"store_wide",     VK_ATTACHMENT_STORE_OP_STORE,     960, 540,  96, true},
+            {"discard_wide",   VK_ATTACHMENT_STORE_OP_DONT_CARE, 960, 540,  96, true},
+        };
+
+        std::vector<double> aggregate;
+        std::vector<double> storeSamples;
+        std::vector<double> discardSamples;
+        std::ostringstream passJson;
+        passJson << '[';
+        const int slice = static_cast<int>(passes.size());
+        for (size_t index = 0; index < passes.size(); ++index) {
+            const Pass &pass = passes[index];
+            context.setStage(std::string("emulator_frame_") + pass.name);
+            AttachmentProfile profile{};
+            profile.storeOp = pass.storeOp;
+            profile.width = pass.width;
+            profile.height = pass.height;
+            RenderSetup setup = createRenderSetup(VK_SAMPLE_COUNT_1_BIT, pass.depth,
+                                                  pass.draws, aluFragment,
+                                                  effectiveRepetitionCount, profile);
+            std::vector<double> samples;
+            try {
+                samples = sampleRender(setup, std::max(0, warmupSeconds / slice),
+                                       std::max(1, measureSeconds / slice));
+            } catch (...) {
+                destroyRenderSetup(setup);
+                throw;
+            }
+            const bool timestamps = setup.query.supported;
+            destroyRenderSetup(setup);
+            aggregate.insert(aggregate.end(), samples.begin(), samples.end());
+            if (pass.storeOp == VK_ATTACHMENT_STORE_OP_STORE) {
+                storeSamples.insert(storeSamples.end(), samples.begin(), samples.end());
+            } else {
+                discardSamples.insert(discardSamples.end(), samples.begin(), samples.end());
+            }
+            if (index > 0) passJson << ',';
+            passJson << "{\"name\":\"" << pass.name << "\""
+                     << ",\"store_op\":\""
+                     << (pass.storeOp == VK_ATTACHMENT_STORE_OP_STORE ? "store" : "dont_care")
+                     << "\",\"width\":" << pass.width
+                     << ",\"height\":" << pass.height
+                     << ",\"draws_per_pass\":" << pass.draws
+                     << ",\"depth\":" << (pass.depth ? "true" : "false")
+                     << ",\"sample_count\":" << samples.size()
+                     << ",\"median_frame_ms\":" << median(samples)
+                     << ",\"p95_frame_ms\":" << percentile(samples, 0.95)
+                     << ",\"p99_frame_ms\":" << percentile(samples, 0.99)
+                     << ",\"gpu_timestamps_used\":" << (timestamps ? "true" : "false")
+                     << ",\"frame_times_ms\":";
+            appendDoubleArray(passJson, samples);
+            passJson << '}';
+        }
+        passJson << ']';
+
+        // The ratio is the point of the workload: how much the driver pays to keep
+        // a small target instead of discarding it. A driver that resolves cheaply
+        // shows a ratio near 1; one that falls back to system memory does not.
+        const double storeMedian = median(storeSamples);
+        const double discardMedian = median(discardSamples);
+        const double storePenalty = discardMedian > 0.0 ? storeMedian / discardMedian : 0.0;
+
+        std::ostringstream json;
+        json << "{\"success\":true"
+             << ",\"workload_id\":\"" << kEmulatorFrameId << "\""
+             << ",\"workload_version\":" << workloadVersion
+             << ",\"custom_driver\":" << (context.isCustomDriver() ? "true" : "false")
+             << ",\"pass_count\":" << passes.size()
+             << ",\"repetition_unit\":\"renderpass\""
+             << ",\"repetitions_per_sample\":" << requestedRepetitions
+             << ",\"effective_repetitions_per_sample\":" << effectiveRepetitionCount
+             << ",\"effect_injection_percent\":" << effectPercent
+             << ",\"effect_injection_domain\":\"gpu_workload\""
+             << ",\"realized_workload_effect_percent\":"
+             << realizedEffectPercent(requestedRepetitions, effectiveRepetitionCount)
+             << ",\"median_batch_us\":" << median(aggregate) * 1000.0
+             << ",\"median_frame_ms\":" << median(aggregate)
+             << ",\"p95_frame_ms\":" << percentile(aggregate, 0.95)
+             << ",\"p99_frame_ms\":" << percentile(aggregate, 0.99)
+             << ",\"store_median_ms\":" << storeMedian
+             << ",\"discard_median_ms\":" << discardMedian
+             << ",\"store_penalty_ratio\":" << storePenalty
+             << ",\"passes\":" << passJson.str()
+             << ",\"gpu_timestamps_used\":"
+             << (context.timestampsSupported() ? "true" : "false")
+             << ",\"capabilities\":" << context.capabilities
+             << ",\"metric_note\":\"Many small render passes with few draws each, sweeping store versus discard, which is the frame shape emulators emit. store_penalty_ratio is the cost of keeping a target rather than discarding it. This is a synthetic proxy for tiling behaviour; it does not read driver internals and does not predict game FPS.\""
+             << '}';
+        return json.str();
     }
 
     std::string runStableScene(uint32_t workloadVersion,

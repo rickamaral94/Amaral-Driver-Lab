@@ -117,7 +117,10 @@ final class QualificationProfile {
             return recommendedV4Steps();
         }
         if (version == Phase13ValidationContract.PROFILE_VERSION) return recommendedV5Steps();
-        if (version == Phase15DynamicRangeContract.PROFILE_VERSION) return recommendedV6Steps();
+        if (version == Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION) {
+            return recommendedV6Steps();
+        }
+        if (version == Phase15DynamicRangeContract.PROFILE_VERSION) return emulatorV7Steps();
         throw new IllegalArgumentException("Versão de Qualification desconhecida: " + version);
     }
 
@@ -290,6 +293,48 @@ final class QualificationProfile {
         return Collections.unmodifiableList(output);
     }
 
+    /**
+     * The measurement profile rebuilt around what an emulator actually emits.
+     *
+     * Every A/B run on v6 came back a technical tie at about a tenth of a percent.
+     * That was not bad luck: its performance steps render one large, uniform scene
+     * with a coefficient of variation near 0.03%, which is a very precise
+     * instrument pointed at something that does not vary between drivers.
+     *
+     * So the performance weight moves to {@code emulator_frame_pattern}, which
+     * emits many small render passes with few draws each and sweeps store against
+     * discard, and to cold shader compilation — the one axis that ever showed a
+     * large separation (44.7% between Turnip and the blob, issue #30).
+     *
+     * The visible scenes and the offscreen correctness stay, with weight zero.
+     * They are not weak; they are the gates that caught driver v8b failing 92 of
+     * 92 presentation rounds. Removing them to make room would have traded the
+     * only part of the suite that works for the part that did not.
+     */
+    private static List<Step> emulatorV7Steps() {
+        List<Step> output = new ArrayList<>();
+        output.add(new Step("correctness_pre", "Correção offscreen inicial",
+                WorkloadContract.RENDER_CORRECTNESS_ID, 1, "", 3, 0, 1, 2, 0, true));
+        output.add(new Step("visual_geometry", "Gate visível: geometria e depth",
+                VisualSceneContract.GEOMETRY_ID, 2, "", 3, 1, 3, 2, 0, true));
+        output.add(new Step("visual_materials", "Gate visível: materiais e amostragem",
+                VisualSceneContract.MATERIALS_ID, 2, "", 3, 1, 3, 2, 0, true));
+        output.add(new Step("visual_postprocess", "Gate visível: pós-processamento",
+                VisualSceneContract.POSTPROCESS_ID, 2, "", 3, 1, 3, 2, 0, true));
+        output.add(new Step("visual_gpu_stress", "Gate visível: GPU Stress 3D 720p",
+                VisualSceneContract.GPU_STRESS_ID, 2, "", 3, 1, 3, 2, 0, true));
+        output.add(new Step("emulator_frame", "Padrão de quadro de emulador",
+                WorkloadContract.EMULATOR_FRAME_ID, 2, "", 7, 2, 10, 3, 70, false));
+        output.add(new Step("shader_compile", "Compilação cold de shaders",
+                WorkloadContract.SHADER_COMPILE_ID, 2, "", 5, 1, 1, 2, 30, false));
+        output.add(new Step("trace_mixed", "Gate: trace gráfico, compute e barreiras",
+                WorkloadContract.TRACE_REPLAY_ID, 2, TraceReplayContract.MIXED_TRACE_ID,
+                3, 2, 3, 2, 0, true));
+        output.add(new Step("correctness_post", "Correção offscreen após carga",
+                WorkloadContract.RENDER_CORRECTNESS_ID, 1, "", 3, 0, 1, 0, 0, true));
+        return Collections.unmodifiableList(output);
+    }
+
     static JSONObject definition() throws Exception { return definitionForVersion(currentVersion()); }
 
     static JSONObject definitionForVersion(int version) throws Exception {
@@ -304,11 +349,14 @@ final class QualificationProfile {
                 : version == 3 ? Phase11Contract.PROFILE_LABEL
                 : version == Phase15DynamicRangeContract.PROFILE_VERSION
                 ? Phase15DynamicRangeContract.PROFILE_LABEL
+                : version == Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION
+                ? Phase15DynamicRangeContract.LEGACY_PROFILE_LABEL
                 : Phase13ValidationContract.profileLabelForVersion(version);
         String limitations = version == 1 ? Phase7Contract.LIMITATION
                 : version == 2 ? Phase8Contract.LIMITATION
                 : version == 3 ? Phase11Contract.LIMITATION
                 : version == Phase15DynamicRangeContract.PROFILE_VERSION
+                || version == Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION
                 ? Phase15DynamicRangeContract.LIMITATION
                 : Phase13ValidationContract.limitationForVersion(version);
         JSONObject definition = new JSONObject()
@@ -347,6 +395,7 @@ final class QualificationProfile {
             if (version != 1 && version != 2 && version != 3
                     && version != Phase13ValidationContract.LEGACY_PROFILE_VERSION
                     && version != Phase13ValidationContract.PROFILE_VERSION
+                    && version != Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION
                     && version != Phase15DynamicRangeContract.PROFILE_VERSION) return false;
             JSONArray steps = profile.optJSONArray("steps");
             if (steps == null || steps.length() != stepsForVersion(version).size()) return false;

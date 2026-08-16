@@ -24,7 +24,7 @@ public final class WorkloadContractTest {
     @Test
     public void phaseTwoSeriesAdvanceToVersionTwoWhileV1RemainsSupported() {
         assertEquals(15, WorkloadContract.RESULT_SCHEMA_VERSION);
-        assertEquals(5, WorkloadContract.PHASE2_IDS.size());
+        assertEquals(6, WorkloadContract.PHASE2_IDS.size());
         for (String workloadId : WorkloadContract.PHASE2_IDS) {
             assertEquals(2, WorkloadContract.versionFor(workloadId));
             assertTrue(WorkloadContract.isSupportedVersion(workloadId, 1));
