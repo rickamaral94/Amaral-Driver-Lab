@@ -126,7 +126,10 @@ final class QualificationProfile {
         if (version == Phase15DynamicRangeContract.COMPOSITE_V8_PROFILE_VERSION) {
             return emulatorV8Steps();
         }
-        if (version == Phase15DynamicRangeContract.PROFILE_VERSION) return linearV9Steps();
+        if (version == Phase15DynamicRangeContract.LINEAR_V9_PROFILE_VERSION) {
+            return linearV9Steps();
+        }
+        if (version == Phase15DynamicRangeContract.PROFILE_VERSION) return measuredV10Steps();
         throw new IllegalArgumentException("Versão de Qualification desconhecida: " + version);
     }
 
@@ -352,8 +355,11 @@ final class QualificationProfile {
         List<Step> output = new ArrayList<>();
         for (Step step : emulatorV7Steps()) {
             if (WorkloadContract.EMULATOR_FRAME_ID.equals(step.workloadId)) {
+                // Fixo em 3, nao na constante: v8 e v9 foram publicados com a carga
+                // na versao 3 e precisam continuar significando isso. A v4 mudou a
+                // forma do quadro, entao os numeros nao se comparam.
                 output.add(new Step(step.stepId, step.label, step.workloadId,
-                        WorkloadContract.EMULATOR_FRAME_VERSION, step.traceId, step.rounds,
+                        3, step.traceId, step.rounds,
                         step.warmupSeconds, step.measureSeconds, step.cooldownSeconds,
                         step.weight, step.compatibilityGate));
             } else {
@@ -397,6 +403,28 @@ final class QualificationProfile {
         return Collections.unmodifiableList(output);
     }
 
+    /**
+     * v10 differs from v9 in one field again: emulator_frame_pattern moves to
+     * workload version 4, whose frame shape comes from an Eden API trace instead
+     * of from an assumption. v3 used 24 to 96 draws per pass against a measured
+     * median of 1, and capped the target at 960x540 when 45% of the emulator's
+     * render passes are 1920x1080.
+     */
+    private static List<Step> measuredV10Steps() {
+        List<Step> output = new ArrayList<>();
+        for (Step step : linearV9Steps()) {
+            if (WorkloadContract.EMULATOR_FRAME_ID.equals(step.workloadId)) {
+                output.add(new Step(step.stepId, step.label, step.workloadId,
+                        WorkloadContract.EMULATOR_FRAME_VERSION, step.traceId, step.rounds,
+                        step.warmupSeconds, step.measureSeconds, step.cooldownSeconds,
+                        step.weight, step.compatibilityGate));
+            } else {
+                output.add(step);
+            }
+        }
+        return Collections.unmodifiableList(output);
+    }
+
     static JSONObject definition() throws Exception { return definitionForVersion(currentVersion()); }
 
     static JSONObject definitionForVersion(int version) throws Exception {
@@ -411,6 +439,8 @@ final class QualificationProfile {
                 : version == 3 ? Phase11Contract.PROFILE_LABEL
                 : version == Phase15DynamicRangeContract.PROFILE_VERSION
                 ? Phase15DynamicRangeContract.PROFILE_LABEL
+                : version == Phase15DynamicRangeContract.LINEAR_V9_PROFILE_VERSION
+                ? Phase15DynamicRangeContract.LINEAR_V9_PROFILE_LABEL
                 : version == Phase15DynamicRangeContract.COMPOSITE_V8_PROFILE_VERSION
                 ? Phase15DynamicRangeContract.COMPOSITE_V8_PROFILE_LABEL
                 : version == Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION
@@ -422,6 +452,7 @@ final class QualificationProfile {
                 : version == 2 ? Phase8Contract.LIMITATION
                 : version == 3 ? Phase11Contract.LIMITATION
                 : version == Phase15DynamicRangeContract.PROFILE_VERSION
+                || version == Phase15DynamicRangeContract.LINEAR_V9_PROFILE_VERSION
                 || version == Phase15DynamicRangeContract.COMPOSITE_V8_PROFILE_VERSION
                 || version == Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION
                 || version == Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION
@@ -466,6 +497,7 @@ final class QualificationProfile {
                     && version != Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION
                     && version != Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION
                     && version != Phase15DynamicRangeContract.COMPOSITE_V8_PROFILE_VERSION
+                    && version != Phase15DynamicRangeContract.LINEAR_V9_PROFILE_VERSION
                     && version != Phase15DynamicRangeContract.PROFILE_VERSION) return false;
             JSONArray steps = profile.optJSONArray("steps");
             if (steps == null || steps.length() != stepsForVersion(version).size()) return false;

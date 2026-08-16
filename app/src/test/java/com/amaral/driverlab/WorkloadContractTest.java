@@ -29,7 +29,7 @@ public final class WorkloadContractTest {
             // emulator_frame_pattern is at 3: its v2 primary metric was the median
             // of the five passes pooled, which moves with the sample mix. See
             // EmulatorFramePatternTest.
-            final int expected = WorkloadContract.EMULATOR_FRAME_ID.equals(workloadId) ? 3 : 2;
+            final int expected = WorkloadContract.EMULATOR_FRAME_ID.equals(workloadId) ? 4 : 2;
             assertEquals(expected, WorkloadContract.versionFor(workloadId));
             assertTrue(WorkloadContract.isSupportedVersion(workloadId, 1));
             assertTrue(WorkloadContract.isSupportedVersion(workloadId, 2));

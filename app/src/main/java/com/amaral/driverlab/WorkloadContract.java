@@ -53,7 +53,7 @@ final class WorkloadContract {
                     + "IA, física, shaders gráficos ou desempenho geral da GPU.";
 
     static final String EMULATOR_FRAME_ID = "emulator_frame_pattern";
-    static final int EMULATOR_FRAME_VERSION = 3;
+    static final int EMULATOR_FRAME_VERSION = 4;
     static final String EMULATOR_FRAME_METRIC = "composite_frame_ms";
     static final String EMULATOR_FRAME_LIMITATION =
             "Muitos render passes pequenos com poucos draws cada, variando store e "

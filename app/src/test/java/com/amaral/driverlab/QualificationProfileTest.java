@@ -39,12 +39,41 @@ public final class QualificationProfileTest {
                 seven.getString("profile_sha256").equals(eight.getString("profile_sha256")));
     }
 
+    /**
+     * Every published profile has to keep declaring the workload version it ran
+     * with. emulatorV8Steps once read EMULATOR_FRAME_VERSION straight from the
+     * contract, so bumping the constant silently rewrote what v8 and v9 meant —
+     * two incomparable measurements sharing one identity.
+     */
+    @Test
+    public void publishedProfilesPinTheEmulatorFrameVersionTheyShippedWith() throws Exception {
+        int[][] expected = {
+                {Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION, 2},
+                {Phase15DynamicRangeContract.COMPOSITE_V8_PROFILE_VERSION, 3},
+                {Phase15DynamicRangeContract.LINEAR_V9_PROFILE_VERSION, 3},
+                {Phase15DynamicRangeContract.PROFILE_VERSION, 4},
+        };
+        for (int[] pair : expected) {
+            JSONArray steps = QualificationProfile.definitionForVersion(pair[0])
+                    .getJSONArray("steps");
+            int checked = 0;
+            for (int index = 0; index < steps.length(); ++index) {
+                JSONObject step = steps.getJSONObject(index);
+                if (WorkloadContract.EMULATOR_FRAME_ID.equals(step.getString("workload_id"))) {
+                    assertEquals("perfil v" + pair[0], pair[1], step.getInt("workload_version"));
+                    checked++;
+                }
+            }
+            assertEquals(1, checked);
+        }
+    }
+
     @Test
     public void currentRecommendedProfileIsFocusedAndWeightsSumToOneHundred() throws Exception {
         JSONObject profile = QualificationProfile.definition();
         assertTrue(QualificationProfile.verify(profile));
         assertEquals(Phase7Contract.PROFILE_ID, profile.getString("profile_id"));
-        assertEquals(9, profile.getInt("profile_version"));
+        assertEquals(10, profile.getInt("profile_version"));
         assertEquals(9, profile.getInt("step_count"));
         assertEquals(9, profile.getInt("automated_logical_test_count"));
         assertEquals(1, profile.getInt("optional_evidence_slot_count"));

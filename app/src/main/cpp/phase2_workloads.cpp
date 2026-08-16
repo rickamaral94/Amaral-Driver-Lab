@@ -40,12 +40,17 @@ constexpr uint32_t kTraceHeight = 180;
 constexpr uint32_t kTraceComputeWords = 65536;
 constexpr uint32_t kLegacyWorkloadVersion = 1;
 constexpr uint32_t kWorkloadVersion = 2;
-// emulator_frame_pattern v3 corrige a metrica primaria: v2 publicava a
-// mediana das amostras das cinco passadas juntas, que nao mede nada porque
-// as passadas custam coisas diferentes e o numero de amostras de cada uma
-// varia com o tempo de medicao. v3 publica a soma das medianas por passada,
-// que e o custo de um quadro composto e escala com as repeticoes.
-constexpr uint32_t kEmulatorFrameVersion = 3;
+// emulator_frame_pattern:
+//   v2 publicava a mediana das amostras das cinco passadas juntas, que nao mede
+//      nada: as passadas custam coisas diferentes e quantas amostras cada uma
+//      rende depende do tempo de medicao;
+//   v3 trocou a metrica pela soma das medianas por passada, corrigindo a
+//      aritmetica mas mantendo uma forma de quadro inventada — 24 a 96 draws por
+//      passe, alvo maximo de 960x540;
+//   v4 troca a forma pela medida num traco de API do Eden: 93 passes por quadro,
+//      mediana de 1 draw, 45% em 1920x1080. A unidade de repeticao passa a ser o
+//      quadro inteiro.
+constexpr uint32_t kEmulatorFrameVersion = 4;
 constexpr uint32_t kShaderPipelineCount = 24;
 constexpr uint32_t kTilingDrawCount = 2048;
 constexpr uint32_t kStableDrawCount = 512;
@@ -2594,125 +2599,266 @@ private:
      * and the target size is therefore the minimum needed to make tiling options
      * such as tu_autotune_algorithm observable at all.
      */
+    // A forma do quadro abaixo nao foi inventada: veio de um traco de API do Eden
+    // rodando Mario Kart 8 Deluxe na Adreno 740 com a v10 perf — 353.589
+    // renderpasses e 1.126.192 draws em 108,6 s. Ver
+    // capturas/eden-mk8-v10/FORMA-DO-QUADRO.md no repositorio do driver.
+    //
+    // O que o traco mostrou, e que a versao anterior desta carga contradizia:
+    //   * 44,7% dos renderpasses sao 1920x1080, nao 960x540;
+    //   * a MEDIANA e 1 draw por passe, nao 24 a 96. 74,9% tem exatamente um e
+    //     17,8% nao tem nenhum;
+    //   * a media de 3,19 vem de uma cauda curta e pesada: 3% dos passes levam
+    //     67% dos draws, com ate 295 num passe so;
+    //   * ha um alvo 1024x1024 com ~20 draws por passe, com cara de mapa de sombra;
+    //   * o resto e uma cadeia descendente de alvos minusculos, ate 16x16.
+    //
+    // 93 passes por quadro reproduzem o mix de tamanho medido, 18,3% de passes
+    // sem draw contra 17,8% reais, 75,3% com um draw contra 74,9% e media de
+    // 3,20 draws por passe contra 3,19.
+    //
+    // Nao medido: os load/store ops de cada passe. O traco registra area e
+    // contagem de draws, nao o que o renderpass faz com o anexo. Por isso todos
+    // os alvos aqui usam STORE, que e a escolha cara, e a razao store/discard da
+    // versao anterior saiu — ela comparava uma suposicao com outra.
+    struct FramePass {
+        uint32_t width;
+        uint32_t height;
+        uint32_t count;
+        uint32_t draws;
+        bool depth;
+    };
+
+    static const std::vector<FramePass> &emulatorFrameShape() {
+        // Ordem deliberada: o mapa de sombra primeiro, depois a geometria em tela
+        // cheia, e por fim a cadeia descendente de pos-processamento. Agrupar os
+        // 42 passes de 1080p deixaria o mesmo alvo quente de um jeito que o
+        // emulador nao produz, entao a geometria vem intercalada com os alvos
+        // pequenos.
+        static const std::vector<FramePass> shape{
+            {1024, 1024,  2, 20, true},
+            {1920, 1080,  4, 47, true},
+            {1920, 1080, 29,  1, true},
+            {1920, 1080,  9,  0, true},
+            {1280,  720,  2,  1, false},
+            {1280,  720,  1,  0, false},
+            { 960,  540,  2,  1, false},
+            { 960,  540,  1,  0, false},
+            { 480,  272,  1,  1, false},
+            { 480,  272,  3,  0, false},
+            { 320,  180,  5,  1, false},
+            { 240,  136,  5,  1, false},
+            { 120,   68,  5,  1, false},
+            { 120,   68,  1,  0, false},
+            {  60,   34,  5,  1, false},
+            {  60,   34,  1,  0, false},
+            {  30,   17,  4,  1, false},
+            {  30,   17,  1,  0, false},
+            {  32,   32,  6,  1, false},
+            {  16,   16,  6,  1, false},
+        };
+        return shape;
+    }
+
     std::string runEmulatorFrame(uint32_t workloadVersion,
                                  uint32_t requestedRepetitions,
                                  uint32_t effectiveRepetitionCount,
                                  uint32_t effectPercent,
                                  int warmupSeconds, int measureSeconds) {
         context.setStage("emulator_frame_setup");
-        struct Pass {
-            const char *name;
-            VkAttachmentStoreOp storeOp;
-            uint32_t width;
-            uint32_t height;
-            uint32_t draws;
-            bool depth;
-        };
-        // Sizes and draw counts in the range emulators actually emit: small
-        // offscreen targets, tens of draws, not thousands.
-        const std::vector<Pass> passes{
-            {"discard_small",  VK_ATTACHMENT_STORE_OP_DONT_CARE, 256, 256,  24, false},
-            {"store_small",    VK_ATTACHMENT_STORE_OP_STORE,     256, 256,  24, false},
-            {"store_medium",   VK_ATTACHMENT_STORE_OP_STORE,     512, 512,  48, true},
-            {"store_wide",     VK_ATTACHMENT_STORE_OP_STORE,     960, 540,  96, true},
-            {"discard_wide",   VK_ATTACHMENT_STORE_OP_DONT_CARE, 960, 540,  96, true},
-        };
+        const std::vector<FramePass> &shape = emulatorFrameShape();
 
-        std::vector<double> aggregate;
-        std::vector<double> passMedians;
-        std::vector<double> storeSamples;
-        std::vector<double> discardSamples;
-        std::ostringstream passJson;
-        passJson << '[';
-        const int slice = static_cast<int>(passes.size());
-        for (size_t index = 0; index < passes.size(); ++index) {
-            const Pass &pass = passes[index];
-            context.setStage(std::string("emulator_frame_") + pass.name);
-            AttachmentProfile profile{};
-            profile.storeOp = pass.storeOp;
-            profile.width = pass.width;
-            profile.height = pass.height;
-            RenderSetup setup = createRenderSetup(VK_SAMPLE_COUNT_1_BIT, pass.depth,
-                                                  pass.draws, aluFragment,
-                                                  effectiveRepetitionCount, profile);
-            std::vector<double> samples;
-            try {
-                samples = sampleRender(setup, std::max(0, warmupSeconds / slice),
-                                       std::max(1, measureSeconds / slice));
-            } catch (...) {
-                destroyRenderSetup(setup);
-                throw;
-            }
-            const bool timestamps = setup.query.supported;
-            destroyRenderSetup(setup);
-            aggregate.insert(aggregate.end(), samples.begin(), samples.end());
-            passMedians.push_back(median(samples));
-            if (pass.storeOp == VK_ATTACHMENT_STORE_OP_STORE) {
-                storeSamples.insert(storeSamples.end(), samples.begin(), samples.end());
-            } else {
-                discardSamples.insert(discardSamples.end(), samples.begin(), samples.end());
-            }
-            if (index > 0) passJson << ',';
-            passJson << "{\"name\":\"" << pass.name << "\""
-                     << ",\"store_op\":\""
-                     << (pass.storeOp == VK_ATTACHMENT_STORE_OP_STORE ? "store" : "dont_care")
-                     << "\",\"width\":" << pass.width
-                     << ",\"height\":" << pass.height
-                     << ",\"draws_per_pass\":" << pass.draws
-                     << ",\"depth\":" << (pass.depth ? "true" : "false")
-                     << ",\"sample_count\":" << samples.size()
-                     << ",\"median_frame_ms\":" << median(samples)
-                     << ",\"p95_frame_ms\":" << percentile(samples, 0.95)
-                     << ",\"p99_frame_ms\":" << percentile(samples, 0.99)
-                     << ",\"gpu_timestamps_used\":" << (timestamps ? "true" : "false")
-                     << ",\"frame_times_ms\":";
-            appendDoubleArray(passJson, samples);
-            passJson << '}';
+        // Um alvo por tamanho distinto; os passes reusam.
+        std::vector<std::pair<uint32_t, uint32_t>> sizes;
+        for (const FramePass &pass : shape) {
+            const std::pair<uint32_t, uint32_t> key{pass.width, pass.height};
+            if (std::find(sizes.begin(), sizes.end(), key) == sizes.end()) sizes.push_back(key);
         }
-        passJson << ']';
+        std::vector<RenderSetup> targets;
+        targets.reserve(sizes.size());
+        auto releaseTargets = [&]() {
+            for (RenderSetup &target : targets) destroyRenderSetup(target);
+            targets.clear();
+        };
+        try {
+            for (const std::pair<uint32_t, uint32_t> &size : sizes) {
+                bool depth = false;
+                for (const FramePass &pass : shape) {
+                    if (pass.width == size.first && pass.height == size.second && pass.depth) {
+                        depth = true;
+                    }
+                }
+                AttachmentProfile profile{};
+                profile.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+                profile.width = size.first;
+                profile.height = size.second;
+                // repetitions 0 grava um command buffer vazio: os recursos e o
+                // pipeline sao o que interessa, o quadro e gravado abaixo.
+                targets.push_back(createRenderSetup(VK_SAMPLE_COUNT_1_BIT, depth, 0U,
+                                                    aluFragment, 0U, profile));
+            }
+        } catch (...) {
+            releaseTargets();
+            throw;
+        }
 
-        // The ratio is the point of the workload: how much the driver pays to keep
-        // a small target instead of discarding it. A driver that resolves cheaply
-        // shows a ratio near 1; one that falls back to system memory does not.
-        // Um quadro de emulador e as cinco passadas juntas, entao o custo do quadro
-        // e a soma do custo tipico de cada uma. Somar medianas por passada mantem a
-        // composicao fixa: nao depende de quantas amostras cada passada coube no
-        // tempo de medicao, e dobra quando as repeticoes dobram.
-        double compositeFrameMs = 0.0;
-        for (double value : passMedians) compositeFrameMs += value;
+        // A sequencia de 93 passes, expandida uma vez e reusada em toda repeticao.
+        struct FrameStep { size_t target; uint32_t draws; };
+        std::vector<FrameStep> frame;
+        for (const FramePass &pass : shape) {
+            size_t index = 0;
+            for (size_t candidate = 0; candidate < sizes.size(); ++candidate) {
+                if (sizes[candidate].first == pass.width
+                        && sizes[candidate].second == pass.height) {
+                    index = candidate;
+                }
+            }
+            for (uint32_t repeat = 0; repeat < pass.count; ++repeat) {
+                frame.push_back({index, pass.draws});
+            }
+        }
 
-        const double storeMedian = median(storeSamples);
-        const double discardMedian = median(discardSamples);
-        const double storePenalty = discardMedian > 0.0 ? storeMedian / discardMedian : 0.0;
+        VkCommandPool framePool = VK_NULL_HANDLE;
+        VkCommandBuffer frameCommand = VK_NULL_HANDLE;
+        TimestampQuery frameQuery{};
+        std::vector<double> samples;
+        double frameMs = 0.0;
+        try {
+            context.setStage("emulator_frame_record");
+            framePool = context.createCommandPool();
+            frameCommand = context.allocateCommandBuffer(framePool);
+            frameQuery = context.createTimestampQuery();
+            context.beginTimedCommand(frameCommand, frameQuery);
+            std::array<VkClearValue, 2> clears{};
+            clears[0].color.float32[0] = 0.02F;
+            clears[0].color.float32[1] = 0.03F;
+            clears[0].color.float32[2] = 0.05F;
+            clears[0].color.float32[3] = 1.0F;
+            clears[1].depthStencil = {1.0F, 0};
+            // A unidade de repeticao e o quadro inteiro. Um quadro a mais custa um
+            // quadro a mais, o que e o que o teste de linearidade cobra.
+            for (uint32_t repetition = 0; repetition < effectiveRepetitionCount; ++repetition) {
+                for (const FrameStep &step : frame) {
+                    RenderSetup &target = targets[step.target];
+                    const bool depth = target.depth.image != VK_NULL_HANDLE;
+                    VkRenderPassBeginInfo begin{};
+                    begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                    begin.renderPass = target.renderPass;
+                    begin.framebuffer = target.framebuffer;
+                    begin.renderArea.extent = {target.width, target.height};
+                    begin.clearValueCount = depth ? 2U : 1U;
+                    begin.pClearValues = clears.data();
+                    context.vkCmdBeginRenderPass(frameCommand, &begin, VK_SUBPASS_CONTENTS_INLINE);
+                    if (step.draws > 0U) {
+                        context.vkCmdBindPipeline(frameCommand, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                  target.pipeline);
+                        const uint32_t columns = 8U;
+                        const uint32_t rows = std::max(1U, (step.draws + columns - 1U) / columns);
+                        for (uint32_t index = 0; index < step.draws; ++index) {
+                            const uint32_t column = index % columns;
+                            const uint32_t row = index / columns;
+                            DrawPush push{};
+                            push.transform[0] = 1.7F / static_cast<float>(columns);
+                            push.transform[1] = 1.7F / static_cast<float>(rows);
+                            push.transform[2] = -0.85F + (static_cast<float>(column) + 0.5F)
+                                    * 1.7F / static_cast<float>(columns);
+                            push.transform[3] = -0.85F + (static_cast<float>(row) + 0.5F)
+                                    * 1.7F / static_cast<float>(rows);
+                            push.color[0] = static_cast<float>((index * 17U) & 255U) / 255.0F;
+                            push.color[1] = static_cast<float>((index * 29U) & 255U) / 255.0F;
+                            push.color[2] = static_cast<float>((index * 43U) & 255U) / 255.0F;
+                            push.color[3] = 1.0F;
+                            context.vkCmdPushConstants(frameCommand, target.layout,
+                                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                    0, sizeof(push), &push);
+                            context.vkCmdDraw(frameCommand, 3, 1, 0, 0);
+                        }
+                    }
+                    context.vkCmdEndRenderPass(frameCommand);
+                }
+            }
+            context.endTimedCommand(frameCommand, frameQuery);
+
+            context.setStage("emulator_frame_measure");
+            auto warmupStart = Clock::now();
+            do {
+                context.submitTimed(frameCommand, frameQuery);
+            } while (elapsedMs(warmupStart) < static_cast<double>(warmupSeconds) * 1000.0);
+            auto measureStart = Clock::now();
+            do {
+                samples.push_back(context.submitTimed(frameCommand, frameQuery));
+            } while ((elapsedMs(measureStart) < static_cast<double>(measureSeconds) * 1000.0
+                      || samples.size() < 8U) && samples.size() < 600U);
+            frameMs = median(samples);
+        } catch (...) {
+            if (framePool != VK_NULL_HANDLE) {
+                context.vkDestroyCommandPool(context.device, framePool, nullptr);
+            }
+            context.destroyTimestampQuery(frameQuery);
+            releaseTargets();
+            throw;
+        }
+        const bool timestamps = frameQuery.supported;
+        context.vkDestroyCommandPool(context.device, framePool, nullptr);
+        context.destroyTimestampQuery(frameQuery);
+        releaseTargets();
+
+        uint32_t passesPerFrame = 0;
+        uint32_t drawsPerFrame = 0;
+        uint32_t emptyPasses = 0;
+        for (const FrameStep &step : frame) {
+            passesPerFrame++;
+            drawsPerFrame += step.draws;
+            if (step.draws == 0U) emptyPasses++;
+        }
+
+        std::ostringstream shapeJson;
+        shapeJson << '[';
+        for (size_t index = 0; index < shape.size(); ++index) {
+            if (index > 0) shapeJson << ',';
+            shapeJson << "{\"width\":" << shape[index].width
+                      << ",\"height\":" << shape[index].height
+                      << ",\"passes\":" << shape[index].count
+                      << ",\"draws_per_pass\":" << shape[index].draws
+                      << ",\"depth\":" << (shape[index].depth ? "true" : "false") << '}';
+        }
+        shapeJson << ']';
 
         std::ostringstream json;
         json << "{\"success\":true"
              << ",\"workload_id\":\"" << kEmulatorFrameId << "\""
              << ",\"workload_version\":" << workloadVersion
              << ",\"custom_driver\":" << (context.isCustomDriver() ? "true" : "false")
-             << ",\"pass_count\":" << passes.size()
-             << ",\"repetition_unit\":\"renderpass\""
+             << ",\"repetition_unit\":\"frame\""
              << ",\"repetitions_per_sample\":" << requestedRepetitions
              << ",\"effective_repetitions_per_sample\":" << effectiveRepetitionCount
              << ",\"effect_injection_percent\":" << effectPercent
              << ",\"effect_injection_domain\":\"gpu_workload\""
              << ",\"realized_workload_effect_percent\":"
              << realizedEffectPercent(requestedRepetitions, effectiveRepetitionCount)
-             << ",\"median_batch_us\":" << compositeFrameMs * 1000.0
-             << ",\"composite_frame_ms\":" << compositeFrameMs
-             << ",\"pass_median_ms\":";
-        appendDoubleArray(json, passMedians);
-        json << ",\"pooled_median_frame_ms\":" << median(aggregate)
-             << ",\"p95_frame_ms\":" << percentile(aggregate, 0.95)
-             << ",\"p99_frame_ms\":" << percentile(aggregate, 0.99)
-             << ",\"store_median_ms\":" << storeMedian
-             << ",\"discard_median_ms\":" << discardMedian
-             << ",\"store_penalty_ratio\":" << storePenalty
-             << ",\"passes\":" << passJson.str()
-             << ",\"gpu_timestamps_used\":"
-             << (context.timestampsSupported() ? "true" : "false")
+             << ",\"renderpasses_per_frame\":" << passesPerFrame
+             << ",\"draws_per_frame\":" << drawsPerFrame
+             << ",\"empty_renderpasses_per_frame\":" << emptyPasses
+             << ",\"mean_draws_per_renderpass\":"
+             << static_cast<double>(drawsPerFrame) / static_cast<double>(passesPerFrame)
+             << ",\"distinct_render_targets\":" << sizes.size()
+             << ",\"median_batch_us\":" << frameMs * 1000.0
+             << ",\"composite_frame_ms\":" << frameMs
+             << ",\"p95_frame_ms\":" << percentile(samples, 0.95)
+             << ",\"p99_frame_ms\":" << percentile(samples, 0.99)
+             << ",\"sample_count\":" << samples.size()
+             << ",\"frame_shape\":" << shapeJson.str()
+             << ",\"reference_capture\":\"eden v0.2.1 / Mario Kart 8 Deluxe / Adreno 740 / "
+                "353589 renderpasses / 1126192 draws / 108.6 s\""
+             << ",\"gpu_timestamps_used\":" << (timestamps ? "true" : "false")
              << ",\"capabilities\":" << context.capabilities
-             << ",\"metric_note\":\"Many small render passes with few draws each, sweeping store versus discard, which is the frame shape emulators emit. composite_frame_ms is the sum of the per-pass medians, so the composition is fixed and does not depend on how many samples each pass fit in the measurement window; pooled_median_frame_ms is kept only for comparison with v2 and must not be used to rank. store_penalty_ratio is the cost of keeping a target rather than discarding it. This is a synthetic proxy for tiling behaviour; it does not read driver internals and does not predict game FPS.\""
+             << ",\"metric_note\":\"One sample is one emulator-shaped frame: 93 render passes "
+                "reproducing the size mix and draw-count distribution measured in an Eden API "
+                "trace of Mario Kart 8 Deluxe on this GPU. 18.3% of the passes carry no draw at "
+                "all and 75.3% carry exactly one, which is what makes the fixed cost of tiling "
+                "impossible to amortize. composite_frame_ms is the time for one such frame, so "
+                "it scales with the repetition count. Load and store ops were not recorded by "
+                "the trace and are not modelled: every target here stores.\""
              << '}';
         return json.str();
     }

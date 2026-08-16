@@ -21,7 +21,14 @@ final class Phase15DynamicRangeContract {
      * showed does not resolve anything below roughly 10%.
      */
     static final int COMPOSITE_V8_PROFILE_VERSION = 8;
-    static final int PROFILE_VERSION = 9;
+    /**
+     * v9 declared emulator_frame_pattern at workload version 3, whose frame shape
+     * was assumed rather than measured: 24 to 96 draws per pass against a real
+     * median of 1, and no target above 960x540 when 45% of the emulator's render
+     * passes are 1920x1080.
+     */
+    static final int LINEAR_V9_PROFILE_VERSION = 9;
+    static final int PROFILE_VERSION = 10;
     static final int REPORT_VERSION = 5;
     static final int SCORE_VERSION = 5;
     static final int RANKING_VERSION = 3;
@@ -32,8 +39,10 @@ final class Phase15DynamicRangeContract {
             "Turnip Recommended Validation v4 · carga de emulador";
     static final String COMPOSITE_V8_PROFILE_LABEL =
             "Turnip Recommended Validation v5 · quadro de emulador composto";
-    static final String PROFILE_LABEL =
+    static final String LINEAR_V9_PROFILE_LABEL =
             "Turnip Recommended Validation v6 · réguas lineares";
+    static final String PROFILE_LABEL =
+            "Turnip Recommended Validation v7 · quadro medido do Eden";
     static final String LIMITATION =
             "Workloads v2 usam lotes calibrados por hardware, unidade de repetição explícita, "
                     + "teste de linearidade, tamanho amostral fixado após piloto independente e "
@@ -54,7 +63,7 @@ final class Phase15DynamicRangeContract {
                 .put("result_schema_version", WorkloadContract.RESULT_SCHEMA_VERSION)
                 .put("calibration", BenchmarkCalibrationContract.contractJson())
                 .put("legacy_profiles_preserved", new JSONArray()
-                        .put(1).put(2).put(3).put(4).put(5).put(6).put(7).put(8))
+                        .put(1).put(2).put(3).put(4).put(5).put(6).put(7).put(8).put(9))
                 .put("historical_workload_identity_required", true)
                 .put("limitations", LIMITATION);
     }
