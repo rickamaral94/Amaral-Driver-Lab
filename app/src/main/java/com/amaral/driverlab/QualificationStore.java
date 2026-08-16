@@ -258,6 +258,29 @@ final class QualificationStore {
                 .put("failure", JSONObject.NULL);
     }
 
+    /**
+     * Stores a battery/thermal snapshot taken at a step boundary.
+     *
+     * <p>Only the suite-wide preflight and final_environment existed before, and
+     * those cannot separate "the candidate runs hotter" from "the second arm ran
+     * hot because the suite is long". Sampling per step is what makes throttling
+     * visible where it actually happens.
+     */
+    static void recordStepEnvironment(JSONObject manifest, String stepId,
+                                      String key, JSONObject snapshot) throws Exception {
+        if (snapshot == null) return;
+        JSONObject state = findState(manifest, stepId);
+        if (state != null) state.put(key, snapshot);
+    }
+
+    private static JSONObject findState(JSONObject manifest, String stepId) {
+        try {
+            return requireState(manifest, stepId);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     static void markStepCompleted(File filesDir, JSONObject manifest, String stepId,
                                   File suiteFile, JSONObject report) throws Exception {
         JSONObject state = requireState(manifest, stepId);

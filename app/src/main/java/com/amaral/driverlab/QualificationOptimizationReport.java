@@ -32,6 +32,11 @@ final class QualificationOptimizationReport {
             appendLoaderAudit(loaderAudit, stepId, suite.optJSONArray("phases"));
             JSONObject metric = metricFor(definition, suite);
             if (metric == null) continue;
+            JSONObject breakdown = failureBreakdown(loaderAudit, stepId);
+            if (breakdown != null) {
+                metric.put("failure_breakdown", breakdown);
+                applyOneSidedStatus(metric, breakdown);
+            }
             metrics.put(metric);
             double delta = metric.optDouble("candidate_improvement_percent", Double.NaN);
             if (Double.isFinite(delta)) {
@@ -46,9 +51,13 @@ final class QualificationOptimizationReport {
         JSONObject device = preflight == null ? null : preflight.optJSONObject("device");
         JSONObject target = hardwareTarget(hardware, device);
         JSONObject comparisonSummary = comparisonSummary(metrics);
+        JSONObject runtimeIdentity = runtimeIdentitySummary(loaderAudit);
         return new JSONObject()
                 .put("format_version", FORMAT_VERSION)
                 .put("hardware_target", target)
+                .put("runtime_driver_identity",
+                        runtimeIdentity == null ? JSONObject.NULL : runtimeIdentity)
+                .put("capability_diff", capabilityDiffSummary(scoredSteps))
                 .put("loader_audit", loaderAudit)
                 .put("metrics", metrics)
                 .put("comparison_summary", comparisonSummary)
@@ -188,7 +197,10 @@ final class QualificationOptimizationReport {
         for (int index = 0; index < phases.length(); index++) {
             JSONObject phase = phases.optJSONObject(index);
             if (phase == null) continue;
-            output.put(new JSONObject()
+            JSONObject nativeResult = phase.optJSONObject("native");
+            boolean phaseOk = phase.optBoolean("success", false);
+            boolean nativeOk = nativeResult == null || nativeResult.optBoolean("success", false);
+            JSONObject row = new JSONObject()
                     .put("step_id", stepId)
                     .put("round", phase.optInt("round", -1))
                     .put("role", phase.optString("driver_role",
@@ -198,8 +210,218 @@ final class QualificationOptimizationReport {
                     .put("mode", phase.optString("driver_mode", "unknown"))
                     .put("driver_name", phase.opt("driver_display_name"))
                     .put("driver_sha256", phase.opt("driver_sha256"))
-                    .put("success", phase.optBoolean("success", false)));
+                    .put("success", phaseOk && nativeOk);
+            JSONObject runtime = runtimeIdentity(phase);
+            if (runtime != null) row.put("runtime_driver", runtime);
+            if (!phaseOk || !nativeOk) row.put("failure", failureDetail(phase, nativeResult));
+            output.put(row);
         }
+    }
+
+    /**
+     * Why a round failed, not just that it failed.
+     *
+     * <p>The native runners already record the Vulkan stage, the VkResult and the
+     * failing call, and {@link RunCoordinator} records the process-level reason for
+     * crashes and timeouts. None of it reached the report, which is what forced a
+     * failing candidate to be diagnosed by rebuilding the driver instead of by
+     * reading the round that failed.
+     */
+    private static JSONObject failureDetail(JSONObject phase, JSONObject nativeResult)
+            throws Exception {
+        JSONObject source = nativeResult != null
+                && !nativeResult.optBoolean("success", false) ? nativeResult : phase;
+        JSONObject detail = new JSONObject()
+                .put("type", firstNonEmpty(source.optString("failure_type", ""),
+                        phase.optString("failure_type", ""), "unknown_failure"))
+                .put("stage", firstNonEmpty(source.optString("failure_stage", ""),
+                        phase.optString("failure_stage", ""), "unknown"))
+                .put("message", firstNonEmpty(source.optString("error", ""),
+                        phase.optString("error", ""), ""));
+        if (source.has("vk_result")) {
+            int code = source.optInt("vk_result", 0);
+            detail.put("vk_result", code).put("vk_result_name", VkResultNames.of(code));
+        }
+        if (source.has("vulkan_operation")) detail.put("api_call", source.opt("vulkan_operation"));
+        if (source.optBoolean("device_lost", false)) detail.put("device_lost", true);
+        JSONArray validation = phase.optJSONArray("validation_errors");
+        if (validation != null && validation.length() > 0) {
+            detail.put("validation_errors", validation);
+        }
+        return detail;
+    }
+
+    /**
+     * What the driver reports about itself, per round.
+     *
+     * <p>The package SHA-256 proves which file the loader opened. Only this proves
+     * which driver Vulkan ended up using — the distinction that matters when the
+     * loader falls back to the system blob, and the only thing that separates two
+     * builds of the same Mesa commit.
+     */
+    private static JSONObject runtimeIdentity(JSONObject phase) throws Exception {
+        JSONObject nativeResult = phase.optJSONObject("native");
+        if (nativeResult == null) return null;
+        JSONObject capabilities = nativeResult.optJSONObject("capabilities");
+        JSONObject source = capabilities != null && capabilities.has("driver_id")
+                ? capabilities : nativeResult;
+        if (!source.has("driver_id") && !source.has("gpu_name")) return null;
+        return new JSONObject()
+                .put("gpu_name", source.opt("gpu_name"))
+                .put("driver_id", source.opt("driver_id"))
+                .put("driver_id_name", source.opt("driver_id_name"))
+                .put("driver_name", source.opt("driver_name"))
+                .put("driver_info", source.opt("driver_info"))
+                .put("driver_version_raw", source.opt("driver_version_raw"))
+                .put("api_version", source.opt("api_version"))
+                .put("vendor_id", source.opt("vendor_id"))
+                .put("device_id", source.opt("device_id"))
+                .put("conformance_version", source.opt("conformance_version"));
+    }
+
+    /**
+     * Collapses the per-round runtime identities into one block per arm, and
+     * raises the caveats that invalidate a comparison outright.
+     */
+    private static JSONObject runtimeIdentitySummary(JSONArray audit) throws Exception {
+        JSONObject perRole = new JSONObject();
+        for (int index = 0; index < audit.length(); index++) {
+            JSONObject row = audit.optJSONObject(index);
+            if (row == null) continue;
+            JSONObject identity = row.optJSONObject("runtime_driver");
+            if (identity == null) continue;
+            String role = row.optString("role", "unknown");
+            if (!perRole.has(role)) perRole.put(role, identity);
+        }
+        JSONArray caveats = new JSONArray();
+        JSONObject candidate = perRole.optJSONObject(DriverExecutionIdentity.ROLE_CANDIDATE);
+        JSONObject reference = perRole.optJSONObject(DriverExecutionIdentity.ROLE_REFERENCE);
+        if (candidate != null && reference != null) {
+            String candidateInfo = candidate.optString("driver_info", "");
+            String referenceInfo = reference.optString("driver_info", "");
+            if (!candidateInfo.isEmpty() && candidateInfo.equals(referenceInfo)) {
+                caveats.put("identical_runtime_driver_info_between_arms:" + candidateInfo);
+            }
+        }
+        for (String role : new String[] {DriverExecutionIdentity.ROLE_CANDIDATE,
+                DriverExecutionIdentity.ROLE_REFERENCE}) {
+            JSONObject identity = perRole.optJSONObject(role);
+            if (identity == null) continue;
+            if (identity.optInt("driver_id", -1) != VkResultNames.DRIVER_ID_MESA_TURNIP) {
+                caveats.put("arm_is_not_turnip:" + role + ":"
+                        + identity.optString("driver_id_name", "unknown"));
+            }
+        }
+        if (perRole.length() == 0) return null;
+        return new JSONObject().put("by_role", perRole).put("caveats", caveats);
+    }
+
+    /**
+     * Groups the failures of a step by stage, VkResult and arm.
+     *
+     * <p>Twenty identical failures and twenty different ones are opposite
+     * diagnoses, and a flat count cannot tell them apart.
+     */
+    private static JSONObject failureBreakdown(JSONArray audit, String stepId) throws Exception {
+        JSONObject byStage = new JSONObject();
+        JSONObject byResult = new JSONObject();
+        JSONObject byRole = new JSONObject();
+        int failed = 0;
+        for (int index = 0; index < audit.length(); index++) {
+            JSONObject row = audit.optJSONObject(index);
+            if (row == null || !stepId.equals(row.optString("step_id"))) continue;
+            JSONObject failure = row.optJSONObject("failure");
+            if (failure == null) continue;
+            failed++;
+            increment(byStage, failure.optString("stage", "unknown"));
+            increment(byRole, row.optString("role", "unknown"));
+            if (failure.has("vk_result_name")) {
+                increment(byResult, failure.optString("vk_result_name"));
+            }
+        }
+        if (failed == 0) return null;
+        return new JSONObject()
+                .put("failed_round_count", failed)
+                .put("by_stage", byStage)
+                .put("by_vk_result", byResult)
+                .put("by_role", byRole);
+    }
+
+    private static void increment(JSONObject counter, String key) throws Exception {
+        counter.put(key, counter.optInt(key, 0) + 1);
+    }
+
+    /**
+     * A step where one arm collapsed and the other measured cleanly is a
+     * conclusive result, not missing data.
+     *
+     * <p>Previously it degraded to {@code insufficient_data}, which discarded the
+     * surviving arm's samples along with the failed one's — the reference rounds
+     * were paid for in battery and heat and then thrown away by a presentation
+     * rule. Here the surviving side keeps its statistics and the step is labelled
+     * for the arm that failed.
+     */
+    private static void applyOneSidedStatus(JSONObject metric, JSONObject breakdown)
+            throws Exception {
+        JSONObject byRole = breakdown.optJSONObject("by_role");
+        if (byRole == null) return;
+        int candidateSamples = sampleCount(metric.optJSONObject("candidate"));
+        int referenceSamples = sampleCount(metric.optJSONObject("reference"));
+        boolean candidateFailed = byRole.optInt(DriverExecutionIdentity.ROLE_CANDIDATE, 0) > 0
+                && candidateSamples == 0;
+        boolean referenceFailed = byRole.optInt(DriverExecutionIdentity.ROLE_REFERENCE, 0) > 0
+                && referenceSamples == 0;
+        if (candidateFailed && referenceSamples > 0) {
+            metric.put("classification", "candidate_failed")
+                    .put("winner", DriverExecutionIdentity.ROLE_REFERENCE)
+                    .put("surviving_arm", DriverExecutionIdentity.ROLE_REFERENCE);
+        } else if (referenceFailed && candidateSamples > 0) {
+            metric.put("classification", "reference_failed")
+                    .put("winner", DriverExecutionIdentity.ROLE_CANDIDATE)
+                    .put("surviving_arm", DriverExecutionIdentity.ROLE_CANDIDATE);
+        } else if (candidateFailed && referenceFailed) {
+            metric.put("classification", "both_arms_failed").put("winner", "none");
+        }
+    }
+
+    private static int sampleCount(JSONObject stats) {
+        return stats == null ? 0 : stats.optInt("sample_count", 0);
+    }
+
+    /**
+     * Lifts the capability diff out of the per-suite artifact and into the report.
+     *
+     * <p>It was already computed and already stored; it just never reached the
+     * document anyone reads. An extension that disappeared between two builds
+     * explains a regression better than any timing statistic, because it means the
+     * emulator took a different code path rather than the same path more slowly.
+     */
+    private static Object capabilityDiffSummary(JSONArray scoredSteps) throws Exception {
+        for (int index = 0; index < scoredSteps.length(); index++) {
+            JSONObject scored = scoredSteps.optJSONObject(index);
+            if (scored == null) continue;
+            JSONObject suite = scored.optJSONObject("report");
+            JSONObject diff = suite == null ? null : suite.optJSONObject("capability_diff");
+            if (diff == null) continue;
+            return new JSONObject()
+                    .put("step_id", scored.optString("step_id", "unknown"))
+                    .put("summary", diff.opt("summary"))
+                    .put("driver_identity_changed", diff.opt("driver_identity_changed"))
+                    .put("extensions_gained", diff.opt("extensions_gained"))
+                    .put("extensions_lost", diff.opt("extensions_lost"))
+                    .put("features_gained", diff.opt("features_gained"))
+                    .put("features_lost", diff.opt("features_lost"))
+                    .put("limits_increased", diff.opt("limits_increased"))
+                    .put("limits_decreased", diff.opt("limits_decreased"));
+        }
+        return JSONObject.NULL;
+    }
+
+    private static String firstNonEmpty(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isEmpty()) return value;
+        }
+        return "";
     }
 
     private static JSONObject hardwareTarget(JSONObject hardware, JSONObject device)
@@ -393,8 +615,8 @@ final class QualificationOptimizationReport {
         JSONArray audit = optimization(manifest).optJSONArray("loader_audit");
         if (audit == null || audit.length() == 0) return "";
         StringBuilder out = new StringBuilder("### Auditoria dos drivers carregados\n\n"
-                + "| Etapa | Rodada | Papel | Loader | Pacote | SHA-256 | Sucesso |\n"
-                + "|---|---:|---|---|---|---|---|\n");
+                + "| Etapa | Rodada | Papel | Loader | Pacote | SHA-256 | Sucesso | Falha |\n"
+                + "|---|---:|---|---|---|---|---|---|\n");
         for (int i = 0; i < audit.length(); i++) {
             JSONObject a = audit.optJSONObject(i);
             if (a == null) continue;
@@ -404,9 +626,209 @@ final class QualificationOptimizationReport {
                     .append(escape(a.optString("mode", "—"))).append(" | ")
                     .append(escape(string(a.opt("driver_name")))).append(" | `")
                     .append(shortSha(string(a.opt("driver_sha256")))).append("` | ")
-                    .append(a.optBoolean("success", false) ? "sim" : "não").append(" |\n");
+                    .append(a.optBoolean("success", false) ? "sim" : "não").append(" | ")
+                    .append(failureCell(a.optJSONObject("failure"))).append(" |\n");
         }
         return out.append("\n").toString();
+    }
+
+    private static String failureCell(JSONObject failure) {
+        if (failure == null) return "—";
+        StringBuilder cell = new StringBuilder(escape(failure.optString("stage", "unknown")));
+        String result = failure.optString("vk_result_name", "");
+        if (!result.isEmpty()) cell.append(" · ").append(escape(result));
+        String call = failure.optString("api_call", "");
+        if (!call.isEmpty()) cell.append(" · `").append(escape(call)).append('`');
+        return cell.toString();
+    }
+
+    /**
+     * The runtime identity block: what each arm's driver says about itself.
+     *
+     * <p>Placed before the metrics because a comparison between two arms that
+     * resolved to the same driver, or to the system blob, has no contrast to
+     * report and the numbers below it mean nothing.
+     */
+    static String runtimeIdentityMarkdown(JSONObject manifest) {
+        JSONObject identity = optimization(manifest).optJSONObject("runtime_driver_identity");
+        if (identity == null) return "";
+        JSONObject byRole = identity.optJSONObject("by_role");
+        if (byRole == null || byRole.length() == 0) return "";
+        StringBuilder out = new StringBuilder("### Identidade do driver em runtime\n\n"
+                + "| Papel | driverID | driverName | driverInfo | GPU | API |\n"
+                + "|---|---|---|---|---|---|\n");
+        java.util.Iterator<String> roles = byRole.keys();
+        while (roles.hasNext()) {
+            String role = roles.next();
+            JSONObject value = byRole.optJSONObject(role);
+            if (value == null) continue;
+            out.append("| ").append(escape(role)).append(" | ")
+                    .append(escape(string(value.opt("driver_id")))).append(" · ")
+                    .append(escape(string(value.opt("driver_id_name")))).append(" | ")
+                    .append(escape(string(value.opt("driver_name")))).append(" | `")
+                    .append(escape(string(value.opt("driver_info")))).append("` | ")
+                    .append(escape(string(value.opt("gpu_name")))).append(" | ")
+                    .append(escape(string(value.opt("api_version")))).append(" |\n");
+        }
+        JSONArray caveats = identity.optJSONArray("caveats");
+        if (caveats != null && caveats.length() > 0) {
+            out.append("\n**Ressalvas que invalidam a comparação:**\n\n");
+            for (int i = 0; i < caveats.length(); i++) {
+                out.append("- `").append(escape(caveats.optString(i))).append("`\n");
+            }
+        }
+        return out.append("\n").toString();
+    }
+
+    /** Failure breakdown per step: how the failures distribute, not how many. */
+    static String failureBreakdownMarkdown(JSONObject manifest) {
+        JSONArray values = metrics(manifest);
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < values.length(); i++) {
+            JSONObject item = values.optJSONObject(i);
+            if (item == null) continue;
+            JSONObject breakdown = item.optJSONObject("failure_breakdown");
+            if (breakdown == null) continue;
+            out.append("- **").append(escape(item.optString("label",
+                            item.optString("step_id")))).append("** — ")
+                    .append(breakdown.optInt("failed_round_count", 0))
+                    .append(" rodada(s) com falha; estágios: ")
+                    .append(escape(counterText(breakdown.optJSONObject("by_stage"))));
+            JSONObject byResult = breakdown.optJSONObject("by_vk_result");
+            if (byResult != null && byResult.length() > 0) {
+                out.append("; VkResult: ").append(escape(counterText(byResult)));
+            }
+            out.append("; por braço: ")
+                    .append(escape(counterText(breakdown.optJSONObject("by_role")))).append("\n");
+        }
+        if (out.length() == 0) return "";
+        return "### Falhas por etapa\n\n" + out + "\n";
+    }
+
+    private static String counterText(JSONObject counter) {
+        if (counter == null || counter.length() == 0) return "—";
+        StringBuilder text = new StringBuilder();
+        java.util.Iterator<String> keys = counter.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (text.length() > 0) text.append(", ");
+            text.append(key).append('×').append(counter.optInt(key, 0));
+        }
+        return text.toString();
+    }
+
+    /** Capability diff, promoted from the suite artifact into the report body. */
+    static String capabilityDiffMarkdown(JSONObject manifest) {
+        JSONObject diff = optimization(manifest).optJSONObject("capability_diff");
+        if (diff == null) return "";
+        StringBuilder out = new StringBuilder("### Diferença de capacidades entre os braços\n\n");
+        int gained = length(diff.optJSONArray("extensions_gained"));
+        int lost = length(diff.optJSONArray("extensions_lost"));
+        int featuresGained = length(diff.optJSONArray("features_gained"));
+        int featuresLost = length(diff.optJSONArray("features_lost"));
+        if (gained + lost + featuresGained + featuresLost == 0) {
+            out.append("- Nenhuma diferença de capacidade entre os braços.\n");
+        } else {
+            out.append("- Extensões: +").append(gained).append(" / −").append(lost)
+                    .append(" · features: +").append(featuresGained)
+                    .append(" / −").append(featuresLost).append("\n");
+            appendList(out, "Extensões perdidas", diff.optJSONArray("extensions_lost"));
+            appendList(out, "Extensões ganhas", diff.optJSONArray("extensions_gained"));
+            appendList(out, "Features perdidas", diff.optJSONArray("features_lost"));
+            appendList(out, "Limites reduzidos", diff.optJSONArray("limits_decreased"));
+        }
+        return out.append("\n").toString();
+    }
+
+    private static void appendList(StringBuilder out, String label, JSONArray values) {
+        if (values == null || values.length() == 0) return;
+        out.append("- ").append(label).append(": ");
+        for (int i = 0; i < values.length(); i++) {
+            if (i > 0) out.append(", ");
+            out.append('`').append(escape(values.optString(i))).append('`');
+        }
+        out.append('\n');
+    }
+
+    private static int length(JSONArray values) {
+        return values == null ? 0 : values.length();
+    }
+
+    /**
+     * Temperature and charge per step, plus the reason consumption may be
+     * unreadable.
+     *
+     * <p>The project's guidelines make temperature and consumption mandatory in an
+     * A/B: a gain paid for in either is a trade, not a gain. The one case that has
+     * to be said out loud rather than reported as a number is a charging device —
+     * the charge counter climbs during the run, so any consumption delta computed
+     * from it is meaningless, and reporting it as if it were valid is worse than
+     * reporting nothing.
+     */
+    static String thermalMarkdown(JSONObject manifest) {
+        JSONArray states = manifest.optJSONObject("execution") == null ? null
+                : manifest.optJSONObject("execution").optJSONArray("steps");
+        if (states == null || states.length() == 0) return "";
+        boolean charging = chargingDuringRun(manifest);
+        StringBuilder rows = new StringBuilder();
+        for (int i = 0; i < states.length(); i++) {
+            JSONObject state = states.optJSONObject(i);
+            if (state == null) continue;
+            JSONObject start = deviceOf(state.optJSONObject("environment_start"));
+            JSONObject end = deviceOf(state.optJSONObject("environment_end"));
+            if (start == null || end == null) continue;
+            double startTemp = start.optDouble("battery_temperature_c", Double.NaN);
+            double endTemp = end.optDouble("battery_temperature_c", Double.NaN);
+            long startCharge = start.optLong("battery_charge_counter_uah", 0L);
+            long endCharge = end.optLong("battery_charge_counter_uah", 0L);
+            int maxThermal = Math.max(start.optInt("thermal_status", 0),
+                    end.optInt("thermal_status", 0));
+            rows.append("| ").append(escape(state.optString("step_id", "—"))).append(" | ")
+                    .append(number(startTemp, 1)).append(" | ")
+                    .append(number(endTemp, 1)).append(" | ")
+                    .append(Double.isFinite(startTemp) && Double.isFinite(endTemp)
+                            ? String.format(Locale.US, "%+.1f", endTemp - startTemp) : "—")
+                    .append(" | ").append(maxThermal).append(" | ")
+                    .append(charging ? "n/d (carregando)"
+                            : String.valueOf(startCharge - endCharge))
+                    .append(" |\n");
+        }
+        if (rows.length() == 0) return "";
+        StringBuilder out = new StringBuilder("### Temperatura e consumo por etapa\n\n");
+        if (charging) {
+            out.append("> O aparelho estava carregando durante a execução. "
+                    + "O contador de carga sobe, então o consumo por etapa não é "
+                    + "mensurável nesta corrida e aparece como `n/d`. "
+                    + "A comparação térmica continua válida enquanto o estado de "
+                    + "carga não mudar no meio da suíte.\n\n");
+        }
+        out.append("| Etapa | T. início (°C) | T. fim (°C) | Δ | thermal_status máx | Carga gasta (µAh) |\n")
+                .append("|---|---:|---:|---:|---:|---:|\n").append(rows);
+        return out.append("\n").toString();
+    }
+
+    private static JSONObject deviceOf(JSONObject snapshot) {
+        if (snapshot == null) return null;
+        JSONObject device = snapshot.optJSONObject("device");
+        return device == null ? snapshot : device;
+    }
+
+    /** BatteryManager.BATTERY_STATUS_CHARGING (2) or FULL (5) at either boundary. */
+    private static boolean chargingDuringRun(JSONObject manifest) {
+        return isCharging(manifest.optJSONObject("preflight"))
+                || isCharging(manifest.optJSONObject("final_environment"));
+    }
+
+    private static boolean isCharging(JSONObject environment) {
+        JSONObject device = deviceOf(environment);
+        if (device == null) return false;
+        int status = device.optInt("battery_status", -1);
+        return status == 2 || status == 5;
+    }
+
+    private static String number(double value, int decimals) {
+        return Double.isFinite(value)
+                ? String.format(Locale.US, "%." + decimals + "f", value) : "—";
     }
 
     static String metricsMarkdown(JSONObject manifest) {
