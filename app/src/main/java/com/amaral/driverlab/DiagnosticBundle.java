@@ -3,7 +3,6 @@ package com.amaral.driverlab;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -47,17 +46,15 @@ final class DiagnosticBundle {
         JSONArray manifestEntries = new JSONArray();
         try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(bundle, false))) {
             for (EntrySource source : sources) {
-                byte[] bytes = read(source.file);
-                String sha = sha256(bytes);
                 ZipEntry entry = new ZipEntry(source.path);
                 entry.setTime(0L);
                 zip.putNextEntry(entry);
-                zip.write(bytes);
+                CopiedEntry copied = copyAndDigest(source.file, zip);
                 zip.closeEntry();
                 manifestEntries.put(new JSONObject()
                         .put("path", source.path)
-                        .put("bytes", bytes.length)
-                        .put("sha256", sha));
+                        .put("bytes", copied.bytes)
+                        .put("sha256", copied.sha256));
             }
             int profileVersion = manifest.getJSONObject("profile").optInt("profile_version", 1);
             int bundleVersion = profileVersion >= 3 ? Phase11Contract.BUNDLE_VERSION
@@ -84,7 +81,7 @@ final class DiagnosticBundle {
                 .put("diagnostic_bundle_version", bundleVersion)
                 .put("relative_path", bundle.getName())
                 .put("bytes", bundle.length())
-                .put("sha256", sha256(read(bundle)))
+                .put("sha256", sha256(bundle))
                 .put("entry_count", manifestEntries.length() + 1)
                 .put("includes_global_logcat", false)
                 .put("adb_capture_recommended", true);
@@ -106,18 +103,35 @@ final class DiagnosticBundle {
         if (file.isFile() && file.length() <= MAX_SOURCE_FILE_BYTES) output.add(new EntrySource(file, path));
     }
 
-    private static byte[] read(File file) throws Exception {
-        try (FileInputStream input = new FileInputStream(file);
-             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+    private static CopiedEntry copyAndDigest(File file, ZipOutputStream output) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        long total = 0L;
+        try (FileInputStream input = new FileInputStream(file)) {
             byte[] buffer = new byte[32 * 1024];
             int count;
-            while ((count = input.read(buffer)) >= 0) output.write(buffer, 0, count);
-            return output.toByteArray();
+            while ((count = input.read(buffer)) >= 0) {
+                if (count == 0) continue;
+                output.write(buffer, 0, count);
+                digest.update(buffer, 0, count);
+                total += count;
+            }
         }
+        return new CopiedEntry(total, hex(digest.digest()));
     }
 
-    private static String sha256(byte[] bytes) throws Exception {
-        byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+    private static String sha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (FileInputStream input = new FileInputStream(file)) {
+            byte[] buffer = new byte[32 * 1024];
+            int count;
+            while ((count = input.read(buffer)) >= 0) {
+                if (count > 0) digest.update(buffer, 0, count);
+            }
+        }
+        return hex(digest.digest());
+    }
+
+    private static String hex(byte[] digest) {
         StringBuilder output = new StringBuilder();
         for (byte item : digest) output.append(String.format("%02x", item & 0xff));
         return output.toString();
@@ -129,6 +143,16 @@ final class DiagnosticBundle {
         EntrySource(File file, String path) {
             this.file = file;
             this.path = path;
+        }
+    }
+
+    private static final class CopiedEntry {
+        final long bytes;
+        final String sha256;
+
+        CopiedEntry(long bytes, String sha256) {
+            this.bytes = bytes;
+            this.sha256 = sha256;
         }
     }
 }

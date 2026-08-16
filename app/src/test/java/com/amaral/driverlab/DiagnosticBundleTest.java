@@ -7,6 +7,7 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.util.zip.ZipFile;
 
 import static org.junit.Assert.assertEquals;
@@ -17,7 +18,7 @@ public final class DiagnosticBundleTest {
     @Rule public final TemporaryFolder temporary = new TemporaryFolder();
 
     @Test
-    public void bundleContainsManifestReportAndProfile() throws Exception {
+    public void bundleContainsManifestReportAndProfileAndStreamsLargeSource() throws Exception {
         File filesDir = temporary.newFolder("files");
         File driverDir = temporary.newFolder("driver");
         File zip = temporary.newFile("driver.zip");
@@ -33,7 +34,11 @@ public final class DiagnosticBundleTest {
                 .put("qualification_id", manifest.getString("qualification_id"))
                 .put("profile_sha256", manifest.getString("profile_sha256"));
         ResultFiles.writeAtomic(new File(directory, "report.json"), report.toString(2));
-        ResultFiles.writeAtomic(new File(directory, "summary.html"), "<html></html>");
+        File summary = new File(directory, "summary.html");
+        byte[] block = new byte[64 * 1024];
+        try (FileOutputStream output = new FileOutputStream(summary)) {
+            for (int index = 0; index < 64; index++) output.write(block);
+        }
 
         JSONObject descriptor = DiagnosticBundle.create(filesDir, qualificationFile,
                 manifest, report);
@@ -44,6 +49,7 @@ public final class DiagnosticBundleTest {
             assertNotNull(archive.getEntry("manifest.json"));
             assertNotNull(archive.getEntry("report.json"));
             assertNotNull(archive.getEntry("profile.json"));
+            assertEquals(summary.length(), archive.getEntry("summary.html").getSize());
         }
     }
 
