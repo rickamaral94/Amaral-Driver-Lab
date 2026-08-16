@@ -334,7 +334,7 @@ final class RunCoordinator {
         double medianUs = extractMedianBatchUs(result);
         if (!result.optBoolean("success", false) || !Double.isFinite(medianUs)
                 || medianUs <= 0.0) {
-            throw new IllegalStateException("Probe de calibração sem mediana válida");
+            throw new IllegalStateException(describeProbeFailure(result));
         }
         JSONObject nativeResult = result.optJSONObject("native");
         calibrationObservations.put(new JSONObject()
@@ -694,6 +694,61 @@ final class RunCoordinator {
                 .put("runner_last_stage", failure.opt("runner_last_stage")));
         phaseResults.put(failure);
         retireCompletedRunner(this::finishSuite);
+    }
+
+    /**
+     * Turns a failed calibration probe into a sentence that names the cause.
+     *
+     * <p>The probe used to fail as "sem mediana válida", which describes the
+     * symptom and discards the diagnosis the runner had already written down.
+     * When a driver cannot present to the screen, every visible scene dies in
+     * about a second, so all the operator sees is the runner activity flashing —
+     * and the natural reading is that the app is broken rather than the driver.
+     */
+    static String describeProbeFailure(JSONObject result) {
+        JSONObject nativeResult = result == null ? null : result.optJSONObject("native");
+        JSONObject source = nativeResult != null
+                && !nativeResult.optBoolean("success", false) ? nativeResult : result;
+        if (source == null) return "Probe de calibração sem mediana válida";
+
+        String stage = source.optString("failure_stage", "");
+        String call = source.optString("vulkan_operation", "");
+        boolean hasResult = source.has("vk_result");
+        String resultName = hasResult
+                ? VkResultNames.of(source.optInt("vk_result", 0)) : "";
+
+        if (stage.isEmpty() && call.isEmpty() && !hasResult) {
+            String error = source.optString("error", "");
+            return error.isEmpty() ? "Probe de calibração sem mediana válida"
+                    : "Probe de calibração falhou: " + error;
+        }
+
+        StringBuilder message = new StringBuilder();
+        if (isPresentationFailure(stage, call)) {
+            message.append("O driver não conseguiu apresentar na tela. ");
+        } else {
+            message.append("O driver falhou na calibração. ");
+        }
+        if (!call.isEmpty()) message.append(call);
+        if (!resultName.isEmpty()) {
+            message.append(call.isEmpty() ? "" : " → ").append(resultName);
+        }
+        if (!stage.isEmpty()) message.append(" (estágio ").append(stage).append(')');
+        if (source.optBoolean("device_lost", false)) message.append(" · device lost");
+        return message.toString();
+    }
+
+    /**
+     * Whether the failure is in the swapchain path rather than in rendering.
+     *
+     * <p>Worth separating because it fails only the visible scenes: offscreen
+     * correctness never touches a swapchain and keeps passing, which is precisely
+     * the combination that makes the fault look like an app defect.
+     */
+    private static boolean isPresentationFailure(String stage, String call) {
+        return call.contains("AcquireNextImage") || call.contains("QueuePresent")
+                || call.contains("CreateSwapchain")
+                || "render_visible_frame".equals(stage) || "create_swapchain".equals(stage);
     }
 
     private Phase calibrationPhase() {
