@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id 'com.android.application'
 }
@@ -8,6 +10,10 @@ def configuredClientId = providers.gradleProperty('GITHUB_CLIENT_ID')
         .replace('\\', '\\\\')
         .replace('"', '\\"')
 
+def alphaKeyFile = layout.buildDirectory.file('generated/signing/amaral-alpha.keystore').get().asFile
+alphaKeyFile.parentFile.mkdirs()
+alphaKeyFile.bytes = Base64.decoder.decode(file('alpha-debug.keystore.b64').text.trim())
+
 android {
     namespace 'com.amaral.driverlab'
     compileSdk 35
@@ -17,8 +23,8 @@ android {
         applicationId 'com.amaral.driverlab'
         minSdk 28
         targetSdk 35
-        versionCode 36
-        versionName '0.13.0-alpha23'
+        versionCode 37
+        versionName '0.13.0-alpha24'
 
         buildConfigField 'String', 'GITHUB_CLIENT_ID', '"' + configuredClientId + '"'
 
@@ -58,9 +64,19 @@ android {
         unitTests.returnDefaultValues = true
     }
 
+    signingConfigs {
+        alpha {
+            storeFile alphaKeyFile
+            storePassword 'android'
+            keyAlias 'amaral-alpha'
+            keyPassword 'android'
+        }
+    }
+
     buildTypes {
         debug {
             debuggable true
+            signingConfig signingConfigs.alpha
         }
         release {
             minifyEnabled false
