@@ -1,0 +1,128 @@
+name: Publish v0.13.0-alpha27 prerelease
+
+on:
+  push:
+    branches: [agent/alpha21-ranking-v5]
+    paths: ['.github/workflows/publish-alpha27-prerelease.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_CLIENT_ID: ${{ vars.GITHUB_CLIENT_ID }}
+      TAG: v0.13.0-alpha27
+      APK_NAME: Amaral-Driver-Lab-v0.13.0-alpha27.apk
+      SHA_NAME: Amaral-Driver-Lab-v0.13.0-alpha27.sha256
+      CERT_SHA256: 4bb6b5cb69f6b46b50e5870ea7830db5465617fca7a593cfbb5bc4f0885b8173
+    steps:
+      - name: Checkout prerelease source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Native toolchain
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" \
+            "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest :telemetry-sdk:testDebugUnitTest --stacktrace --console=plain
+
+      - name: Build prerelease APK
+        run: ./gradlew :app:assembleDebug --stacktrace --console=plain
+
+      - name: Prepare and verify release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" \
+            | grep -F "versionName='0.13.0-alpha27'"
+          actual_cert=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify \
+            --print-certs "$apk" | awk -F': ' '/certificate SHA-256 digest/ {print $2; exit}')
+          test "$actual_cert" = "$CERT_SHA256"
+          mkdir -p release
+          cp "$apk" "release/${APK_NAME}"
+          (cd release && sha256sum "${APK_NAME}" > "${SHA_NAME}")
+
+      - name: Publish GitHub prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES=$(cat <<'EOF'
+          ## Amaral Driver Lab v0.13.0-alpha27
+
+          Correção de um número errado no relatório.
+
+          A alpha25 promoveu o `capability_diff` do `suite.json` para o corpo do relatório. A promoção estava certa — uma extensão que some entre dois braços explica uma regressão melhor que qualquer estatística de tempo. Faltou a guarda.
+
+          ### O sintoma
+          Uma comparação entre duas builds compiladas **do mesmo fonte Mesa** publicou:
+
+          ```
+          Extensões: +42 / −0
+          ```
+
+          Isso é impossível. A causa é um lado que não enumerou extensões: comparar contra uma lista vazia reporta a lista inteira do outro braço como ganha.
+
+          ### O que muda
+          - o `capability_diff` só é calculado quando **os dois lados** enumeraram extensões;
+          - quando um lado não enumerou, o bloco é omitido em vez de publicar um número inventado.
+
+          Vale notar que foi a promoção da alpha25 que expôs o erro. Enquanto o campo ficava enterrado no `suite.json`, ele estava igualmente errado e ninguém via.
+
+          ### Instalação
+          Mesma assinatura desde a alpha24. Instala por cima sem perder histórico.
+          EOF
+          )
+          gh release create "$TAG" --target "$GITHUB_SHA" \
+            --title "Amaral Driver Lab v0.13.0-alpha27" \
+            --notes "$NOTES" --prerelease
+          gh release upload "$TAG" \
+            "release/${APK_NAME}" "release/${SHA_NAME}" --clobber
+
+      - name: Verify prerelease and record status
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" \
+            --json tagName,name,url,targetCommitish,publishedAt,isDraft,isPrerelease,assets \
+            > /tmp/alpha27-release.json
+          test "$(jq -r '.isDraft' /tmp/alpha27-release.json)" = "false"
+          test "$(jq -r '.isPrerelease' /tmp/alpha27-release.json)" = "true"
+          apk_sha=$(awk '{print $1}' "release/${SHA_NAME}")
+          remote_digest=$(jq -r --arg name "$APK_NAME" \
+            '.assets[] | select(.name == $name) | .digest' /tmp/alpha27-release.json)
+          test "$remote_digest" = "sha256:${apk_sha}"
+
+          git checkout "$GITHUB_REF_NAME"
+          git pull --ff-only origin "$GITHUB_REF_NAME"
+          mkdir -p .release-status
+          jq --arg expected "$apk_sha" --arg certificate "$CERT_SHA256" \
+             --arg workflow_run "$GITHUB_RUN_ID" \
+             '. + {verification: {expected_apk_sha256: $expected, certificate_sha256: $certificate, workflow_run: $workflow_run, status: "published_as_prerelease_and_verified"}}' \
+             /tmp/alpha27-release.json > .release-status/v0.13.0-alpha27.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .release-status/v0.13.0-alpha27.json
+          git commit -m "release: record verified v0.13.0-alpha27 prerelease" || true
+          git push origin HEAD:"$GITHUB_REF_NAME"
