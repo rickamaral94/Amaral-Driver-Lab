@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -121,6 +122,8 @@ final class QualificationCoordinator {
             QualificationProfile.Step step = QualificationProfile.step(profileVersion, stepId);
             if (step == null) throw new IllegalStateException("Etapa desconhecida: " + stepId);
             QualificationStore.markStepRunning(manifest, stepId);
+            QualificationStore.recordStepEnvironment(manifest, stepId,
+                    "environment_start", DeviceSnapshot.capture(activity));
             QualificationStore.save(qualificationFile, manifest);
             listener.onUpdated(qualificationFile, manifest);
             int ordinal = stepOrdinal(stepId);
@@ -172,6 +175,8 @@ final class QualificationCoordinator {
                         currentRun = null;
                         if (report.optBoolean("qualification_abort_recommended", false)) {
                             abortAfterRunnerFailure(step, reportFile, report);
+                        } else if (report.optJSONObject("calibration_failure") != null) {
+                            failSuiteStepAndContinue(step, reportFile, report);
                         } else {
                             completeSuiteStep(step, reportFile, report);
                         }
@@ -230,7 +235,26 @@ final class QualificationCoordinator {
         }
     }
 
+    private void failSuiteStepAndContinue(QualificationProfile.Step step, File reportFile,
+                                          JSONObject report) {
+        try {
+            JSONObject failure = report.optJSONObject("calibration_failure");
+            String reason = failure == null ? "calibration_failure"
+                    : failure.optString("failure_type", "calibration_failure");
+            QualificationStore.markStepFailedArtifact(activity.getFilesDir(), manifest,
+                    step.stepId, reportFile, report,
+                    "Falha controlada durante a calibração (" + reason + ")");
+            listener.onStatus("Etapa " + step.label
+                    + " falhou; o runner permaneceu íntegro e o diagnóstico continuará.");
+            persistAndContinue(step);
+        } catch (Throwable error) {
+            failStep(step, "Falha ao registrar suite com erro: " + error.getMessage());
+        }
+    }
+
     private void persistAndContinue(QualificationProfile.Step step) throws Exception {
+        QualificationStore.recordStepEnvironment(manifest, step.stepId,
+                "environment_end", DeviceSnapshot.capture(activity));
         QualificationStore.save(qualificationFile, manifest);
         listener.onUpdated(qualificationFile, manifest);
         continueAfterCooldown(step.cooldownSeconds);
@@ -239,6 +263,8 @@ final class QualificationCoordinator {
     private void failStep(QualificationProfile.Step step, String message) {
         try {
             QualificationStore.markStepFailed(manifest, step.stepId, message);
+            QualificationStore.recordStepEnvironment(manifest, step.stepId,
+                    "environment_end", DeviceSnapshot.capture(activity));
             QualificationStore.save(qualificationFile, manifest);
             listener.onUpdated(qualificationFile, manifest);
             listener.onStatus("Etapa " + step.label + " falhou; o diagnóstico continuará.");
@@ -263,11 +289,16 @@ final class QualificationCoordinator {
                     .put("abort_reason", reason)
                     .put("aborted_at_ms", System.currentTimeMillis());
             QualificationStore.save(qualificationFile, manifest);
+            JSONObject bundle = DiagnosticBundle.create(
+                    activity.getFilesDir(), qualificationFile, manifest, report);
+            manifest.put("diagnostic_bundle", bundle);
+            QualificationStore.save(qualificationFile, manifest);
+            listener.onUpdated(qualificationFile, manifest);
             active = false;
             handler.removeCallbacksAndMessages(null);
             listener.onUpdated(qualificationFile, manifest);
-            listener.onFailure("Teste interrompido com segurança após o crash do runner; "
-                    + "o relatório e os logs foram preservados", null);
+            listener.onFailure("Teste interrompido com segurança após falha real do runner; "
+                    + "o relatório e o ZIP parcial foram preservados", null);
         } catch (Throwable error) {
             active = false;
             listener.onFailure("Falha ao registrar a interrupção segura", error);
@@ -291,36 +322,145 @@ final class QualificationCoordinator {
     }
 
     private void finishQualification() {
+        String stage = "start";
+        JSONArray warnings = new JSONArray();
         try {
             listener.onStatus("Consolidando performance, compatibilidade, telemetria e bundle…");
-            JSONObject finalEnvironment = QualificationPreflight.capture(activity);
-            JSONObject comparison = QualificationPreflight.compare(
-                    manifest.getJSONObject("preflight"), finalEnvironment);
             File directory = qualificationFile.getParentFile();
-            ResultFiles.writeAtomic(new File(directory, "final-environment.json"),
-                    finalEnvironment.toString(2));
-            ResultFiles.writeAtomic(new File(directory, "environment-comparison.json"),
-                    comparison.toString(2));
-            JSONObject report = QualificationReport.build(
-                    activity.getFilesDir(), manifest, finalEnvironment, comparison);
+            JSONObject initialEnvironment = manifest.getJSONObject("preflight");
+            JSONObject finalEnvironment;
+            stage = "capture_final_environment";
+            try {
+                finalEnvironment = QualificationPreflight.capture(activity);
+            } catch (Throwable error) {
+                recordFinalizationWarning(warnings, stage, error);
+                finalEnvironment = new JSONObject(initialEnvironment.toString())
+                        .put("capture_fallback", true);
+            }
+            JSONObject comparison;
+            stage = "compare_environment";
+            try {
+                comparison = QualificationPreflight.compare(initialEnvironment, finalEnvironment);
+            } catch (Throwable error) {
+                recordFinalizationWarning(warnings, stage, error);
+                comparison = new JSONObject()
+                        .put("temperature_delta_c", JSONObject.NULL)
+                        .put("warnings", new JSONArray().put("final_environment_unavailable"))
+                        .put("blockers", new JSONArray().put("environment_gate_not_verified"))
+                        .put("ranking_blocked", true);
+            }
+            stage = "write_environment_artifacts";
+            try {
+                ResultFiles.writeAtomic(new File(directory, "final-environment.json"),
+                        finalEnvironment.toString(2));
+                ResultFiles.writeAtomic(new File(directory, "environment-comparison.json"),
+                        comparison.toString(2));
+            } catch (Throwable error) {
+                recordFinalizationWarning(warnings, stage, error);
+            }
+
+            JSONObject report;
+            stage = "build_report";
+            try {
+                report = QualificationReport.build(
+                        activity.getFilesDir(), manifest, finalEnvironment, comparison);
+            } catch (Throwable error) {
+                recordFinalizationWarning(warnings, stage, error);
+                report = QualificationFinalization.fallbackReport(manifest, finalEnvironment,
+                        comparison, stage, error, warnings);
+            }
             File reportFile = new File(directory, "report.json");
-            ResultFiles.writeAtomic(reportFile, report.toString(2));
-            report.put("local_leaderboard",
-                    QualificationHistory.leaderboard(activity.getFilesDir(), report));
-            ResultFiles.writeAtomic(reportFile, report.toString(2));
-            ResultFiles.writeAtomic(new File(directory, "summary.html"),
-                    LocalizedReportRenderer.render(activity, report));
-            JSONObject bundle = DiagnosticBundle.create(
-                    activity.getFilesDir(), qualificationFile, manifest, report);
-            QualificationStore.finish(manifest, finalEnvironment, comparison, report, bundle);
+            stage = "build_local_leaderboard";
+            try {
+                report.put("local_leaderboard",
+                        QualificationHistory.leaderboard(activity.getFilesDir(), report));
+            } catch (Throwable error) {
+                recordFinalizationWarning(warnings, stage, error);
+                report.put("local_leaderboard", JSONObject.NULL);
+            }
+            if (warnings.length() > 0) report.put("finalization_warnings", warnings);
+            stage = "write_report";
+            try {
+                ResultFiles.writeAtomic(reportFile, report.toString(2));
+            } catch (Throwable error) {
+                recordFinalizationWarning(warnings, stage, error);
+            }
+            stage = "render_summary";
+            try {
+                ResultFiles.writeAtomic(new File(directory, "summary.html"),
+                        LocalizedReportRenderer.render(activity, report));
+            } catch (Throwable error) {
+                recordFinalizationWarning(warnings, stage, error);
+            }
+
+            // Persist completion before building optional artifacts. A ZIP/HTML failure must
+            // never turn a successfully executed 20-minute qualification back into "running".
+            stage = "persist_completed_manifest";
+            if (warnings.length() > 0) report.put("finalization_warnings", warnings);
+            QualificationStore.finish(manifest, finalEnvironment, comparison, report, null);
+            if (warnings.length() > 0) {
+                manifest.getJSONObject("execution")
+                        .put("state", "completed_with_finalization_warnings");
+            }
             QualificationStore.save(qualificationFile, manifest);
+            listener.onUpdated(qualificationFile, manifest);
+
+            JSONObject bundle = null;
+            stage = "build_diagnostic_bundle";
+            try {
+                bundle = DiagnosticBundle.create(
+                        activity.getFilesDir(), qualificationFile, manifest, report);
+                manifest.put("diagnostic_bundle", bundle);
+                QualificationStore.save(qualificationFile, manifest);
+                listener.onUpdated(qualificationFile, manifest);
+            } catch (Throwable error) {
+                recordFinalizationWarning(warnings, stage, error);
+                report.put("finalization_warnings", warnings);
+                manifest.getJSONObject("execution")
+                        .put("state", "completed_with_finalization_warnings");
+                manifest.put("report", report).put("diagnostic_bundle", JSONObject.NULL);
+                QualificationStore.save(qualificationFile, manifest);
+                listener.onUpdated(qualificationFile, manifest);
+            }
+            stage = "capture_ranking_measurement";
+            try {
+                JSONObject fingerprint = EnvironmentFingerprint.capture(activity);
+                MeasurementRecord measurement = RankingMeasurementExtractor.fromQualification(
+                        activity.getFilesDir(), manifest, fingerprint);
+                java.util.List<MeasurementRecord> prior = RankingStore.load(activity.getFilesDir());
+                prior.add(measurement);
+                JSONObject enriched = measurement.toJson().put("noise_floor_at_capture",
+                        DriverRanking.noiseFloorForRecords(prior,
+                                fingerprint.getString("device_fingerprint_sha256"),
+                                fingerprint.getString("epoch_sha256")));
+                measurement = new MeasurementRecord(enriched);
+                RankingStore.append(activity.getFilesDir(), measurement);
+            } catch (Throwable rankingError) {
+                AppDiagnostics.event("ranking_measurement_capture_failed",
+                        AppDiagnostics.details("qualification_id",
+                                manifest.optString("qualification_id"),
+                                "error", rankingError.toString()));
+            }
             active = false;
             listener.onComplete(qualificationFile, manifest,
-                    new File(directory, bundle.getString("relative_path")));
+                    bundle == null ? null
+                            : new File(directory, bundle.getString("relative_path")));
         } catch (Throwable error) {
             active = false;
-            listener.onFailure("Falha ao consolidar o Full Qualification", error);
+            AppDiagnostics.event("qualification_finalization_failed",
+                    AppDiagnostics.details("qualification_id",
+                            manifest == null ? "unknown" : manifest.optString("qualification_id"),
+                            "stage", stage, "error", error.toString()));
+            listener.onFailure("Falha ao consolidar o Full Qualification em " + stage, error);
         }
+    }
+
+    private void recordFinalizationWarning(JSONArray warnings, String stage, Throwable error)
+            throws Exception {
+        warnings.put(QualificationFinalization.warning(stage, error));
+        AppDiagnostics.event("qualification_finalization_warning",
+                AppDiagnostics.details("qualification_id", manifest.optString("qualification_id"),
+                        "stage", stage, "error", error.toString()));
     }
 
     private DriverPackage loadDriver(String sha256) throws Exception {

@@ -268,17 +268,20 @@ final class RunCoordinator {
     private void launchCalibrationProbe(int repetitions, int effectPercent, String stage) {
         if (!canContinue()) return;
         try {
-            Phase phase = new Phase(false, 0, reference);
+            // Calibrate on an injected Turnip arm. The system blob may legitimately reject a
+            // workload that the candidate supports; the selected multiplier remains shared by
+            // both arms and therefore is not per-driver calibration.
+            Phase phase = calibrationPhase();
             currentResultFile = new File(suiteDirectory,
                     "calibration-" + stage.replaceAll("[^a-z0-9_-]", "-") + ".json");
             listener.onStatus("Calibração " + stage + " · " + repetitions
                     + " repetição(ões) · injeção GPU " + effectPercent
-                    + "% · braço de referência");
+                    + "% · " + calibrationArmLabel());
             Intent intent = new Intent(activity, VisualSceneContract.isVisualScene(workloadId)
                     ? VisualRunnerActivity.class : RunnerActivity.class);
             intent.putExtra(RunnerActivity.EXTRA_RESULT_PATH,
                     currentResultFile.getAbsolutePath());
-            intent.putExtra(RunnerActivity.EXTRA_PHASE_LABEL, "calibration_reference");
+            intent.putExtra(RunnerActivity.EXTRA_PHASE_LABEL, calibrationPhaseLabel());
             intent.putExtra(RunnerActivity.EXTRA_ROUND, 0);
             intent.putExtra(RunnerActivity.EXTRA_WARMUP_SECONDS, Math.max(1, warmupSeconds));
             intent.putExtra(RunnerActivity.EXTRA_MEASURE_SECONDS, Math.max(2, measureSeconds));
@@ -287,6 +290,8 @@ final class RunCoordinator {
             intent.putExtra(RunnerActivity.EXTRA_WORKLOAD_VERSION, workloadVersion);
             intent.putExtra(RunnerActivity.EXTRA_REPETITIONS_PER_SAMPLE, repetitions);
             intent.putExtra(RunnerActivity.EXTRA_EFFECT_INJECTION_PERCENT, effectPercent);
+            intent.putExtra(RunnerActivity.EXTRA_FORCE_CPU_TIMING,
+                    mode == MODE_AB && reference == null);
             intent.putExtra(RunnerActivity.EXTRA_PIXEL_TOLERANCE, pixelTolerance);
             intent.putExtra(RunnerActivity.EXTRA_MAX_DIVERGENT_BLOCKS,
                     maximumDivergentBlocks);
@@ -322,18 +327,14 @@ final class RunCoordinator {
     }
 
     private void scheduleCalibrationProbe(int repetitions, int effectPercent, String stage) {
-        // RunnerActivity and VisualRunnerActivity share the :runner process. The activity that
-        // just wrote the result still has a pending self-termination callback, so starting the
-        // next probe immediately lets the old callback kill the new probe in the same process.
-        handler.postDelayed(() -> launchCalibrationProbe(repetitions, effectPercent, stage),
-                RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+        retireCompletedRunner(() -> launchCalibrationProbe(repetitions, effectPercent, stage));
     }
 
     private void handleCalibrationProbe(JSONObject result) throws Exception {
         double medianUs = extractMedianBatchUs(result);
         if (!result.optBoolean("success", false) || !Double.isFinite(medianUs)
                 || medianUs <= 0.0) {
-            throw new IllegalStateException("Probe de calibração sem mediana válida");
+            throw new IllegalStateException(describeProbeFailure(result));
         }
         JSONObject nativeResult = result.optJSONObject("native");
         calibrationObservations.put(new JSONObject()
@@ -408,15 +409,14 @@ final class RunCoordinator {
                 calibrationStage = "effect_injection_10";
                 scheduleCalibrationProbe(calibrationRepetitions, 10, calibrationStage);
             } else {
-                handler.postDelayed(this::startSampleSizePilot,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::startSampleSizePilot);
             }
             return;
         }
         if ("post_run_reference_validation".equals(calibrationStage)) {
             postValidationMedianUs = medianUs;
             postCalibrationValidationComplete = true;
-            finishSuite();
+            retireCompletedRunner(this::finishSuite);
             return;
         }
         throw new IllegalStateException("Estado de calibração desconhecido: " + calibrationStage);
@@ -553,6 +553,8 @@ final class RunCoordinator {
         intent.putExtra(RunnerActivity.EXTRA_REPETITIONS_PER_SAMPLE,
                 workloadVersion >= 2 ? calibrationRepetitions : 1);
         intent.putExtra(RunnerActivity.EXTRA_EFFECT_INJECTION_PERCENT, 0);
+        intent.putExtra(RunnerActivity.EXTRA_FORCE_CPU_TIMING,
+                mode == MODE_AB && reference == null);
         intent.putExtra(RunnerActivity.EXTRA_PIXEL_TOLERANCE, pixelTolerance);
         intent.putExtra(RunnerActivity.EXTRA_MAX_DIVERGENT_BLOCKS, maximumDivergentBlocks);
         intent.putExtra(RunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE,
@@ -602,8 +604,7 @@ final class RunCoordinator {
                 if (sampleSizePilotActive) sampleSizePilotResults.put(completed);
                 else phaseResults.put(completed);
                 phaseIndex++;
-                handler.postDelayed(this::launchNext,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             if (runnerExitedUnexpectedly()) {
@@ -616,8 +617,7 @@ final class RunCoordinator {
                 }
                 recordSyntheticFailure("crash", "runner_crash", false);
                 phaseIndex++;
-                handler.postDelayed(this::launchNext,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             if (SystemClock.elapsedRealtime() >= phaseDeadlineElapsed) {
@@ -630,8 +630,7 @@ final class RunCoordinator {
                 }
                 recordSyntheticFailure("timeout", "runner_timeout", false);
                 phaseIndex++;
-                handler.postDelayed(this::launchNext,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             handler.postDelayed(this::pollCurrent, 500);
@@ -655,12 +654,11 @@ final class RunCoordinator {
 
     private JSONObject recordSyntheticFailure(String failureType, String error,
                                               boolean calibration) throws Exception {
-        Phase phase = calibration
-                ? new Phase(false, 0, reference) : phases.get(phaseIndex);
+        Phase phase = calibration ? calibrationPhase() : phases.get(phaseIndex);
         JSONObject failure = new JSONObject();
         failure.put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION);
         failure.put("success", false);
-        failure.put("phase", calibration ? "calibration_reference" : phase.label);
+        failure.put("phase", calibration ? calibrationPhaseLabel() : phase.label);
         failure.put("driver_mode",
                 DriverExecutionIdentity.mode(phase.usesCustomDriver()));
         failure.put("driver_role", phase.executionRole());
@@ -695,7 +693,103 @@ final class RunCoordinator {
                 .put("failure_stage", failure.optString("failure_stage", "runner_process"))
                 .put("runner_last_stage", failure.opt("runner_last_stage")));
         phaseResults.put(failure);
-        finishSuite();
+        retireCompletedRunner(this::finishSuite);
+    }
+
+    /**
+     * Turns a failed calibration probe into a sentence that names the cause.
+     *
+     * <p>The probe used to fail as "sem mediana válida", which describes the
+     * symptom and discards the diagnosis the runner had already written down.
+     * When a driver cannot present to the screen, every visible scene dies in
+     * about a second, so all the operator sees is the runner activity flashing —
+     * and the natural reading is that the app is broken rather than the driver.
+     */
+    static String describeProbeFailure(JSONObject result) {
+        JSONObject nativeResult = result == null ? null : result.optJSONObject("native");
+        JSONObject source = nativeResult != null
+                && !nativeResult.optBoolean("success", false) ? nativeResult : result;
+        if (source == null) return "Probe de calibração sem mediana válida";
+
+        String stage = source.optString("failure_stage", "");
+        String call = source.optString("vulkan_operation", "");
+        boolean hasResult = source.has("vk_result");
+        String resultName = hasResult
+                ? VkResultNames.of(source.optInt("vk_result", 0)) : "";
+
+        if (stage.isEmpty() && call.isEmpty() && !hasResult) {
+            String error = source.optString("error", "");
+            return error.isEmpty() ? "Probe de calibração sem mediana válida"
+                    : "Probe de calibração falhou: " + error;
+        }
+
+        StringBuilder message = new StringBuilder();
+        if (isPresentationFailure(stage, call)) {
+            message.append("O driver não conseguiu apresentar na tela. ");
+        } else {
+            message.append("O driver falhou na calibração. ");
+        }
+        if (!call.isEmpty()) message.append(call);
+        if (!resultName.isEmpty()) {
+            message.append(call.isEmpty() ? "" : " → ").append(resultName);
+        }
+        if (!stage.isEmpty()) message.append(" (estágio ").append(stage).append(')');
+        if (source.optBoolean("device_lost", false)) message.append(" · device lost");
+        return message.toString();
+    }
+
+    /**
+     * Whether the failure is in the swapchain path rather than in rendering.
+     *
+     * <p>Worth separating because it fails only the visible scenes: offscreen
+     * correctness never touches a swapchain and keeps passing, which is precisely
+     * the combination that makes the fault look like an app defect.
+     */
+    private static boolean isPresentationFailure(String stage, String call) {
+        return call.contains("AcquireNextImage") || call.contains("QueuePresent")
+                || call.contains("CreateSwapchain")
+                || "render_visible_frame".equals(stage) || "create_swapchain".equals(stage);
+    }
+
+    private Phase calibrationPhase() {
+        return reference != null
+                ? new Phase(false, 0, reference)
+                : new Phase(true, 0, candidate);
+    }
+
+    private String calibrationPhaseLabel() {
+        return reference != null ? "calibration_reference" : "calibration_candidate";
+    }
+
+    private String calibrationArmLabel() {
+        return reference != null ? "braço Turnip de referência" : "braço Turnip candidato";
+    }
+
+    static boolean calibrationRequiresQualificationAbort(JSONObject failure) {
+        if (failure == null) return false;
+        String type = failure.optString("failure_type", "");
+        return "crash".equals(type) || "timeout".equals(type)
+                || "runner_crash".equals(type) || "runner_timeout".equals(type)
+                || failure.optBoolean("runner_process_died", false);
+    }
+
+    private void retireCompletedRunner(Runnable continuation) {
+        File completedResultFile = currentResultFile;
+        RunnerProcessLifecycle.retireCompletedRunner(handler, completedResultFile,
+                this::canContinue, new RunnerProcessLifecycle.Callback() {
+                    @Override
+                    public void onRetired() {
+                        if (canContinue()) continuation.run();
+                    }
+
+                    @Override
+                    public void onFailure(Throwable error) {
+                        if (!canContinue()) return;
+                        cancelled = true;
+                        handler.removeCallbacksAndMessages(null);
+                        listener.onFailure("Falha ao encerrar o processo isolado", error);
+                    }
+                });
     }
 
     private void killTimedOutRunner() {
@@ -767,7 +861,11 @@ final class RunCoordinator {
                     driverIdentityAudit.getJSONObject("identity_observation_coverage"));
             report.put("loader_isolation_verified",
                     driverIdentityAudit.get("loader_isolation_verified"));
-            report.put("qualification_abort_recommended", calibrationFailure != null);
+            report.put("calibration_failure", calibrationFailure == null
+                    ? JSONObject.NULL : calibrationFailure);
+            report.put("calibration_arm", calibrationPhaseLabel());
+            report.put("qualification_abort_recommended",
+                    calibrationRequiresQualificationAbort(calibrationFailure));
             report.put("qualification_abort_reason", calibrationFailure == null
                     ? JSONObject.NULL
                     : calibrationFailure.optString("failure_type", "calibration_failure"));
@@ -1171,7 +1269,20 @@ final class RunCoordinator {
         JSONObject systemCapabilities = firstCapabilities(false);
         JSONObject candidateCapabilities = firstCapabilities(true);
         if (systemCapabilities == null || candidateCapabilities == null) return null;
+        // A side that never enumerated extensions is not "an arm without them":
+        // comparing against it reports the other arm's entire list as gained.
+        // A run of two builds of the same Mesa source produced "+42 extensions",
+        // which is impossible and was published as if it explained something.
+        if (!enumeratedExtensions(systemCapabilities)
+                || !enumeratedExtensions(candidateCapabilities)) {
+            return null;
+        }
         return CapabilityDiff.compare(systemCapabilities, candidateCapabilities);
+    }
+
+    private static boolean enumeratedExtensions(JSONObject capabilities) {
+        org.json.JSONArray extensions = capabilities.optJSONArray("extensions");
+        return extensions != null && extensions.length() > 0;
     }
 
     private JSONObject firstCapabilities(boolean candidateArm) {

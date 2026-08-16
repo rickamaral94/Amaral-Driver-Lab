@@ -28,6 +28,7 @@ constexpr char kShaderCompileId[] = "shader_compile_pipeline";
 constexpr char kRenderPassTilingId[] = "renderpass_tiling_gmem";
 constexpr char kComputeArithmeticId[] = "compute_arithmetic";
 constexpr char kStableSceneId[] = "stable_scene_frametime";
+constexpr char kEmulatorFrameId[] = "emulator_frame_pattern";
 constexpr char kThermalSustainId[] = "thermal_sustain_efficiency";
 constexpr char kTraceReplayId[] = "vulkan_command_trace_replay";
 constexpr char kMixedTraceId[] = "mixed_graphics_compute_barrier";
@@ -39,6 +40,17 @@ constexpr uint32_t kTraceHeight = 180;
 constexpr uint32_t kTraceComputeWords = 65536;
 constexpr uint32_t kLegacyWorkloadVersion = 1;
 constexpr uint32_t kWorkloadVersion = 2;
+// emulator_frame_pattern:
+//   v2 publicava a mediana das amostras das cinco passadas juntas, que nao mede
+//      nada: as passadas custam coisas diferentes e quantas amostras cada uma
+//      rende depende do tempo de medicao;
+//   v3 trocou a metrica pela soma das medianas por passada, corrigindo a
+//      aritmetica mas mantendo uma forma de quadro inventada — 24 a 96 draws por
+//      passe, alvo maximo de 960x540;
+//   v4 troca a forma pela medida num traco de API do Eden: 93 passes por quadro,
+//      mediana de 1 draw, 45% em 1920x1080. A unidade de repeticao passa a ser o
+//      quadro inteiro.
+constexpr uint32_t kEmulatorFrameVersion = 4;
 constexpr uint32_t kShaderPipelineCount = 24;
 constexpr uint32_t kTilingDrawCount = 2048;
 constexpr uint32_t kStableDrawCount = 512;
@@ -296,6 +308,8 @@ class VulkanContext {
 public:
     ~VulkanContext() { cleanup(); }
 
+    void setForceCpuTiming(bool value) { forceCpuTiming = value; }
+
     void initialize(const std::string &driverDirectory,
                     const std::string &driverName,
                     const std::string &nativeLibraryDirectory,
@@ -475,7 +489,8 @@ public:
     const std::string &currentStage() const { return stage; }
     bool isCustomDriver() const { return customDriver; }
     bool timestampsSupported() const {
-        return queueFamilyProperties.timestampValidBits > 0 && properties.limits.timestampPeriod > 0.0F;
+        return !forceCpuTiming && queueFamilyProperties.timestampValidBits > 0
+                && properties.limits.timestampPeriod > 0.0F;
     }
 
     bool supportsExtension(const char *name) const {
@@ -982,6 +997,7 @@ private:
     PFN_vkEnumerateDeviceExtensionProperties enumerateDeviceExtensionProperties = nullptr;
     PFN_vkCreateDevice createDevice = nullptr;
     PFN_vkGetDeviceProcAddr getDeviceProcAddr = nullptr;
+    bool forceCpuTiming = false;
 };
 
 struct DrawPush {
@@ -989,7 +1005,22 @@ struct DrawPush {
     float color[4];
 };
 
+// What an emulator does to an attachment between passes. The existing workloads
+// always CLEAR then DONT_CARE, which is the case a tiler resolves for free; an
+// emulator constantly LOADs a previous target and STOREs the result, and that is
+// the traffic that makes the GMEM/sysmem decision matter.
+struct AttachmentProfile {
+    // Only the store side varies. LOAD would need the image already in
+    // COLOR_ATTACHMENT_OPTIMAL before the first pass, and storing alone already
+    // produces the resolve traffic that separates GMEM from sysmem.
+    VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    uint32_t width = 0;   // 0 keeps the workload default
+    uint32_t height = 0;
+};
+
 struct RenderSetup {
+    uint32_t width = 0;
+    uint32_t height = 0;
     VkRenderPass renderPass = VK_NULL_HANDLE;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
     VkPipelineLayout layout = VK_NULL_HANDLE;
@@ -1024,6 +1055,14 @@ public:
     std::string run(const std::string &workloadId, uint32_t workloadVersion,
                     uint32_t repetitions, uint32_t effectPercent,
                     int warmupSeconds, int measureSeconds) {
+        if (workloadId == kEmulatorFrameId) {
+            if (workloadVersion != kEmulatorFrameVersion) {
+                throw std::invalid_argument("Unsupported workload version");
+            }
+            return runEmulatorFrame(workloadVersion, repetitions,
+                    effectiveRepetitions(repetitions, effectPercent), effectPercent,
+                    std::max(0, warmupSeconds), std::max(1, measureSeconds));
+        }
         requireVersion(workloadVersion, repetitions, effectPercent);
         const uint32_t effective = workloadVersion >= 2
                 ? effectiveRepetitions(repetitions, effectPercent) : 1U;
@@ -1463,19 +1502,30 @@ private:
 
     RenderSetup createRenderSetup(VkSampleCountFlagBits samples, bool depthEnabled,
                                   uint32_t drawCount, VkShaderModule fragment,
-                                  uint32_t repetitions = 1U) {
+                                  uint32_t repetitions = 1U,
+                                  AttachmentProfile profile = AttachmentProfile{}) {
         RenderSetup setup;
+        const uint32_t width = profile.width == 0 ? kRenderWidth : profile.width;
+        const uint32_t height = profile.height == 0 ? kRenderHeight : profile.height;
+        setup.width = width;
+        setup.height = height;
         const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
+        VkImageUsageFlags colorUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        if (profile.storeOp == VK_ATTACHMENT_STORE_OP_STORE) {
+            // A stored target is sampled or copied later, exactly as an emulator
+            // reuses a previous render target.
+            colorUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        }
         setup.color = context.createImage(
-                kRenderWidth, kRenderHeight, colorFormat, samples,
-                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+                width, height, colorFormat, samples,
+                colorUsage, VK_IMAGE_ASPECT_COLOR_BIT);
         VkFormat depthFormat = VK_FORMAT_UNDEFINED;
         if (depthEnabled) {
             depthFormat = context.depthFormat();
             VkImageAspectFlags aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
             if (depthFormat == VK_FORMAT_D24_UNORM_S8_UINT) aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
             setup.depth = context.createImage(
-                    kRenderWidth, kRenderHeight, depthFormat, samples,
+                    width, height, depthFormat, samples,
                     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, aspect);
         }
 
@@ -1483,7 +1533,7 @@ private:
         attachments[0].format = colorFormat;
         attachments[0].samples = samples;
         attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachments[0].storeOp = profile.storeOp;
         attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         attachments[1].format = depthFormat;
@@ -1520,8 +1570,8 @@ private:
         framebufferInfo.renderPass = setup.renderPass;
         framebufferInfo.attachmentCount = depthEnabled ? 2U : 1U;
         framebufferInfo.pAttachments = views.data();
-        framebufferInfo.width = kRenderWidth;
-        framebufferInfo.height = kRenderHeight;
+        framebufferInfo.width = width;
+        framebufferInfo.height = height;
         framebufferInfo.layers = 1;
         check(context.vkCreateFramebuffer(context.device, &framebufferInfo, nullptr,
                                           &setup.framebuffer), "vkCreateFramebuffer(phase2)");
@@ -1543,7 +1593,7 @@ private:
         begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         begin.renderPass = setup.renderPass;
         begin.framebuffer = setup.framebuffer;
-        begin.renderArea.extent = {kRenderWidth, kRenderHeight};
+        begin.renderArea.extent = {width, height};
         begin.clearValueCount = depthEnabled ? 2U : 1U;
         begin.pClearValues = clears.data();
         const uint32_t columns = 32;
@@ -2533,6 +2583,286 @@ private:
         }
     }
 
+
+    /**
+     * The frame shape an emulator actually produces.
+     *
+     * The existing performance workloads render one large pass with thousands of
+     * draws and discard the result. A tiler resolves that for free, which is why
+     * every A/B between our drivers came back a technical tie: the workload gave
+     * the driver no decision worth making.
+     *
+     * An emulator does the opposite — many small passes per frame, few draws each,
+     * and the result of most of them is kept because a later pass samples it. The
+     * store is what forces tile memory back out to system memory, and that traffic
+     * is where GMEM and sysmem stop being equivalent. Sweeping the store operation
+     * and the target size is therefore the minimum needed to make tiling options
+     * such as tu_autotune_algorithm observable at all.
+     */
+    // A forma do quadro abaixo nao foi inventada: veio de um traco de API do Eden
+    // rodando Mario Kart 8 Deluxe na Adreno 740 com a v10 perf — 353.589
+    // renderpasses e 1.126.192 draws em 108,6 s. Ver
+    // capturas/eden-mk8-v10/FORMA-DO-QUADRO.md no repositorio do driver.
+    //
+    // O que o traco mostrou, e que a versao anterior desta carga contradizia:
+    //   * 44,7% dos renderpasses sao 1920x1080, nao 960x540;
+    //   * a MEDIANA e 1 draw por passe, nao 24 a 96. 74,9% tem exatamente um e
+    //     17,8% nao tem nenhum;
+    //   * a media de 3,19 vem de uma cauda curta e pesada: 3% dos passes levam
+    //     67% dos draws, com ate 295 num passe so;
+    //   * ha um alvo 1024x1024 com ~20 draws por passe, com cara de mapa de sombra;
+    //   * o resto e uma cadeia descendente de alvos minusculos, ate 16x16.
+    //
+    // 93 passes por quadro reproduzem o mix de tamanho medido, 18,3% de passes
+    // sem draw contra 17,8% reais, 75,3% com um draw contra 74,9% e media de
+    // 3,20 draws por passe contra 3,19.
+    //
+    // Nao medido: os load/store ops de cada passe. O traco registra area e
+    // contagem de draws, nao o que o renderpass faz com o anexo. Por isso todos
+    // os alvos aqui usam STORE, que e a escolha cara, e a razao store/discard da
+    // versao anterior saiu — ela comparava uma suposicao com outra.
+    struct FramePass {
+        uint32_t width;
+        uint32_t height;
+        uint32_t count;
+        uint32_t draws;
+        bool depth;
+    };
+
+    static const std::vector<FramePass> &emulatorFrameShape() {
+        // Ordem deliberada: o mapa de sombra primeiro, depois a geometria em tela
+        // cheia, e por fim a cadeia descendente de pos-processamento. Agrupar os
+        // 42 passes de 1080p deixaria o mesmo alvo quente de um jeito que o
+        // emulador nao produz, entao a geometria vem intercalada com os alvos
+        // pequenos.
+        static const std::vector<FramePass> shape{
+            {1024, 1024,  2, 20, true},
+            {1920, 1080,  4, 47, true},
+            {1920, 1080, 29,  1, true},
+            {1920, 1080,  9,  0, true},
+            {1280,  720,  2,  1, false},
+            {1280,  720,  1,  0, false},
+            { 960,  540,  2,  1, false},
+            { 960,  540,  1,  0, false},
+            { 480,  272,  1,  1, false},
+            { 480,  272,  3,  0, false},
+            { 320,  180,  5,  1, false},
+            { 240,  136,  5,  1, false},
+            { 120,   68,  5,  1, false},
+            { 120,   68,  1,  0, false},
+            {  60,   34,  5,  1, false},
+            {  60,   34,  1,  0, false},
+            {  30,   17,  4,  1, false},
+            {  30,   17,  1,  0, false},
+            {  32,   32,  6,  1, false},
+            {  16,   16,  6,  1, false},
+        };
+        return shape;
+    }
+
+    std::string runEmulatorFrame(uint32_t workloadVersion,
+                                 uint32_t requestedRepetitions,
+                                 uint32_t effectiveRepetitionCount,
+                                 uint32_t effectPercent,
+                                 int warmupSeconds, int measureSeconds) {
+        context.setStage("emulator_frame_setup");
+        const std::vector<FramePass> &shape = emulatorFrameShape();
+
+        // Um alvo por tamanho distinto; os passes reusam.
+        std::vector<std::pair<uint32_t, uint32_t>> sizes;
+        for (const FramePass &pass : shape) {
+            const std::pair<uint32_t, uint32_t> key{pass.width, pass.height};
+            if (std::find(sizes.begin(), sizes.end(), key) == sizes.end()) sizes.push_back(key);
+        }
+        std::vector<RenderSetup> targets;
+        targets.reserve(sizes.size());
+        auto releaseTargets = [&]() {
+            for (RenderSetup &target : targets) destroyRenderSetup(target);
+            targets.clear();
+        };
+        try {
+            for (const std::pair<uint32_t, uint32_t> &size : sizes) {
+                bool depth = false;
+                for (const FramePass &pass : shape) {
+                    if (pass.width == size.first && pass.height == size.second && pass.depth) {
+                        depth = true;
+                    }
+                }
+                AttachmentProfile profile{};
+                profile.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+                profile.width = size.first;
+                profile.height = size.second;
+                // repetitions 0 grava um command buffer vazio: os recursos e o
+                // pipeline sao o que interessa, o quadro e gravado abaixo.
+                targets.push_back(createRenderSetup(VK_SAMPLE_COUNT_1_BIT, depth, 0U,
+                                                    aluFragment, 0U, profile));
+            }
+        } catch (...) {
+            releaseTargets();
+            throw;
+        }
+
+        // A sequencia de 93 passes, expandida uma vez e reusada em toda repeticao.
+        struct FrameStep { size_t target; uint32_t draws; };
+        std::vector<FrameStep> frame;
+        for (const FramePass &pass : shape) {
+            size_t index = 0;
+            for (size_t candidate = 0; candidate < sizes.size(); ++candidate) {
+                if (sizes[candidate].first == pass.width
+                        && sizes[candidate].second == pass.height) {
+                    index = candidate;
+                }
+            }
+            for (uint32_t repeat = 0; repeat < pass.count; ++repeat) {
+                frame.push_back({index, pass.draws});
+            }
+        }
+
+        VkCommandPool framePool = VK_NULL_HANDLE;
+        VkCommandBuffer frameCommand = VK_NULL_HANDLE;
+        TimestampQuery frameQuery{};
+        std::vector<double> samples;
+        double frameMs = 0.0;
+        try {
+            context.setStage("emulator_frame_record");
+            framePool = context.createCommandPool();
+            frameCommand = context.allocateCommandBuffer(framePool);
+            frameQuery = context.createTimestampQuery();
+            context.beginTimedCommand(frameCommand, frameQuery);
+            std::array<VkClearValue, 2> clears{};
+            clears[0].color.float32[0] = 0.02F;
+            clears[0].color.float32[1] = 0.03F;
+            clears[0].color.float32[2] = 0.05F;
+            clears[0].color.float32[3] = 1.0F;
+            clears[1].depthStencil = {1.0F, 0};
+            // A unidade de repeticao e o quadro inteiro. Um quadro a mais custa um
+            // quadro a mais, o que e o que o teste de linearidade cobra.
+            for (uint32_t repetition = 0; repetition < effectiveRepetitionCount; ++repetition) {
+                for (const FrameStep &step : frame) {
+                    RenderSetup &target = targets[step.target];
+                    const bool depth = target.depth.image != VK_NULL_HANDLE;
+                    VkRenderPassBeginInfo begin{};
+                    begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                    begin.renderPass = target.renderPass;
+                    begin.framebuffer = target.framebuffer;
+                    begin.renderArea.extent = {target.width, target.height};
+                    begin.clearValueCount = depth ? 2U : 1U;
+                    begin.pClearValues = clears.data();
+                    context.vkCmdBeginRenderPass(frameCommand, &begin, VK_SUBPASS_CONTENTS_INLINE);
+                    if (step.draws > 0U) {
+                        context.vkCmdBindPipeline(frameCommand, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                  target.pipeline);
+                        const uint32_t columns = 8U;
+                        const uint32_t rows = std::max(1U, (step.draws + columns - 1U) / columns);
+                        for (uint32_t index = 0; index < step.draws; ++index) {
+                            const uint32_t column = index % columns;
+                            const uint32_t row = index / columns;
+                            DrawPush push{};
+                            push.transform[0] = 1.7F / static_cast<float>(columns);
+                            push.transform[1] = 1.7F / static_cast<float>(rows);
+                            push.transform[2] = -0.85F + (static_cast<float>(column) + 0.5F)
+                                    * 1.7F / static_cast<float>(columns);
+                            push.transform[3] = -0.85F + (static_cast<float>(row) + 0.5F)
+                                    * 1.7F / static_cast<float>(rows);
+                            push.color[0] = static_cast<float>((index * 17U) & 255U) / 255.0F;
+                            push.color[1] = static_cast<float>((index * 29U) & 255U) / 255.0F;
+                            push.color[2] = static_cast<float>((index * 43U) & 255U) / 255.0F;
+                            push.color[3] = 1.0F;
+                            context.vkCmdPushConstants(frameCommand, target.layout,
+                                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                    0, sizeof(push), &push);
+                            context.vkCmdDraw(frameCommand, 3, 1, 0, 0);
+                        }
+                    }
+                    context.vkCmdEndRenderPass(frameCommand);
+                }
+            }
+            context.endTimedCommand(frameCommand, frameQuery);
+
+            context.setStage("emulator_frame_measure");
+            auto warmupStart = Clock::now();
+            do {
+                context.submitTimed(frameCommand, frameQuery);
+            } while (elapsedMs(warmupStart) < static_cast<double>(warmupSeconds) * 1000.0);
+            auto measureStart = Clock::now();
+            do {
+                samples.push_back(context.submitTimed(frameCommand, frameQuery));
+            } while ((elapsedMs(measureStart) < static_cast<double>(measureSeconds) * 1000.0
+                      || samples.size() < 8U) && samples.size() < 600U);
+            frameMs = median(samples);
+        } catch (...) {
+            if (framePool != VK_NULL_HANDLE) {
+                context.vkDestroyCommandPool(context.device, framePool, nullptr);
+            }
+            context.destroyTimestampQuery(frameQuery);
+            releaseTargets();
+            throw;
+        }
+        const bool timestamps = frameQuery.supported;
+        context.vkDestroyCommandPool(context.device, framePool, nullptr);
+        context.destroyTimestampQuery(frameQuery);
+        releaseTargets();
+
+        uint32_t passesPerFrame = 0;
+        uint32_t drawsPerFrame = 0;
+        uint32_t emptyPasses = 0;
+        for (const FrameStep &step : frame) {
+            passesPerFrame++;
+            drawsPerFrame += step.draws;
+            if (step.draws == 0U) emptyPasses++;
+        }
+
+        std::ostringstream shapeJson;
+        shapeJson << '[';
+        for (size_t index = 0; index < shape.size(); ++index) {
+            if (index > 0) shapeJson << ',';
+            shapeJson << "{\"width\":" << shape[index].width
+                      << ",\"height\":" << shape[index].height
+                      << ",\"passes\":" << shape[index].count
+                      << ",\"draws_per_pass\":" << shape[index].draws
+                      << ",\"depth\":" << (shape[index].depth ? "true" : "false") << '}';
+        }
+        shapeJson << ']';
+
+        std::ostringstream json;
+        json << "{\"success\":true"
+             << ",\"workload_id\":\"" << kEmulatorFrameId << "\""
+             << ",\"workload_version\":" << workloadVersion
+             << ",\"custom_driver\":" << (context.isCustomDriver() ? "true" : "false")
+             << ",\"repetition_unit\":\"frame\""
+             << ",\"repetitions_per_sample\":" << requestedRepetitions
+             << ",\"effective_repetitions_per_sample\":" << effectiveRepetitionCount
+             << ",\"effect_injection_percent\":" << effectPercent
+             << ",\"effect_injection_domain\":\"gpu_workload\""
+             << ",\"realized_workload_effect_percent\":"
+             << realizedEffectPercent(requestedRepetitions, effectiveRepetitionCount)
+             << ",\"renderpasses_per_frame\":" << passesPerFrame
+             << ",\"draws_per_frame\":" << drawsPerFrame
+             << ",\"empty_renderpasses_per_frame\":" << emptyPasses
+             << ",\"mean_draws_per_renderpass\":"
+             << static_cast<double>(drawsPerFrame) / static_cast<double>(passesPerFrame)
+             << ",\"distinct_render_targets\":" << sizes.size()
+             << ",\"median_batch_us\":" << frameMs * 1000.0
+             << ",\"composite_frame_ms\":" << frameMs
+             << ",\"p95_frame_ms\":" << percentile(samples, 0.95)
+             << ",\"p99_frame_ms\":" << percentile(samples, 0.99)
+             << ",\"sample_count\":" << samples.size()
+             << ",\"frame_shape\":" << shapeJson.str()
+             << ",\"reference_capture\":\"eden v0.2.1 / Mario Kart 8 Deluxe / Adreno 740 / "
+                "353589 renderpasses / 1126192 draws / 108.6 s\""
+             << ",\"gpu_timestamps_used\":" << (timestamps ? "true" : "false")
+             << ",\"capabilities\":" << context.capabilities
+             << ",\"metric_note\":\"One sample is one emulator-shaped frame: 93 render passes "
+                "reproducing the size mix and draw-count distribution measured in an Eden API "
+                "trace of Mario Kart 8 Deluxe on this GPU. 18.3% of the passes carry no draw at "
+                "all and 75.3% carry exactly one, which is what makes the fixed cost of tiling "
+                "impossible to amortize. composite_frame_ms is the time for one such frame, so "
+                "it scales with the repetition count. Load and store ops were not recorded by "
+                "the trace and are not modelled: every target here stores.\""
+             << '}';
+        return json.str();
+    }
+
     std::string runStableScene(uint32_t workloadVersion,
                                uint32_t requestedRepetitions,
                                uint32_t effectiveRepetitionCount,
@@ -3425,6 +3755,7 @@ Java_com_amaral_driverlab_RunnerActivity_runNativePhase2Workload(
         jint workloadVersion,
         jint repetitionsPerSample,
         jint effectInjectionPercent,
+        jboolean forceCpuTiming,
         jstring driverDirectory,
         jstring driverName,
         jstring nativeLibraryDirectory,
@@ -3434,6 +3765,7 @@ Java_com_amaral_driverlab_RunnerActivity_runNativePhase2Workload(
     const std::string workload = UtfString(environment, workloadId).string();
     VulkanContext context;
     try {
+        context.setForceCpuTiming(forceCpuTiming == JNI_TRUE);
         if (workload == kShaderCompileId && workloadVersion >= 2) {
             setenv("MESA_SHADER_CACHE_DISABLE", "true", 1);
         }
@@ -3463,6 +3795,7 @@ Java_com_amaral_driverlab_RunnerActivity_runNativeTraceReplay(
         jint workloadVersion,
         jint repetitionsPerSample,
         jint effectInjectionPercent,
+        jboolean forceCpuTiming,
         jstring driverDirectory,
         jstring driverName,
         jstring nativeLibraryDirectory,
@@ -3473,6 +3806,7 @@ Java_com_amaral_driverlab_RunnerActivity_runNativeTraceReplay(
     const std::string trace = UtfString(environment, traceId).string();
     VulkanContext context;
     try {
+        context.setForceCpuTiming(forceCpuTiming == JNI_TRUE);
         context.initialize(UtfString(environment, driverDirectory).string(),
                            UtfString(environment, driverName).string(),
                            UtfString(environment, nativeLibraryDirectory).string(),

@@ -46,7 +46,12 @@ final class BenchmarkCalibrationContract {
             return "renderpass";
         }
         if (WorkloadContract.STABLE_SCENE_ID.equals(workloadId)
-                || WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)) {
+                || WorkloadContract.TRACE_REPLAY_ID.equals(workloadId)
+                // v4: uma amostra e um quadro inteiro de 93 render passes, na
+                // proporcao medida num traco do Eden. Ate a v3 a unidade era o
+                // render pass, o que so fazia sentido quando a carga era cinco
+                // passadas soltas.
+                || WorkloadContract.EMULATOR_FRAME_ID.equals(workloadId)) {
             return "frame";
         }
         if (WorkloadContract.COMPUTE_ARITHMETIC_ID.equals(workloadId)

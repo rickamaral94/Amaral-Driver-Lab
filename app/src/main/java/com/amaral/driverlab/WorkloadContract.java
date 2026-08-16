@@ -52,6 +52,15 @@ final class WorkloadContract {
             "Mede uma carga aritmética compute fixa e validada; não representa transferência, "
                     + "IA, física, shaders gráficos ou desempenho geral da GPU.";
 
+    static final String EMULATOR_FRAME_ID = "emulator_frame_pattern";
+    static final int EMULATOR_FRAME_VERSION = 4;
+    static final String EMULATOR_FRAME_METRIC = "composite_frame_ms";
+    static final String EMULATOR_FRAME_LIMITATION =
+            "Muitos render passes pequenos com poucos draws cada, variando store e "
+            + "discard — a forma de quadro que emuladores emitem. É proxy sintético "
+            + "de comportamento de tiling: não lê estado interno do driver e não "
+            + "prevê FPS de jogo.";
+
     static final String STABLE_SCENE_ID = "stable_scene_frametime";
     static final int STABLE_SCENE_VERSION = 2;
     static final String STABLE_SCENE_METRIC = "p99_frame_ms";
@@ -104,6 +113,7 @@ final class WorkloadContract {
 
     static final List<String> PHASE2_IDS = Collections.unmodifiableList(Arrays.asList(
             SHADER_COMPILE_ID,
+            EMULATOR_FRAME_ID,
             RENDERPASS_TILING_ID,
             COMPUTE_ARITHMETIC_ID,
             STABLE_SCENE_ID,
@@ -134,6 +144,7 @@ final class WorkloadContract {
         if (SHADER_COMPILE_ID.equals(workloadId)) return SHADER_COMPILE_VERSION;
         if (RENDERPASS_TILING_ID.equals(workloadId)) return RENDERPASS_TILING_VERSION;
         if (COMPUTE_ARITHMETIC_ID.equals(workloadId)) return COMPUTE_ARITHMETIC_VERSION;
+        if (EMULATOR_FRAME_ID.equals(workloadId)) return EMULATOR_FRAME_VERSION;
         if (STABLE_SCENE_ID.equals(workloadId)) return STABLE_SCENE_VERSION;
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return THERMAL_SUSTAIN_VERSION;
         if (TRACE_REPLAY_ID.equals(workloadId)) return TRACE_REPLAY_VERSION;
@@ -141,12 +152,17 @@ final class WorkloadContract {
         throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
     }
 
+    /**
+     * Every version from 1 up to the workload's current one is supported. The
+     * ceiling has to be derived from versionFor: hard-coding it meant that bumping
+     * a workload left the runner rejecting the very version the profile declared.
+     * emulator_frame_pattern v3 and the visible scenes v3 both shipped that way —
+     * the suite aborted before launching the runner, with no failure recorded,
+     * because the abort happened on the coordinator side.
+     */
     static boolean isSupportedVersion(String workloadId, int version) {
         if (!isSupported(workloadId)) return false;
-        if (TRANSFER_ID.equals(workloadId) || RENDER_CORRECTNESS_ID.equals(workloadId)) {
-            return version == 1;
-        }
-        return version == 1 || version == 2;
+        return version >= 1 && version <= versionFor(workloadId);
     }
 
     static String limitationFor(String workloadId) {
@@ -155,6 +171,7 @@ final class WorkloadContract {
         if (SHADER_COMPILE_ID.equals(workloadId)) return SHADER_COMPILE_LIMITATION;
         if (RENDERPASS_TILING_ID.equals(workloadId)) return RENDERPASS_TILING_LIMITATION;
         if (COMPUTE_ARITHMETIC_ID.equals(workloadId)) return COMPUTE_ARITHMETIC_LIMITATION;
+        if (EMULATOR_FRAME_ID.equals(workloadId)) return EMULATOR_FRAME_LIMITATION;
         if (STABLE_SCENE_ID.equals(workloadId)) return STABLE_SCENE_LIMITATION;
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return THERMAL_SUSTAIN_LIMITATION;
         if (TRACE_REPLAY_ID.equals(workloadId)) return TRACE_REPLAY_LIMITATION;
@@ -178,6 +195,7 @@ final class WorkloadContract {
         if (SHADER_COMPILE_ID.equals(workloadId)) return "compilação de shaders v" + version;
         if (RENDERPASS_TILING_ID.equals(workloadId)) return "render pass / tiling v" + version;
         if (COMPUTE_ARITHMETIC_ID.equals(workloadId)) return "compute aritmético v" + version;
+        if (EMULATOR_FRAME_ID.equals(workloadId)) return "padrão de quadro de emulador v" + version;
         if (STABLE_SCENE_ID.equals(workloadId)) return "frametime estável v" + version;
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return "sustentação térmica v" + version;
         if (TRACE_REPLAY_ID.equals(workloadId)) return "trace replay Vulkan v" + version;
@@ -205,6 +223,7 @@ final class WorkloadContract {
         if (SHADER_COMPILE_ID.equals(workloadId)) return SHADER_COMPILE_METRIC;
         if (RENDERPASS_TILING_ID.equals(workloadId)) return RENDERPASS_TILING_METRIC;
         if (COMPUTE_ARITHMETIC_ID.equals(workloadId)) return COMPUTE_ARITHMETIC_METRIC;
+        if (EMULATOR_FRAME_ID.equals(workloadId)) return EMULATOR_FRAME_METRIC;
         if (STABLE_SCENE_ID.equals(workloadId)) return STABLE_SCENE_METRIC;
         if (THERMAL_SUSTAIN_ID.equals(workloadId)) return THERMAL_SUSTAIN_METRIC;
         if (TRACE_REPLAY_ID.equals(workloadId)) return TRACE_REPLAY_METRIC;
@@ -214,6 +233,7 @@ final class WorkloadContract {
 
     static boolean lowerIsBetter(String workloadId) {
         return SHADER_COMPILE_ID.equals(workloadId)
+                || EMULATOR_FRAME_ID.equals(workloadId)
                 || RENDERPASS_TILING_ID.equals(workloadId)
                 || STABLE_SCENE_ID.equals(workloadId)
                 || TRACE_REPLAY_ID.equals(workloadId)

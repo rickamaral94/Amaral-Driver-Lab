@@ -200,6 +200,8 @@ class VisualRenderer {
 public:
     ~VisualRenderer() { cleanup(); }
 
+    void setForceCpuTiming(bool value) { forceCpuTiming = value; }
+
     void initialize(JNIEnv *environment,
                     jobject surfaceObject,
                     const std::string &sceneIdValue,
@@ -215,7 +217,12 @@ public:
         diagnosticLogPath = diagnosticLogPathValue;
         nativeStagePath = nativeStagePathValue;
         sceneId = sceneIdValue;
-        if (workloadVersionValue != 1U && workloadVersionValue != 2U) {
+        // v3 moves the GPU timestamp bracket to enclose only the repetition loop.
+        // v2 measured the blit into the swapchain and the layout transitions too,
+        // which are paid once per sample and do not scale with the repetition
+        // count, so v2 timings are not comparable with v3.
+        if (workloadVersionValue != 1U && workloadVersionValue != 2U
+                && workloadVersionValue != 3U) {
             throw std::runtime_error("Unsupported visual workload version");
         }
         if (workloadVersionValue == 1U
@@ -463,6 +470,39 @@ public:
         const double p99 = percentile(measuredFrameTimes, 0.99);
         const double onePercentLow = p99 > 0.0 ? 1000.0 / p99 : 0.0;
 
+        // Stutter is not described by percentiles. Three long frames in a run of
+        // thousands sit below the p99 cut and are exactly what the player feels,
+        // so count them explicitly, relative to this scene's own median.
+        size_t framesOverTwiceMedian = 0;
+        size_t framesOverFourTimesMedian = 0;
+        size_t bucketUnder1x = 0;
+        size_t bucket1to2x = 0;
+        size_t bucket2to4x = 0;
+        size_t bucketOver4x = 0;
+        double worstFrameMs = 0.0;
+        size_t worstFrameIndex = 0;
+        for (size_t index = 0; index < measuredFrameTimes.size(); ++index) {
+            const double value = measuredFrameTimes[index];
+            if (value > worstFrameMs) {
+                worstFrameMs = value;
+                worstFrameIndex = index;
+            }
+            if (p50 <= 0.0) continue;
+            const double ratio = value / p50;
+            if (ratio > 4.0) {
+                ++framesOverFourTimesMedian;
+                ++framesOverTwiceMedian;
+                ++bucketOver4x;
+            } else if (ratio > 2.0) {
+                ++framesOverTwiceMedian;
+                ++bucket2to4x;
+            } else if (ratio > 1.0) {
+                ++bucket1to2x;
+            } else {
+                ++bucketUnder1x;
+            }
+        }
+
         std::ostringstream json;
         json << std::fixed << std::setprecision(6)
              << "{\"success\":true"
@@ -507,6 +547,21 @@ public:
              << ",\"p99_gpu_frame_ms\":" << p99
              << ",\"mean_gpu_frame_ms\":" << mean
              << ",\"one_percent_low_fps\":" << onePercentLow
+             << ",\"frames_over_2x_median\":" << framesOverTwiceMedian
+             << ",\"frames_over_4x_median\":" << framesOverFourTimesMedian
+             << ",\"worst_frame_ms\":" << worstFrameMs
+             << ",\"worst_frame_index\":" << worstFrameIndex
+             << ",\"frame_time_histogram\":{"
+             << "\"under_1x\":" << bucketUnder1x
+             << ",\"from_1x_to_2x\":" << bucket1to2x
+             << ",\"from_2x_to_4x\":" << bucket2to4x
+             << ",\"over_4x\":" << bucketOver4x << "}"
+             << ",\"frame_times_ms\":[";
+        for (size_t index = 0; index < measuredFrameTimes.size(); ++index) {
+            if (index > 0) json << ',';
+            json << measuredFrameTimes[index];
+        }
+        json << "]"
              << ",\"checkpoint_frames\":[";
         for (size_t index = 0; index < captured.size(); ++index) {
             if (index > 0) json << ',';
@@ -1118,7 +1173,7 @@ private:
     }
 
     void createPipelines() {
-        setStage("create_visual_pipelines");
+        setStage("create_visual_pipeline_layouts");
         VkPushConstantRange push{};
         push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         push.offset = 0;
@@ -1135,19 +1190,26 @@ private:
         check(vkCreatePipelineLayout(device, &finalLayoutInfo, nullptr, &finalPipelineLayout),
               "vkCreatePipelineLayout(final)");
         const bool stressScene = sceneKind == 3;
+        setStage(stressScene ? "create_stress_vertex_shader" : "create_scene_vertex_shader");
         VkShaderModule sceneVertex = stressScene
                 ? shader(kStressVertexSpirv, sizeof(kStressVertexSpirv))
                 : shader(kSceneVertexSpirv, sizeof(kSceneVertexSpirv));
+        setStage(stressScene ? "create_stress_fragment_shader" : "create_scene_fragment_shader");
         VkShaderModule sceneFragment = stressScene
                 ? shader(kStressFragmentSpirv, sizeof(kStressFragmentSpirv))
                 : shader(kSceneFragmentSpirv, sizeof(kSceneFragmentSpirv));
+        setStage("create_post_vertex_shader");
         VkShaderModule postVertex = shader(kPostVertexSpirv, sizeof(kPostVertexSpirv));
+        setStage(stressScene ? "create_stress_post_fragment_shader"
+                             : "create_post_fragment_shader");
         VkShaderModule postFragment = stressScene
                 ? shader(kStressPostFragmentSpirv, sizeof(kStressPostFragmentSpirv))
                 : shader(kPostFragmentSpirv, sizeof(kPostFragmentSpirv));
         try {
+            setStage(stressScene ? "create_stress_scene_pipeline" : "create_scene_pipeline");
             scenePipeline = createPipeline(sceneRenderPass, scenePipelineLayout,
                                            sceneVertex, sceneFragment, true);
+            setStage(stressScene ? "create_stress_final_pipeline" : "create_final_pipeline");
             finalPipeline = createPipeline(finalRenderPass, finalPipelineLayout,
                                            postVertex, postFragment, false);
         } catch (...) {
@@ -1176,7 +1238,7 @@ private:
         allocate.commandBufferCount = 1;
         check(vkAllocateCommandBuffers(device, &allocate, &commandBuffer),
               "vkAllocateCommandBuffers");
-        timestampsSupported = queueFamilyProperties.timestampValidBits > 0;
+        timestampsSupported = !forceCpuTiming && queueFamilyProperties.timestampValidBits > 0;
         if (timestampsSupported) {
             VkQueryPoolCreateInfo queryInfo{};
             queryInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
@@ -1223,7 +1285,6 @@ private:
         check(vkBeginCommandBuffer(commandBuffer, &begin), "vkBeginCommandBuffer");
         if (timestampsSupported) {
             vkCmdResetQueryPool(commandBuffer, queryPool, 0, 2);
-            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
         }
 
         PushConstants push{};
@@ -1250,6 +1311,15 @@ private:
         finalBegin.renderArea.extent = {renderWidth, renderHeight};
         finalBegin.clearValueCount = 1;
         finalBegin.pClearValues = &finalClear;
+        // The timestamp bracket must contain exactly the repeated work and nothing
+        // else, or the measurement does not scale with the repetition count it
+        // declares. Everything after the loop — the checkpoint copy, the layout
+        // transitions and the full-surface blit into the swapchain image — is paid
+        // once per sample no matter how many repetitions were requested, so it
+        // belongs outside the bracket. See the linearity note below.
+        if (timestampsSupported) {
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
+        }
         for (uint32_t repetition = 0; repetition < effectiveRepetitions; ++repetition) {
             // The calibrated repetition unit is a complete render pass. Load/store, depth
             // clear and driver binning decisions are paid on every repetition.
@@ -1270,6 +1340,9 @@ private:
                                0, sizeof(push), &push);
             vkCmdDraw(commandBuffer, 3, 1, 0, 0);
             vkCmdEndRenderPass(commandBuffer);
+        }
+        if (timestampsSupported) {
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
         }
 
         if (checkpoint) {
@@ -1317,9 +1390,6 @@ private:
         vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                              VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr,
                              1, &toPresent);
-        if (timestampsSupported) {
-            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
-        }
         check(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
         VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -1565,6 +1635,7 @@ private:
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     VkQueryPool queryPool = VK_NULL_HANDLE;
     bool timestampsSupported = false;
+    bool forceCpuTiming = false;
     VkSemaphore imageAvailable = VK_NULL_HANDLE;
     VkSemaphore renderFinished = VK_NULL_HANDLE;
     VkFence frameFence = VK_NULL_HANDLE;
@@ -1667,6 +1738,7 @@ Java_com_amaral_driverlab_VisualRunnerActivity_runNativeVisualScene(
         jint workloadVersion,
         jint repetitionsPerSample,
         jint effectInjectionPercent,
+        jboolean forceCpuTiming,
         jstring driverDirectory,
         jstring driverName,
         jstring nativeLibraryDirectory,
@@ -1678,6 +1750,7 @@ Java_com_amaral_driverlab_VisualRunnerActivity_runNativeVisualScene(
         jstring nativeStagePath) {
     VisualRenderer renderer;
     try {
+        renderer.setForceCpuTiming(forceCpuTiming == JNI_TRUE);
         renderer.initialize(environment, surface,
                             UtfString(environment, sceneId).string(),
                             static_cast<uint32_t>(workloadVersion),

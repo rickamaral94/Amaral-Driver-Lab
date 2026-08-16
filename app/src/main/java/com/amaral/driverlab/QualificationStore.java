@@ -24,14 +24,20 @@ final class QualificationStore {
     static File create(File filesDir, DriverPackage driver, DriverPackage referenceDriver,
                        String comparisonMode, int profileVersion, JSONObject preflight)
             throws Exception {
-        String normalizedMode = "turnip_vs_turnip".equals(comparisonMode)
+        String normalizedMode = "null_test".equals(comparisonMode) ? "null_test"
+                : "turnip_vs_turnip".equals(comparisonMode)
                 ? "turnip_vs_turnip" : "system_vs_turnip";
-        if ("turnip_vs_turnip".equals(normalizedMode)) {
+        if ("turnip_vs_turnip".equals(normalizedMode) || "null_test".equals(normalizedMode)) {
             if (referenceDriver == null || !referenceDriver.isUsable()) {
                 throw new IllegalArgumentException("Driver de referência inválido");
             }
-            if (driver.sha256.equalsIgnoreCase(referenceDriver.sha256)) {
+            if ("turnip_vs_turnip".equals(normalizedMode)
+                    && driver.sha256.equalsIgnoreCase(referenceDriver.sha256)) {
                 throw new IllegalArgumentException("Candidato e referência devem ser diferentes");
+            }
+            if ("null_test".equals(normalizedMode)
+                    && !driver.sha256.equalsIgnoreCase(referenceDriver.sha256)) {
+                throw new IllegalArgumentException("Teste nulo exige o mesmo driver nos dois braços");
             }
         }
         long now = System.currentTimeMillis();
@@ -145,13 +151,16 @@ final class QualificationStore {
             if (driver == null || driver.optString("sha256", "").length() != 64) return false;
             String comparisonMode = manifest.optString("comparison_mode", "system_vs_turnip");
             if (!"system_vs_turnip".equals(comparisonMode)
-                    && !"turnip_vs_turnip".equals(comparisonMode)) return false;
+                    && !"turnip_vs_turnip".equals(comparisonMode)
+                    && !"null_test".equals(comparisonMode)) return false;
             JSONObject referenceDriver = manifest.optJSONObject("reference_driver");
-            if ("turnip_vs_turnip".equals(comparisonMode)) {
+            if ("turnip_vs_turnip".equals(comparisonMode) || "null_test".equals(comparisonMode)) {
                 if (referenceDriver == null
-                        || referenceDriver.optString("sha256", "").length() != 64
-                        || driver.optString("sha256").equalsIgnoreCase(
-                                referenceDriver.optString("sha256"))) return false;
+                        || referenceDriver.optString("sha256", "").length() != 64) return false;
+                boolean same = driver.optString("sha256").equalsIgnoreCase(
+                        referenceDriver.optString("sha256"));
+                if ("turnip_vs_turnip".equals(comparisonMode) && same) return false;
+                if ("null_test".equals(comparisonMode) && !same) return false;
             }
             JSONObject execution = manifest.optJSONObject("execution");
             JSONArray states = execution == null ? null : execution.optJSONArray("steps");
@@ -249,6 +258,29 @@ final class QualificationStore {
                 .put("failure", JSONObject.NULL);
     }
 
+    /**
+     * Stores a battery/thermal snapshot taken at a step boundary.
+     *
+     * <p>Only the suite-wide preflight and final_environment existed before, and
+     * those cannot separate "the candidate runs hotter" from "the second arm ran
+     * hot because the suite is long". Sampling per step is what makes throttling
+     * visible where it actually happens.
+     */
+    static void recordStepEnvironment(JSONObject manifest, String stepId,
+                                      String key, JSONObject snapshot) throws Exception {
+        if (snapshot == null) return;
+        JSONObject state = findState(manifest, stepId);
+        if (state != null) state.put(key, snapshot);
+    }
+
+    private static JSONObject findState(JSONObject manifest, String stepId) {
+        try {
+            return requireState(manifest, stepId);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     static void markStepCompleted(File filesDir, JSONObject manifest, String stepId,
                                   File suiteFile, JSONObject report) throws Exception {
         JSONObject state = requireState(manifest, stepId);
@@ -338,7 +370,8 @@ final class QualificationStore {
         manifest.put("final_environment", finalEnvironment)
                 .put("environment_comparison", environmentComparison)
                 .put("report", report)
-                .put("diagnostic_bundle", bundleDescriptor);
+                .put("diagnostic_bundle", bundleDescriptor == null
+                        ? JSONObject.NULL : bundleDescriptor);
     }
 
     static int countStatus(JSONObject manifest, String status) {

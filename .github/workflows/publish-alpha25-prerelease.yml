@@ -1,0 +1,139 @@
+name: Publish v0.13.0-alpha25 prerelease
+
+on:
+  push:
+    branches: [agent/alpha21-ranking-v5]
+    paths: ['.github/workflows/publish-alpha25-prerelease.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_CLIENT_ID: ${{ vars.GITHUB_CLIENT_ID }}
+      TAG: v0.13.0-alpha25
+      APK_NAME: Amaral-Driver-Lab-v0.13.0-alpha25.apk
+      SHA_NAME: Amaral-Driver-Lab-v0.13.0-alpha25.sha256
+      CERT_SHA256: 4bb6b5cb69f6b46b50e5870ea7830db5465617fca7a593cfbb5bc4f0885b8173
+    steps:
+      - name: Checkout prerelease source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Native toolchain
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" \
+            "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest :telemetry-sdk:testDebugUnitTest --stacktrace --console=plain
+
+      - name: Build prerelease APK
+        run: ./gradlew :app:assembleDebug --stacktrace --console=plain
+
+      - name: Prepare and verify release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" \
+            | grep -F "versionName='0.13.0-alpha25'"
+          actual_cert=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify \
+            --print-certs "$apk" | awk -F': ' '/certificate SHA-256 digest/ {print $2; exit}')
+          test "$actual_cert" = "$CERT_SHA256"
+          mkdir -p release
+          cp "$apk" "release/${APK_NAME}"
+          (cd release && sha256sum "${APK_NAME}" > "${SHA_NAME}")
+
+      - name: Publish GitHub prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES=$(cat <<'EOF'
+          ## Amaral Driver Lab v0.13.0-alpha25
+
+          Esta versão não muda como o teste roda. Muda o que o relatório conta sobre ele.
+
+          O relatório provava qual ZIP foi carregado e quantas rodadas falharam, mas não dizia **o que** falhou nem **qual driver** o Vulkan de fato usou. Na prática isso custou duas builds de isolamento para descobrir um estágio de falha, e inutilizou uma captura de emulador de 599 MB porque duas builds do mesmo commit do Mesa eram indistinguíveis entre si.
+
+          A maior parte desses dados já era coletada. Os runners nativos já gravavam o estágio Vulkan, o VkResult e a chamada que falhou; a leitura de `VkPhysicalDeviceDriverProperties` já existia; o diff de capacidades já era calculado e salvo. Nada disso chegava ao documento que alguém lê.
+
+          ### Motivo da falha por rodada
+          - estágio (`create_swapchain`, `present`, `acquire`, `pipeline_create`, …), `VkResult` pelo nome simbólico e a chamada Vulkan que retornou o erro;
+          - `device_lost` e erros de validação quando houver;
+          - agrupamento por etapa, separando estágio, VkResult e braço — vinte falhas iguais e vinte diferentes são diagnósticos opostos.
+
+          ### Identidade do driver em runtime
+          - `driverID`, `driverName` e `driverInfo` por braço, no corpo do relatório;
+          - ressalva automática quando os dois braços resolvem para o mesmo `driverInfo`;
+          - ressalva automática quando um braço não é Turnip, sinal de que o loader caiu no driver do sistema.
+
+          ### Falha de um braço não apaga o outro
+          - `candidate_failed`, `reference_failed` e `both_arms_failed` no lugar de `insufficient_data`;
+          - o braço que sobreviveu mantém mediana, percentis e intervalo de confiança.
+
+          ### Temperatura e consumo por etapa
+          - captura no início e no fim de cada etapa, com delta térmico e `thermal_status` máximo;
+          - consumo declarado `n/d` quando o aparelho está carregando, em vez de imprimir um delta de carga sem significado.
+
+          ### Frametime além dos percentis
+          - contagem de quadros acima de 2x e de 4x da mediana, pior quadro e histograma em faixas relativas, nas cenas visuais.
+
+          ### Diff de capacidades
+          - promovido do `suite.json` para o corpo do relatório: uma extensão que sumiu explica uma regressão melhor que qualquer estatística de tempo.
+
+          ### Instalação
+          Mesma assinatura da alpha24. Instala por cima sem perder histórico.
+          EOF
+          )
+          gh release create "$TAG" --target "$GITHUB_SHA" \
+            --title "Amaral Driver Lab v0.13.0-alpha25" \
+            --notes "$NOTES" --prerelease
+          gh release upload "$TAG" \
+            "release/${APK_NAME}" "release/${SHA_NAME}" --clobber
+
+      - name: Verify prerelease and record status
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" \
+            --json tagName,name,url,targetCommitish,publishedAt,isDraft,isPrerelease,assets \
+            > /tmp/alpha25-release.json
+          test "$(jq -r '.isDraft' /tmp/alpha25-release.json)" = "false"
+          test "$(jq -r '.isPrerelease' /tmp/alpha25-release.json)" = "true"
+          apk_sha=$(awk '{print $1}' "release/${SHA_NAME}")
+          remote_digest=$(jq -r --arg name "$APK_NAME" \
+            '.assets[] | select(.name == $name) | .digest' /tmp/alpha25-release.json)
+          test "$remote_digest" = "sha256:${apk_sha}"
+
+          git checkout "$GITHUB_REF_NAME"
+          git pull --ff-only origin "$GITHUB_REF_NAME"
+          mkdir -p .release-status
+          jq --arg expected "$apk_sha" --arg certificate "$CERT_SHA256" \
+             --arg workflow_run "$GITHUB_RUN_ID" \
+             '. + {verification: {expected_apk_sha256: $expected, certificate_sha256: $certificate, workflow_run: $workflow_run, status: "published_as_prerelease_and_verified"}}' \
+             /tmp/alpha25-release.json > .release-status/v0.13.0-alpha25.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .release-status/v0.13.0-alpha25.json
+          git commit -m "release: record verified v0.13.0-alpha25 prerelease" || true
+          git push origin HEAD:"$GITHUB_REF_NAME"

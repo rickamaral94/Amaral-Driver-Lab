@@ -47,7 +47,9 @@ public final class RunnerActivity extends LocalizedActivity {
     static final String EXTRA_TRACE_ID = "trace_id";
     static final String EXTRA_REPETITIONS_PER_SAMPLE = "repetitions_per_sample";
     static final String EXTRA_EFFECT_INJECTION_PERCENT = "effect_injection_percent";
+    static final String EXTRA_FORCE_CPU_TIMING = "force_cpu_timing";
 
+    private File resultFile;
     private volatile boolean retireRunnerOnDestroy;
 
     private static native String runNativeBenchmark(
@@ -70,6 +72,7 @@ public final class RunnerActivity extends LocalizedActivity {
             int workloadVersion,
             int repetitionsPerSample,
             int effectInjectionPercent,
+            boolean forceCpuTiming,
             String driverDirectory,
             String driverName,
             String nativeLibraryDirectory,
@@ -82,6 +85,7 @@ public final class RunnerActivity extends LocalizedActivity {
             int workloadVersion,
             int repetitionsPerSample,
             int effectInjectionPercent,
+            boolean forceCpuTiming,
             String driverDirectory,
             String driverName,
             String nativeLibraryDirectory,
@@ -93,15 +97,17 @@ public final class RunnerActivity extends LocalizedActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        File resultFile;
+        File validatedResultFile;
         try {
-            resultFile = validateResultPath(getIntent().getStringExtra(EXTRA_RESULT_PATH));
+            validatedResultFile = validateResultPath(
+                    getIntent().getStringExtra(EXTRA_RESULT_PATH));
         } catch (Exception error) {
             finish();
             return;
         }
+        resultFile = validatedResultFile;
 
-        Thread worker = new Thread(() -> execute(resultFile), "vulkan-workload");
+        Thread worker = new Thread(() -> execute(validatedResultFile), "vulkan-workload");
         worker.start();
     }
 
@@ -109,7 +115,7 @@ public final class RunnerActivity extends LocalizedActivity {
     protected void onDestroy() {
         super.onDestroy();
         if (retireRunnerOnDestroy && isFinishing()) {
-            RunnerProcessLifecycle.retireAfterActivityDestroyed();
+            RunnerProcessState.markActivityDestroyed(resultFile, Process.myPid());
         }
     }
 
@@ -164,6 +170,7 @@ public final class RunnerActivity extends LocalizedActivity {
                     getIntent().getIntExtra(EXTRA_REPETITIONS_PER_SAMPLE, 1)));
             int effectInjectionPercent = Math.max(0, Math.min(10,
                     getIntent().getIntExtra(EXTRA_EFFECT_INJECTION_PERCENT, 0)));
+            boolean forceCpuTiming = getIntent().getBooleanExtra(EXTRA_FORCE_CPU_TIMING, false);
             if (workloadVersion < 2 && (repetitionsPerSample != 1
                     || effectInjectionPercent != 0)) {
                 throw new IllegalArgumentException("Workload v1 não aceita repetição calibrada");
@@ -223,6 +230,9 @@ public final class RunnerActivity extends LocalizedActivity {
                     ? driverModeOverride
                     : driverDir == null || driverDir.isEmpty() ? "system" : "custom";
             result.put("driver_mode", driverMode);
+            result.put("driver_injection_mode", DriverExecutionIdentity.injectionMode(
+                    "custom".equals(driverMode)));
+            result.put("custom_driver_injected", "custom".equals(driverMode));
             result.put("driver_role", driverRole == null || driverRole.isEmpty()
                     ? ("candidate".equals(phase)
                     ? DriverExecutionIdentity.ROLE_CANDIDATE
@@ -278,6 +288,7 @@ public final class RunnerActivity extends LocalizedActivity {
                         workloadVersion,
                         repetitionsPerSample,
                         effectInjectionPercent,
+                        forceCpuTiming,
                         driverDir == null ? "" : driverDir,
                         driverName == null ? "" : driverName,
                         getApplicationInfo().nativeLibraryDir,
@@ -291,6 +302,7 @@ public final class RunnerActivity extends LocalizedActivity {
                         workloadVersion,
                         repetitionsPerSample,
                         effectInjectionPercent,
+                        forceCpuTiming,
                         driverDir == null ? "" : driverDir,
                         driverName == null ? "" : driverName,
                         getApplicationInfo().nativeLibraryDir,

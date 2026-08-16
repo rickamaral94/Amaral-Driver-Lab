@@ -70,14 +70,16 @@ public final class QualificationActivity extends LocalizedActivity
         catch (IllegalArgumentException ignored) {
             profileVersion = QualificationProfile.currentVersion();
         }
-        comparisonMode = "turnip_vs_turnip".equals(
-                getIntent().getStringExtra(EXTRA_COMPARISON_MODE))
+        String requestedMode = getIntent().getStringExtra(EXTRA_COMPARISON_MODE);
+        comparisonMode = "null_test".equals(requestedMode) ? "null_test"
+                : "turnip_vs_turnip".equals(requestedMode)
                 ? "turnip_vs_turnip" : "system_vs_turnip";
         buildUi();
         loadDrivers();
         selectDriverBySha(getIntent().getStringExtra(EXTRA_DRIVER_SHA));
         referenceDriver = DriverCatalog.findBySha(this,
                 getIntent().getStringExtra(EXTRA_REFERENCE_DRIVER_SHA));
+        if ("null_test".equals(comparisonMode)) referenceDriver = selectedDriver();
         updateComparisonSummary();
         findLatestQualification();
         if (getIntent().getBooleanExtra(EXTRA_AUTOSTART, false)) {
@@ -202,6 +204,9 @@ public final class QualificationActivity extends LocalizedActivity
         String candidateLabel = candidate == null ? "—" : candidate.displayName();
         String referenceLabel = referenceDriver == null
                 ? getString(R.string.phase13_system_driver) : referenceDriver.displayName();
+        if ("null_test".equals(comparisonMode)) {
+            referenceLabel = candidateLabel + " (mesmo driver · teste nulo)";
+        }
         comparisonSummary.setText(getString(R.string.phase13_comparison_summary_format,
                 referenceLabel, candidateLabel));
     }
@@ -222,6 +227,7 @@ public final class QualificationActivity extends LocalizedActivity
                 return;
             }
         }
+        if ("null_test".equals(comparisonMode)) referenceDriver = driver;
         try {
             JSONObject preflight = QualificationPreflight.capture(this);
             JSONObject evaluation = preflight.getJSONObject("evaluation");
@@ -397,6 +403,10 @@ public final class QualificationActivity extends LocalizedActivity
     @Override
     public void onUpdated(File qualificationFile, JSONObject manifest) {
         currentQualificationFile = qualificationFile;
+        JSONObject bundle = manifest.optJSONObject("diagnostic_bundle");
+        currentBundleFile = bundle == null ? null : new File(
+                qualificationFile.getParentFile(),
+                bundle.optString("relative_path", "diagnostic-bundle.zip"));
         try {
             showManifest(manifest);
         } catch (Exception error) {

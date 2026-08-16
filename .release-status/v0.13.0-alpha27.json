@@ -1,0 +1,45 @@
+{
+  "assets": [
+    {
+      "apiUrl": "https://api.github.com/repos/rickamaral94/Amaral-Driver-Lab/releases/assets/516858896",
+      "contentType": "application/vnd.android.package-archive",
+      "createdAt": "2026-08-16T13:40:41Z",
+      "digest": "sha256:45cdd0ef67fecb0f95eb7320987993d118b1bf9e06777111eaeb5f87b6c417e7",
+      "downloadCount": 0,
+      "id": "RA_kwDOTslf9M4ezqQQ",
+      "label": "",
+      "name": "Amaral-Driver-Lab-v0.13.0-alpha27.apk",
+      "size": 2022892,
+      "state": "uploaded",
+      "updatedAt": "2026-08-16T13:40:41Z",
+      "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/download/v0.13.0-alpha27/Amaral-Driver-Lab-v0.13.0-alpha27.apk"
+    },
+    {
+      "apiUrl": "https://api.github.com/repos/rickamaral94/Amaral-Driver-Lab/releases/assets/516858898",
+      "contentType": "application/octet-stream",
+      "createdAt": "2026-08-16T13:40:41Z",
+      "digest": "sha256:f605b83d5923c9c65e09f15ba05a6f35bd110059865175c82193e1a32d8a0e9b",
+      "downloadCount": 0,
+      "id": "RA_kwDOTslf9M4ezqQS",
+      "label": "",
+      "name": "Amaral-Driver-Lab-v0.13.0-alpha27.sha256",
+      "size": 104,
+      "state": "uploaded",
+      "updatedAt": "2026-08-16T13:40:41Z",
+      "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/download/v0.13.0-alpha27/Amaral-Driver-Lab-v0.13.0-alpha27.sha256"
+    }
+  ],
+  "isDraft": false,
+  "isPrerelease": true,
+  "name": "Amaral Driver Lab v0.13.0-alpha27",
+  "publishedAt": "2026-08-16T13:40:40Z",
+  "tagName": "v0.13.0-alpha27",
+  "targetCommitish": "9d80de13b32a3dddc5c3a6bdf11647e59a36edb9",
+  "url": "https://github.com/rickamaral94/Amaral-Driver-Lab/releases/tag/v0.13.0-alpha27",
+  "verification": {
+    "expected_apk_sha256": "45cdd0ef67fecb0f95eb7320987993d118b1bf9e06777111eaeb5f87b6c417e7",
+    "certificate_sha256": "4bb6b5cb69f6b46b50e5870ea7830db5465617fca7a593cfbb5bc4f0885b8173",
+    "workflow_run": "31950426854",
+    "status": "published_as_prerelease_and_verified"
+  }
+}

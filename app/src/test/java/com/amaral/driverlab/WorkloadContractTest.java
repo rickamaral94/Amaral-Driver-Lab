@@ -24,14 +24,41 @@ public final class WorkloadContractTest {
     @Test
     public void phaseTwoSeriesAdvanceToVersionTwoWhileV1RemainsSupported() {
         assertEquals(15, WorkloadContract.RESULT_SCHEMA_VERSION);
-        assertEquals(5, WorkloadContract.PHASE2_IDS.size());
+        assertEquals(6, WorkloadContract.PHASE2_IDS.size());
         for (String workloadId : WorkloadContract.PHASE2_IDS) {
-            assertEquals(2, WorkloadContract.versionFor(workloadId));
+            // emulator_frame_pattern is at 3: its v2 primary metric was the median
+            // of the five passes pooled, which moves with the sample mix. See
+            // EmulatorFramePatternTest.
+            final int expected = WorkloadContract.EMULATOR_FRAME_ID.equals(workloadId) ? 4 : 2;
+            assertEquals(expected, WorkloadContract.versionFor(workloadId));
             assertTrue(WorkloadContract.isSupportedVersion(workloadId, 1));
             assertTrue(WorkloadContract.isSupportedVersion(workloadId, 2));
             assertTrue(WorkloadContract.isSupported(workloadId));
             assertTrue(WorkloadContract.isPhase2(workloadId));
             assertFalse(WorkloadContract.limitationFor(workloadId).isEmpty());
+        }
+    }
+
+    /**
+     * The invariant that was missing. Every guard asserted isSupportedVersion for
+     * the literals 1 and 2, so bumping a workload to 3 passed the whole suite while
+     * the runner refused to launch it on the device. A workload must accept the
+     * version its own contract declares current.
+     */
+    @Test
+    public void everyWorkloadSupportsTheVersionItDeclaresCurrent() {
+        java.util.List<String> everyId = new java.util.ArrayList<>(WorkloadContract.PHASE2_IDS);
+        everyId.addAll(VisualSceneContract.IDS);
+        everyId.add(WorkloadContract.RENDER_CORRECTNESS_ID);
+        everyId.add(WorkloadContract.TRANSFER_ID);
+        for (String workloadId : everyId) {
+            int current = WorkloadContract.versionFor(workloadId);
+            assertTrue(workloadId + " precisa aceitar a própria versão corrente " + current,
+                    WorkloadContract.isSupportedVersion(workloadId, current));
+            assertFalse(workloadId + " não pode aceitar versão acima da corrente",
+                    WorkloadContract.isSupportedVersion(workloadId, current + 1));
+            assertFalse(workloadId + " não pode aceitar versão zero",
+                    WorkloadContract.isSupportedVersion(workloadId, 0));
         }
     }
 
@@ -96,7 +123,8 @@ public final class WorkloadContractTest {
         assertEquals(2, Phase8Contract.CURRENT_FULL_PROFILE_VERSION);
         assertEquals(4, VisualSceneContract.IDS.size());
         for (String workloadId : VisualSceneContract.IDS) {
-            assertEquals(2, WorkloadContract.versionFor(workloadId));
+            // v3: the GPU timestamp bracket encloses only the repetition loop.
+            assertEquals(3, WorkloadContract.versionFor(workloadId));
             assertTrue(WorkloadContract.isSupportedVersion(workloadId, 1));
             assertEquals("p99_gpu_frame_ms", WorkloadContract.primaryMetricFor(workloadId));
             assertTrue(WorkloadContract.lowerIsBetter(workloadId));

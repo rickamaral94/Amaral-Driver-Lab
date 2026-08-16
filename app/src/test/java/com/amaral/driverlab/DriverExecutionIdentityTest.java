@@ -12,6 +12,8 @@ public final class DriverExecutionIdentityTest {
     public void systemBaselineUsesSystemLoaderAndRole() {
         assertEquals("system", DriverExecutionIdentity.mode(false));
         assertEquals("system", DriverExecutionIdentity.role(false, false));
+        assertEquals("platform_loader_no_injection",
+                DriverExecutionIdentity.injectionMode(false));
     }
 
     @Test

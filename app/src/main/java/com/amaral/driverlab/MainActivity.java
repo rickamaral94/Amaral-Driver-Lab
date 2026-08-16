@@ -26,6 +26,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /** Phase 13 home: choose drivers and run the recommended test without technical detours. */
 public final class MainActivity extends LocalizedActivity {
@@ -83,6 +84,7 @@ public final class MainActivity extends LocalizedActivity {
         if (uxPreferences.advancedMode()) addIndividualTests();
         addResultsSection();
         if (uxPreferences.advancedMode()) addAdvancedWorkspace();
+        addDriverRankingSection();
         setContentView(scroll);
     }
 
@@ -590,9 +592,6 @@ public final class MainActivity extends LocalizedActivity {
         card.addView(actionButton(R.string.phase13_history,
                 R.string.phase13_history_detail, view -> open(Phase4Activity.class)));
         card.addView(AppTheme.divider(this), dividerParams());
-        card.addView(actionButton(R.string.phase13_rankings,
-                R.string.phase13_rankings_detail, view -> open(Phase4Activity.class)));
-        card.addView(AppTheme.divider(this), dividerParams());
         card.addView(actionButton(R.string.phase13_reports,
                 R.string.phase13_reports_detail, view -> {
                     File latest = latestQualification();
@@ -620,6 +619,146 @@ public final class MainActivity extends LocalizedActivity {
                 R.string.phase13_regression_campaigns_detail,
                 view -> open(CampaignActivity.class)));
         root.addView(card, AppTheme.matchWrap(this, 0, 8));
+    }
+
+    /** Compact ranking lives on the home page; the dedicated screen remains for audit details. */
+    private void addDriverRankingSection() {
+        sectionTitleText(logText("Ranking local de drivers Turnip",
+                "Local Turnip driver ranking"));
+        LinearLayout card = AppTheme.card(this);
+        card.addView(AppTheme.body(this, logText(
+                "Índice composto do aparelho atual. Compatibilidade é porta: quem quebra não recebe nota.",
+                "Composite index for this device. Compatibility is a gate: a failing driver receives no score.")));
+        try {
+            JSONObject fingerprint = EnvironmentFingerprint.capture(this);
+            List<MeasurementRecord> records = RankingStore.load(getFilesDir());
+            JSONObject primary = new JSONObject()
+                    .put("binary_sha256", DriverRanking.PRIMARY_ANCHOR_SHA256)
+                    .put("mesa_commit", DriverRanking.PRIMARY_ANCHOR_MESA_COMMIT)
+                    .put("driver_name", "Anchor Turnip v3 audited")
+                    .put("device_fingerprint_sha256",
+                            fingerprint.getString("device_fingerprint_sha256"))
+                    .put("workload_set_sha256",
+                            fingerprint.getString("workload_set_sha256"));
+            RankingResult result = DriverRanking.computeRanking(records, primary,
+                    findStockAnchor(records, fingerprint),
+                    fingerprint.getString("epoch_sha256"));
+
+            card.addView(AppTheme.caption(this, logText(
+                    records.size() + " medição(ões) bruta(s) preservada(s) · "
+                            + result.disqualified.size() + " desclassificado(s) · "
+                            + result.ineligible.size() + " inelegível(is)",
+                    records.size() + " raw measurement(s) preserved · "
+                            + result.disqualified.size() + " disqualified · "
+                            + result.ineligible.size() + " ineligible")),
+                    AppTheme.matchWrap(this, 8, 12));
+
+            if (result.blocked) {
+                addRankingBlocked(card, result.blockedReason);
+            } else {
+                addRankingRows(card, result);
+            }
+
+            Button details = AppTheme.secondaryButton(this,
+                    logText("HISTÓRICO E DETALHES", "HISTORY AND DETAILS"),
+                    view -> open(DriverRankingActivity.class));
+            card.addView(details, AppTheme.matchWrap(this, 12, 0));
+        } catch (Throwable error) {
+            card.addView(AppTheme.body(this, logText(
+                    "Não foi possível carregar o ranking: ",
+                    "Could not load ranking: ") + error.getMessage()),
+                    AppTheme.matchWrap(this, 10, 0));
+        }
+        root.addView(card, AppTheme.matchWrap(this, 0, 0));
+    }
+
+    private void addRankingBlocked(LinearLayout card, String reasonCode) {
+        LinearLayout warning = AppTheme.vertical(this);
+        warning.setPadding(dp(14), dp(14), dp(14), dp(14));
+        warning.setBackground(AppTheme.rounded(AmaralColors.SURFACE_ELEVATED, 16,
+                AmaralColors.WARNING, 1, this));
+        warning.addView(AppTheme.heading(this,
+                logText("Ranking aguardando validação", "Ranking awaiting validation"), 17));
+        warning.addView(AppTheme.body(this, rankingBlockedReason(reasonCode)),
+                AppTheme.matchWrap(this, 7, 0));
+        card.addView(warning);
+
+        if ("null_test_missing".equals(reasonCode)) {
+            Button nullTest = AppTheme.primaryButton(this,
+                    logText("EXECUTAR TESTE NULO", "RUN NULL TEST"), view -> {
+                        Intent intent = new Intent(this, QualificationActivity.class);
+                        intent.putExtra(QualificationActivity.EXTRA_COMPARISON_MODE, "null_test");
+                        DriverPackage candidate = selectedCandidate();
+                        if (candidate != null) {
+                            intent.putExtra(QualificationActivity.EXTRA_DRIVER_SHA,
+                                    candidate.sha256);
+                        }
+                        startActivity(intent);
+                    });
+            card.addView(nullTest, AppTheme.matchWrap(this, 10, 0));
+        }
+    }
+
+    private void addRankingRows(LinearLayout card, RankingResult result) {
+        card.addView(AppTheme.heading(this,
+                "#  " + logText("Driver · Vulkan · Score", "Driver · Vulkan · Score"), 16),
+                AppTheme.matchWrap(this, 2, 4));
+        if (result.ranked.isEmpty()) {
+            card.addView(AppTheme.body(this, logText(
+                    "Ainda não há driver com três sessões AB/BA completas contra a âncora v3 nesta época.",
+                    "No driver has three complete AB/BA sessions against the v3 anchor in this epoch yet.")),
+                    AppTheme.matchWrap(this, 8, 0));
+        }
+        int limit = Math.min(10, result.ranked.size());
+        for (int index = 0; index < limit; index++) {
+            DriverEntry entry = result.ranked.get(index);
+            card.addView(AppTheme.divider(this), dividerParams());
+            TextView row = AppTheme.body(this, entry.rank + "  " + entry.displayName
+                    + " · " + rankingValue(entry.apiVersion) + " · " + entry.score);
+            row.setPadding(dp(5), dp(12), dp(5), dp(12));
+            row.setOnClickListener(view -> open(DriverRankingActivity.class));
+            card.addView(row);
+        }
+        for (DriverEntry reference : result.references) {
+            String score = reference.score == null ? "—" : "Score " + reference.score;
+            if (reference.vsStock != null) score += " · vs_stock " + reference.vsStock;
+            card.addView(AppTheme.caption(this,
+                    logText("Referência: ", "Reference: ") + reference.displayName + " · " + score),
+                    AppTheme.matchWrap(this, 8, 0));
+        }
+        card.addView(AppTheme.caption(this, logText(
+                "Piso de ruído: " + String.format(Locale.US, "%.2f", result.noiseFloor * 100.0)
+                        + " pontos por 100. Score é número puro, nunca porcentagem.",
+                "Noise floor: " + String.format(Locale.US, "%.2f", result.noiseFloor * 100.0)
+                        + " points per 100. Score is a plain number, never a percentage.")),
+                AppTheme.matchWrap(this, 10, 0));
+    }
+
+    private JSONObject findStockAnchor(List<MeasurementRecord> records,
+                                       JSONObject fingerprint) throws Exception {
+        String device = fingerprint.getString("device_fingerprint_sha256");
+        for (MeasurementRecord record : records) {
+            JSONObject identity = record.referenceIdentity();
+            if (identity != null
+                    && "qualcomm_proprietary".equals(identity.optString("runtime_vendor"))
+                    && device.equals(record.deviceFingerprint())) return identity;
+        }
+        return null;
+    }
+
+    private String rankingBlockedReason(String reasonCode) {
+        if ("null_test_missing".equals(reasonCode)) {
+            return logText(
+                    "As medições existentes continuam no histórico, mas o Score só aparece após um teste nulo válido. A comparação v6 × v8 não pontua porque não contém a âncora v3 auditada.",
+                    "Existing measurements remain in history, but Score only appears after a valid null test. The v6 × v8 comparison is unscored because it does not contain the audited v3 anchor.");
+        }
+        return logText(
+                "O IC95 do teste nulo não contém 100. A bancada apresentou viés sistemático; inicie uma nova época e repita o teste nulo.",
+                "The null-test 95% CI does not contain 100. The harness showed systematic bias; start a new epoch and repeat the null test.");
+    }
+
+    private String rankingValue(String value) {
+        return value == null || value.trim().isEmpty() ? logText("ausente", "missing") : value;
     }
 
     private View actionButton(int titleRes, int detailRes, View.OnClickListener listener) {

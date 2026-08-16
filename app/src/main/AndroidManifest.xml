@@ -52,6 +52,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".DriverRankingActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".DeepDiagnosticsRunnerActivity"
             android:excludeFromRecents="true"
             android:exported="false"

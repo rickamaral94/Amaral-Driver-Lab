@@ -1,0 +1,158 @@
+name: Publish v0.13.0-alpha31 prerelease
+
+on:
+  push:
+    branches: [agent/alpha21-ranking-v5]
+    paths: ['.github/workflows/publish-alpha31-prerelease.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_CLIENT_ID: ${{ vars.GITHUB_CLIENT_ID }}
+      TAG: v0.13.0-alpha31
+      APK_NAME: Amaral-Driver-Lab-v0.13.0-alpha31.apk
+      SHA_NAME: Amaral-Driver-Lab-v0.13.0-alpha31.sha256
+      CERT_SHA256: 4bb6b5cb69f6b46b50e5870ea7830db5465617fca7a593cfbb5bc4f0885b8173
+    steps:
+      - name: Checkout prerelease source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Native toolchain
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" \
+            "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest :telemetry-sdk:testDebugUnitTest --stacktrace --console=plain
+
+      - name: Build prerelease APK
+        run: ./gradlew :app:assembleDebug --stacktrace --console=plain
+
+      - name: Prepare and verify release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" \
+            | grep -F "versionName='0.13.0-alpha31'"
+          actual_cert=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify \
+            --print-certs "$apk" | awk -F': ' '/certificate SHA-256 digest/ {print $2; exit}')
+          test "$actual_cert" = "$CERT_SHA256"
+          mkdir -p release
+          cp "$apk" "release/${APK_NAME}"
+          (cd release && sha256sum "${APK_NAME}" > "${SHA_NAME}")
+
+      - name: Publish GitHub prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES=$(cat <<'EOF'
+          ## Amaral Driver Lab v0.13.0-alpha31
+
+          Duas réguas quebradas: a das cenas visíveis media coisa que não repete, e o perfil exigia mais etapas válidas do que ele mesmo pontua.
+
+          ### Linearidade das cenas visíveis
+
+          O teste de linearidade mede em M e em 2M repetições e cobra razão entre 1,8 e 2,2. Duas cenas reprovavam sistematicamente:
+
+          | cena | razão | veredito |
+          |---|---:|---|
+          | `visual_scene_materials` | **1,673** | `nonlinear_scaling` → não ranqueável |
+          | `visual_scene_postprocess` | **1,652** | `nonlinear_scaling` → não ranqueável |
+          | `visual_scene_geometry` | 1,936 | passa |
+          | `visual_scene_gpu_stress` | 1,859 | passa |
+
+          A causa está no código, e é verificável por leitura: o bracket de timestamp da GPU não corresponde à unidade de repetição declarada. O timestamp 0 era escrito em `TOP_OF_PIPE` no começo do command buffer e o timestamp 1 em `BOTTOM_OF_PIPE` no fim — mas o laço de repetições ocupa só um trecho no meio. Entrava na medição:
+
+          - a cópia de checkpoint para o buffer de leitura;
+          - duas transições de layout de imagem;
+          - o **`vkCmdBlitImage` da imagem interna para a swapchain**, na resolução da tela.
+
+          Nada disso repete. Tudo isso é pago **uma vez por amostra**, não importa quantas repetições foram pedidas. A unidade declarada é `renderpass`, então o bracket media algo diferente do que dizia medir.
+
+          **Correção:** o timestamp 0 passa a ser escrito imediatamente antes do laço e o timestamp 1 imediatamente depois. O bracket contém exatamente o trabalho repetido.
+
+          Ressalva honesta: com dois pontos de medição (M e 2M) e um modelo de dois parâmetros, qualquer curva produz um "custo fixo" quando ajustada — o ajuste é exatamente determinado e não distingue custo fixo de escala não-linear. O defeito do bracket é fato lido no código; **o quanto ele responde pela razão só a próxima corrida diz.** Se as cenas continuarem abaixo de 1,8 com o bracket certo, a causa é outra e volta para investigação.
+
+          As quatro cenas vão para **workload version 3**. Tempos de v2 e v3 não se comparam.
+
+          ### Peso do perfil
+
+          O v8 punha 70 no `emulator_frame` e **30 no `shader_compile`** — a etapa que reportou −1,45 %, +4,15 % e +7,08 % em três corridas, duas delas em pares cuja diferença real era zero. Ela não resolve nada abaixo de ~10 % e decidia um terço da nota.
+
+          Os 30 pontos vão para o `trace_mixed`: razão de linearidade **2,006** e coeficiente de variação **0,06 %** — a régua mais limpa da suíte. O `shader_compile` continua rodando e continua sendo reportado; só parou de decidir.
+
+          ### O gate que era impossível de satisfazer
+
+          `minimum_valid_performance_steps` era **6** para qualquer perfil ≥ 4, enquanto o v6, v7 e v8 concentravam peso em **duas** etapas. O resultado aparecia na issue #68: corrida 9/9, zero falhas, e mesmo assim índice `null` com `insufficient_valid_performance_steps: 1/6`.
+
+          O mínimo passa a ser o declarado **limitado pelo número de etapas que carregam peso**. Um perfil não pode exigir mais etapas válidas do que ele pontua. A correção é geral, não específica do v9.
+
+          ### Versionamento
+
+          - **perfil v9** — `Turnip Recommended Validation v6 · réguas lineares`;
+          - v8, v7 e v6 continuam legíveis e continuam fixando as versões de carga que usaram. Corrida registrada sob eles não migra.
+
+          ### Testes
+
+          210 verdes. Cinco guardas de versão e de desenho falharam nesta mudança e foram atualizadas deliberadamente — inclusive as duas que codificavam o peso antigo do `shader_compile`.
+
+          ### Instalação
+
+          Mesma assinatura desde a alpha24. Instala por cima sem perder histórico.
+          EOF
+          )
+          gh release create "$TAG" --target "$GITHUB_SHA" \
+            --title "Amaral Driver Lab v0.13.0-alpha31" \
+            --notes "$NOTES" --prerelease
+          gh release upload "$TAG" \
+            "release/${APK_NAME}" "release/${SHA_NAME}" --clobber
+
+      - name: Verify prerelease and record status
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" \
+            --json tagName,name,url,targetCommitish,publishedAt,isDraft,isPrerelease,assets \
+            > /tmp/alpha31-release.json
+          test "$(jq -r '.isDraft' /tmp/alpha31-release.json)" = "false"
+          test "$(jq -r '.isPrerelease' /tmp/alpha31-release.json)" = "true"
+          apk_sha=$(awk '{print $1}' "release/${SHA_NAME}")
+          remote_digest=$(jq -r --arg name "$APK_NAME" \
+            '.assets[] | select(.name == $name) | .digest' /tmp/alpha31-release.json)
+          test "$remote_digest" = "sha256:${apk_sha}"
+
+          git checkout "$GITHUB_REF_NAME"
+          git pull --ff-only origin "$GITHUB_REF_NAME"
+          mkdir -p .release-status
+          jq --arg expected "$apk_sha" --arg certificate "$CERT_SHA256" \
+             --arg workflow_run "$GITHUB_RUN_ID" \
+             '. + {verification: {expected_apk_sha256: $expected, certificate_sha256: $certificate, workflow_run: $workflow_run, status: "published_as_prerelease_and_verified"}}' \
+             /tmp/alpha31-release.json > .release-status/v0.13.0-alpha31.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .release-status/v0.13.0-alpha31.json
+          git commit -m "release: record verified v0.13.0-alpha31 prerelease" || true
+          git push origin HEAD:"$GITHUB_REF_NAME"

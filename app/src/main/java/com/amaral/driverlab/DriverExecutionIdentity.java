@@ -21,6 +21,10 @@ final class DriverExecutionIdentity {
         return hasCustomDriver ? "custom" : "system";
     }
 
+    static String injectionMode(boolean hasCustomDriver) {
+        return hasCustomDriver ? "custom_dso_injection" : "platform_loader_no_injection";
+    }
+
     /** Hashes the requested package library; this is not proof of the effective loaded DSO. */
     static Object requestedLibrarySha256(String directory, String libraryName) {
         if (directory == null || directory.isEmpty()

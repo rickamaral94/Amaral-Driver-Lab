@@ -13,7 +13,16 @@ final class VisualSceneContract {
     static final String POSTPROCESS_ID = "visual_scene_postprocess";
     static final String GPU_STRESS_ID = "visual_scene_gpu_stress";
     static final int LEGACY_VERSION = 1;
-    static final int VERSION = 2;
+    /**
+     * v2 wrote the GPU timestamps around the whole command buffer, so the sample
+     * included the checkpoint copy, the layout transitions and the full-surface
+     * blit into the swapchain — work paid once per sample regardless of how many
+     * repetitions were requested. The declared repetition unit is a render pass,
+     * so the bracket did not match what it claimed to measure and the linearity
+     * ratio came in under the 1.8 floor on materials (1.67) and postprocess (1.65).
+     */
+    static final int UNBRACKETED_VERSION = 2;
+    static final int VERSION = 3;
     static final int WIDTH = 960;
     static final int HEIGHT = 540;
     static final int INSTANCE_COUNT = 144;
@@ -45,7 +54,8 @@ final class VisualSceneContract {
     }
 
     static String labelFor(String workloadId, int version) {
-        if (version != LEGACY_VERSION && version != VERSION) {
+        if (version != LEGACY_VERSION && version != UNBRACKETED_VERSION
+                && version != VERSION) {
             throw new IllegalArgumentException("Versão de cena desconhecida: " + version);
         }
         if (GEOMETRY_ID.equals(workloadId)) return "Cena visível · geometria e depth v" + version;
@@ -108,7 +118,8 @@ final class VisualSceneContract {
     }
 
     static JSONObject definition(String workloadId, int version) throws Exception {
-        if (version != LEGACY_VERSION && version != VERSION) {
+        if (version != LEGACY_VERSION && version != UNBRACKETED_VERSION
+                && version != VERSION) {
             throw new IllegalArgumentException("Versão de cena desconhecida: " + version);
         }
         JSONObject definition = new JSONObject()

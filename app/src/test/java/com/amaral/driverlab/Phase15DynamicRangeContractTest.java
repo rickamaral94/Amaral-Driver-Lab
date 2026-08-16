@@ -13,7 +13,7 @@ public final class Phase15DynamicRangeContractTest {
         JSONObject contract = Phase15DynamicRangeContract.contractJson();
         assertEquals(15, contract.getInt("result_schema_version"));
         assertEquals(5, contract.getInt("qualification_schema_version"));
-        assertEquals(6, contract.getInt("profile_version"));
+        assertEquals(10, contract.getInt("profile_version"));
         assertEquals(5, contract.getInt("qualification_report_version"));
         assertEquals(5, contract.getInt("qualification_score_version"));
         assertEquals(3, contract.getInt("ranking_version"));

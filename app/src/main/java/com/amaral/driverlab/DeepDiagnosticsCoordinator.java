@@ -163,23 +163,21 @@ final class DeepDiagnosticsCoordinator {
             if (currentResult.isFile()) {
                 results.put(new JSONObject(ResultFiles.readUtf8(currentResult)));
                 phaseIndex++;
-                handler.postDelayed(this::launchNext,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             if (runnerExitedUnexpectedly()) {
                 killRunner();
                 recordSyntheticFailure("crash", "phase10_runner_crash");
                 phaseIndex++;
-                handler.postDelayed(this::launchNext, 1200L);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             if (SystemClock.elapsedRealtime() >= deadlineElapsed) {
                 killRunner();
                 recordSyntheticFailure("timeout", "phase10_runner_timeout");
                 phaseIndex++;
-                handler.postDelayed(this::launchNext,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             handler.postDelayed(this::poll, 500L);
@@ -187,6 +185,25 @@ final class DeepDiagnosticsCoordinator {
             active = false;
             listener.onFailure("Falha ao ler o diagnóstico", error);
         }
+    }
+
+    private void retireCompletedRunner(Runnable continuation) {
+        File completedResultFile = currentResult;
+        RunnerProcessLifecycle.retireCompletedRunner(handler, completedResultFile,
+                () -> active, new RunnerProcessLifecycle.Callback() {
+                    @Override
+                    public void onRetired() {
+                        if (active) continuation.run();
+                    }
+
+                    @Override
+                    public void onFailure(Throwable error) {
+                        if (!active) return;
+                        active = false;
+                        handler.removeCallbacksAndMessages(null);
+                        listener.onFailure("Falha ao encerrar o processo isolado", error);
+                    }
+                });
     }
 
     private void recordSyntheticFailure(String type, String stage) throws Exception {
