@@ -217,7 +217,12 @@ public:
         diagnosticLogPath = diagnosticLogPathValue;
         nativeStagePath = nativeStagePathValue;
         sceneId = sceneIdValue;
-        if (workloadVersionValue != 1U && workloadVersionValue != 2U) {
+        // v3 moves the GPU timestamp bracket to enclose only the repetition loop.
+        // v2 measured the blit into the swapchain and the layout transitions too,
+        // which are paid once per sample and do not scale with the repetition
+        // count, so v2 timings are not comparable with v3.
+        if (workloadVersionValue != 1U && workloadVersionValue != 2U
+                && workloadVersionValue != 3U) {
             throw std::runtime_error("Unsupported visual workload version");
         }
         if (workloadVersionValue == 1U
@@ -1280,7 +1285,6 @@ private:
         check(vkBeginCommandBuffer(commandBuffer, &begin), "vkBeginCommandBuffer");
         if (timestampsSupported) {
             vkCmdResetQueryPool(commandBuffer, queryPool, 0, 2);
-            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
         }
 
         PushConstants push{};
@@ -1307,6 +1311,15 @@ private:
         finalBegin.renderArea.extent = {renderWidth, renderHeight};
         finalBegin.clearValueCount = 1;
         finalBegin.pClearValues = &finalClear;
+        // The timestamp bracket must contain exactly the repeated work and nothing
+        // else, or the measurement does not scale with the repetition count it
+        // declares. Everything after the loop — the checkpoint copy, the layout
+        // transitions and the full-surface blit into the swapchain image — is paid
+        // once per sample no matter how many repetitions were requested, so it
+        // belongs outside the bracket. See the linearity note below.
+        if (timestampsSupported) {
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
+        }
         for (uint32_t repetition = 0; repetition < effectiveRepetitions; ++repetition) {
             // The calibrated repetition unit is a complete render pass. Load/store, depth
             // clear and driver binning decisions are paid on every repetition.
@@ -1327,6 +1340,9 @@ private:
                                0, sizeof(push), &push);
             vkCmdDraw(commandBuffer, 3, 1, 0, 0);
             vkCmdEndRenderPass(commandBuffer);
+        }
+        if (timestampsSupported) {
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
         }
 
         if (checkpoint) {
@@ -1374,9 +1390,6 @@ private:
         vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                              VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr,
                              1, &toPresent);
-        if (timestampsSupported) {
-            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
-        }
         check(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
         VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_TRANSFER_BIT;

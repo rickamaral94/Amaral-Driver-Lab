@@ -100,7 +100,8 @@ public final class WorkloadContractTest {
         assertEquals(2, Phase8Contract.CURRENT_FULL_PROFILE_VERSION);
         assertEquals(4, VisualSceneContract.IDS.size());
         for (String workloadId : VisualSceneContract.IDS) {
-            assertEquals(2, WorkloadContract.versionFor(workloadId));
+            // v3: the GPU timestamp bracket encloses only the repetition loop.
+            assertEquals(3, WorkloadContract.versionFor(workloadId));
             assertTrue(WorkloadContract.isSupportedVersion(workloadId, 1));
             assertEquals("p99_gpu_frame_ms", WorkloadContract.primaryMetricFor(workloadId));
             assertTrue(WorkloadContract.lowerIsBetter(workloadId));

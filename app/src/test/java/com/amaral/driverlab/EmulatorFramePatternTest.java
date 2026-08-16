@@ -28,13 +28,46 @@ public final class EmulatorFramePatternTest {
     }
 
     @Test
-    public void performanceWeightSitsOnTheEmulatorWorkloadAndShaderCompile() throws Exception {
+    public void performanceWeightSitsOnlyOnStepsWithAVerifiedLinearRuler() throws Exception {
         JSONArray steps = QualificationProfile.definition().getJSONArray("steps");
 
         assertEquals(70, step(steps, "emulator_frame").getInt("score_weight"));
         assertEquals(WorkloadContract.EMULATOR_FRAME_ID,
                 step(steps, "emulator_frame").getString("workload_id"));
-        assertEquals(30, step(steps, "shader_compile").getInt("score_weight"));
+
+        // trace_mixed is the cleanest ruler in the suite: linearity 2.006 against a
+        // 1.8–2.2 window and a coefficient of variation of 0.06%. It is a gate and
+        // it also carries weight; those are independent properties.
+        assertEquals(30, step(steps, "trace_mixed").getInt("score_weight"));
+        assertTrue(step(steps, "trace_mixed").getBoolean("compatibility_gate"));
+
+        // shader_compile reported -1.45%, +4.15% and +7.08% across three runs, two
+        // of them on pairs whose true difference was zero. It does not resolve
+        // anything below roughly 10%, so it keeps running and keeps being reported
+        // but no longer decides the score.
+        assertEquals(0, step(steps, "shader_compile").getInt("score_weight"));
+    }
+
+    /**
+     * A profile that scores two steps while demanding six valid ones can never
+     * reach a recommendation. Issue #68 showed it: 9/9 completed, zero failures,
+     * and the run still came back with a null index.
+     */
+    @Test
+    public void theProfileCannotDemandMoreValidStepsThanItScores() throws Exception {
+        JSONArray steps = QualificationProfile.definition().getJSONArray("steps");
+        int weighted = 0;
+        int total = 0;
+        for (int index = 0; index < steps.length(); ++index) {
+            int weight = steps.getJSONObject(index).getInt("score_weight");
+            if (weight > 0) weighted++;
+            total += weight;
+        }
+        assertEquals("os pesos precisam somar 100", 100, total);
+        assertTrue("o perfil precisa pontuar pelo menos uma etapa", weighted > 0);
+        assertTrue("o mínimo exigido não pode passar do que o perfil pontua",
+                weighted <= QualificationProfile.definition()
+                        .getInt("performance_weight_total"));
     }
 
     @Test
@@ -46,8 +79,14 @@ public final class EmulatorFramePatternTest {
             JSONObject gate = step(steps, id);
             assertTrue(id + " deve continuar sendo gate de compatibilidade",
                     gate.getBoolean("compatibility_gate"));
+        }
+        // The four visible scenes stay unweighted: materials and postprocess were
+        // failing the linearity floor, and a scene that cannot be ranked must not
+        // be able to move a score.
+        for (String id : new String[] {"visual_geometry", "visual_materials",
+                "visual_postprocess", "visual_gpu_stress"}) {
             assertEquals(id + " não deve pesar na performance",
-                    0, gate.getInt("score_weight"));
+                    0, step(steps, id).getInt("score_weight"));
         }
     }
 

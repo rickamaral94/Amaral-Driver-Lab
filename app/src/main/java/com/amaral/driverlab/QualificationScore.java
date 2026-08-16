@@ -25,12 +25,29 @@ final class QualificationScore {
             throw new IllegalArgumentException("Perfil Full Qualification inválido");
         }
         int profileVersion = profile.getInt("profile_version");
-        int minimumValidSteps = profileVersion >= 4
+        int declaredMinimumSteps = profileVersion >= 4
                 ? Phase13ValidationContract
                 .minimumValidPerformanceCategoriesForVersion(profileVersion)
                 : profileVersion >= 3 ? Phase11Contract.MINIMUM_VALID_PERFORMANCE_CATEGORIES
                 : profileVersion >= 2 ? Phase8Contract.MINIMUM_VALID_PERFORMANCE_STEPS_V2
                 : Phase7Contract.MINIMUM_VALID_PERFORMANCE_STEPS;
+        // A profile cannot require more valid performance steps than it actually
+        // scores. The v6 and v7 profiles concentrated the weight on two steps while
+        // still demanding six, so they could never reach a recommendation: a clean
+        // 9/9 run with zero failures came back with a null index and
+        // insufficient_valid_performance_steps. The floor is the declared minimum
+        // capped by how many steps carry weight at all.
+        int weightedStepCount = 0;
+        JSONArray weightedLookup = profile.optJSONArray("steps");
+        for (int index = 0; weightedLookup != null && index < weightedLookup.length(); ++index) {
+            JSONObject candidateStep = weightedLookup.optJSONObject(index);
+            if (candidateStep != null && candidateStep.optInt("score_weight", 0) > 0) {
+                weightedStepCount++;
+            }
+        }
+        int minimumValidSteps = weightedStepCount > 0
+                ? Math.min(declaredMinimumSteps, weightedStepCount)
+                : declaredMinimumSteps;
         Map<String, JSONObject> byStep = new HashMap<>();
         for (int index = 0; index < completedSteps.length(); ++index) {
             JSONObject item = completedSteps.optJSONObject(index);

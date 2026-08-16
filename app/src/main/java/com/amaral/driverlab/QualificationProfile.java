@@ -123,7 +123,10 @@ final class QualificationProfile {
         if (version == Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION) {
             return emulatorV7Steps();
         }
-        if (version == Phase15DynamicRangeContract.PROFILE_VERSION) return emulatorV8Steps();
+        if (version == Phase15DynamicRangeContract.COMPOSITE_V8_PROFILE_VERSION) {
+            return emulatorV8Steps();
+        }
+        if (version == Phase15DynamicRangeContract.PROFILE_VERSION) return linearV9Steps();
         throw new IllegalArgumentException("Versão de Qualification desconhecida: " + version);
     }
 
@@ -360,6 +363,40 @@ final class QualificationProfile {
         return Collections.unmodifiableList(output);
     }
 
+    /**
+     * v9 changes two things against v8, both because a measurement was not
+     * measuring what it declared.
+     *
+     * <p>The visual scenes move to workload version 3: the GPU timestamp bracket
+     * now encloses only the repetition loop. Under v2 it also covered the
+     * checkpoint copy, the layout transitions and the blit into the swapchain,
+     * which are paid once per sample however many repetitions were asked for.
+     * That is why materials and postprocess kept landing at 1.65–1.67 against a
+     * 1.8 linearity floor and were dropped as not rankable.
+     *
+     * <p>The weight moves off shader_compile. Three runs gave -1.45%, +4.15% and
+     * +7.08%, two of them on pairs whose true difference was zero; the step does
+     * not resolve anything below roughly 10%. It keeps running and keeps being
+     * reported — it just stops deciding the score. The 30 points go to trace_mixed,
+     * the only other step with a verified linear ruler (ratio 2.006, CV 0.06%).
+     */
+    private static List<Step> linearV9Steps() {
+        List<Step> output = new ArrayList<>();
+        for (Step step : emulatorV8Steps()) {
+            final int weight =
+                    WorkloadContract.SHADER_COMPILE_ID.equals(step.workloadId) ? 0
+                    : WorkloadContract.TRACE_REPLAY_ID.equals(step.workloadId) ? 30
+                    : step.weight;
+            final int workloadVersion =
+                    VisualSceneContract.isVisualScene(step.workloadId)
+                            ? VisualSceneContract.VERSION : step.workloadVersion;
+            output.add(new Step(step.stepId, step.label, step.workloadId, workloadVersion,
+                    step.traceId, step.rounds, step.warmupSeconds, step.measureSeconds,
+                    step.cooldownSeconds, weight, step.compatibilityGate));
+        }
+        return Collections.unmodifiableList(output);
+    }
+
     static JSONObject definition() throws Exception { return definitionForVersion(currentVersion()); }
 
     static JSONObject definitionForVersion(int version) throws Exception {
@@ -374,6 +411,8 @@ final class QualificationProfile {
                 : version == 3 ? Phase11Contract.PROFILE_LABEL
                 : version == Phase15DynamicRangeContract.PROFILE_VERSION
                 ? Phase15DynamicRangeContract.PROFILE_LABEL
+                : version == Phase15DynamicRangeContract.COMPOSITE_V8_PROFILE_VERSION
+                ? Phase15DynamicRangeContract.COMPOSITE_V8_PROFILE_LABEL
                 : version == Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION
                 ? Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_LABEL
                 : version == Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION
@@ -383,6 +422,7 @@ final class QualificationProfile {
                 : version == 2 ? Phase8Contract.LIMITATION
                 : version == 3 ? Phase11Contract.LIMITATION
                 : version == Phase15DynamicRangeContract.PROFILE_VERSION
+                || version == Phase15DynamicRangeContract.COMPOSITE_V8_PROFILE_VERSION
                 || version == Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION
                 || version == Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION
                 ? Phase15DynamicRangeContract.LIMITATION
@@ -425,6 +465,7 @@ final class QualificationProfile {
                     && version != Phase13ValidationContract.PROFILE_VERSION
                     && version != Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION
                     && version != Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION
+                    && version != Phase15DynamicRangeContract.COMPOSITE_V8_PROFILE_VERSION
                     && version != Phase15DynamicRangeContract.PROFILE_VERSION) return false;
             JSONArray steps = profile.optJSONArray("steps");
             if (steps == null || steps.length() != stepsForVersion(version).size()) return false;
