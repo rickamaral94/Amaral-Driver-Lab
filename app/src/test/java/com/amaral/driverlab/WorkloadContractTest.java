@@ -26,7 +26,11 @@ public final class WorkloadContractTest {
         assertEquals(15, WorkloadContract.RESULT_SCHEMA_VERSION);
         assertEquals(6, WorkloadContract.PHASE2_IDS.size());
         for (String workloadId : WorkloadContract.PHASE2_IDS) {
-            assertEquals(2, WorkloadContract.versionFor(workloadId));
+            // emulator_frame_pattern is at 3: its v2 primary metric was the median
+            // of the five passes pooled, which moves with the sample mix. See
+            // EmulatorFramePatternTest.
+            final int expected = WorkloadContract.EMULATOR_FRAME_ID.equals(workloadId) ? 3 : 2;
+            assertEquals(expected, WorkloadContract.versionFor(workloadId));
             assertTrue(WorkloadContract.isSupportedVersion(workloadId, 1));
             assertTrue(WorkloadContract.isSupportedVersion(workloadId, 2));
             assertTrue(WorkloadContract.isSupported(workloadId));

@@ -40,6 +40,12 @@ constexpr uint32_t kTraceHeight = 180;
 constexpr uint32_t kTraceComputeWords = 65536;
 constexpr uint32_t kLegacyWorkloadVersion = 1;
 constexpr uint32_t kWorkloadVersion = 2;
+// emulator_frame_pattern v3 corrige a metrica primaria: v2 publicava a
+// mediana das amostras das cinco passadas juntas, que nao mede nada porque
+// as passadas custam coisas diferentes e o numero de amostras de cada uma
+// varia com o tempo de medicao. v3 publica a soma das medianas por passada,
+// que e o custo de um quadro composto e escala com as repeticoes.
+constexpr uint32_t kEmulatorFrameVersion = 3;
 constexpr uint32_t kShaderPipelineCount = 24;
 constexpr uint32_t kTilingDrawCount = 2048;
 constexpr uint32_t kStableDrawCount = 512;
@@ -1044,6 +1050,14 @@ public:
     std::string run(const std::string &workloadId, uint32_t workloadVersion,
                     uint32_t repetitions, uint32_t effectPercent,
                     int warmupSeconds, int measureSeconds) {
+        if (workloadId == kEmulatorFrameId) {
+            if (workloadVersion != kEmulatorFrameVersion) {
+                throw std::invalid_argument("Unsupported workload version");
+            }
+            return runEmulatorFrame(workloadVersion, repetitions,
+                    effectiveRepetitions(repetitions, effectPercent), effectPercent,
+                    std::max(0, warmupSeconds), std::max(1, measureSeconds));
+        }
         requireVersion(workloadVersion, repetitions, effectPercent);
         const uint32_t effective = workloadVersion >= 2
                 ? effectiveRepetitions(repetitions, effectPercent) : 1U;
@@ -1057,10 +1071,6 @@ public:
         if (workloadId == kComputeArithmeticId) {
             return runCompute(workloadVersion, repetitions, effective, effectPercent,
                     std::max(0, warmupSeconds), std::max(1, measureSeconds), false);
-        }
-        if (workloadId == kEmulatorFrameId) {
-            return runEmulatorFrame(workloadVersion, repetitions, effective, effectPercent,
-                    std::max(0, warmupSeconds), std::max(1, measureSeconds));
         }
         if (workloadId == kStableSceneId) {
             return runStableScene(workloadVersion, repetitions, effective, effectPercent,
@@ -2609,6 +2619,7 @@ private:
         };
 
         std::vector<double> aggregate;
+        std::vector<double> passMedians;
         std::vector<double> storeSamples;
         std::vector<double> discardSamples;
         std::ostringstream passJson;
@@ -2635,6 +2646,7 @@ private:
             const bool timestamps = setup.query.supported;
             destroyRenderSetup(setup);
             aggregate.insert(aggregate.end(), samples.begin(), samples.end());
+            passMedians.push_back(median(samples));
             if (pass.storeOp == VK_ATTACHMENT_STORE_OP_STORE) {
                 storeSamples.insert(storeSamples.end(), samples.begin(), samples.end());
             } else {
@@ -2662,6 +2674,13 @@ private:
         // The ratio is the point of the workload: how much the driver pays to keep
         // a small target instead of discarding it. A driver that resolves cheaply
         // shows a ratio near 1; one that falls back to system memory does not.
+        // Um quadro de emulador e as cinco passadas juntas, entao o custo do quadro
+        // e a soma do custo tipico de cada uma. Somar medianas por passada mantem a
+        // composicao fixa: nao depende de quantas amostras cada passada coube no
+        // tempo de medicao, e dobra quando as repeticoes dobram.
+        double compositeFrameMs = 0.0;
+        for (double value : passMedians) compositeFrameMs += value;
+
         const double storeMedian = median(storeSamples);
         const double discardMedian = median(discardSamples);
         const double storePenalty = discardMedian > 0.0 ? storeMedian / discardMedian : 0.0;
@@ -2679,8 +2698,11 @@ private:
              << ",\"effect_injection_domain\":\"gpu_workload\""
              << ",\"realized_workload_effect_percent\":"
              << realizedEffectPercent(requestedRepetitions, effectiveRepetitionCount)
-             << ",\"median_batch_us\":" << median(aggregate) * 1000.0
-             << ",\"median_frame_ms\":" << median(aggregate)
+             << ",\"median_batch_us\":" << compositeFrameMs * 1000.0
+             << ",\"composite_frame_ms\":" << compositeFrameMs
+             << ",\"pass_median_ms\":";
+        appendDoubleArray(json, passMedians);
+        json << ",\"pooled_median_frame_ms\":" << median(aggregate)
              << ",\"p95_frame_ms\":" << percentile(aggregate, 0.95)
              << ",\"p99_frame_ms\":" << percentile(aggregate, 0.99)
              << ",\"store_median_ms\":" << storeMedian
@@ -2690,7 +2712,7 @@ private:
              << ",\"gpu_timestamps_used\":"
              << (context.timestampsSupported() ? "true" : "false")
              << ",\"capabilities\":" << context.capabilities
-             << ",\"metric_note\":\"Many small render passes with few draws each, sweeping store versus discard, which is the frame shape emulators emit. store_penalty_ratio is the cost of keeping a target rather than discarding it. This is a synthetic proxy for tiling behaviour; it does not read driver internals and does not predict game FPS.\""
+             << ",\"metric_note\":\"Many small render passes with few draws each, sweeping store versus discard, which is the frame shape emulators emit. composite_frame_ms is the sum of the per-pass medians, so the composition is fixed and does not depend on how many samples each pass fit in the measurement window; pooled_median_frame_ms is kept only for comparison with v2 and must not be used to rank. store_penalty_ratio is the cost of keeping a target rather than discarding it. This is a synthetic proxy for tiling behaviour; it does not read driver internals and does not predict game FPS.\""
              << '}';
         return json.str();
     }

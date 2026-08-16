@@ -72,7 +72,61 @@ public final class EmulatorFramePatternTest {
     @Test
     public void lowerIsBetterForTheNewWorkload() {
         assertTrue(WorkloadContract.lowerIsBetter(WorkloadContract.EMULATOR_FRAME_ID));
-        assertEquals("median_frame_ms",
+        assertEquals("composite_frame_ms",
                 WorkloadContract.primaryMetricFor(WorkloadContract.EMULATOR_FRAME_ID));
+    }
+
+    /**
+     * v2 published the median of the samples of all five passes pooled together.
+     * The passes cost wildly different amounts and each runs for a slice of wall
+     * clock, so the number of samples per pass shifts between rounds and the
+     * pooled median jumps to a different pass's population. Issue #68 showed the
+     * damage: medians stepping between 4.18, 3.54 and 2.50 ms across rounds of the
+     * same pair, linearity 1.46 against a 1.8 minimum, and the step dropped as
+     * not_rankable — carrying weight 70.
+     *
+     * <p>The arithmetic below is the fix, restated: a fixed composition cannot
+     * move when the sample counts do.
+     */
+    @Test
+    public void theCompositeFrameDoesNotMoveWhenSampleCountsDo() {
+        double[] cheapPass = { 0.40, 0.41, 0.42, 0.40, 0.41, 0.42, 0.41 };
+        double[] costlyPass = { 4.10, 4.15, 4.20 };
+
+        // The passes are unchanged. Only how many samples of each landed in the
+        // measurement window differs — which is what varies round to round,
+        // because each pass runs for a slice of wall clock, not a fixed count.
+        double mostlyCheap = pooledMedian(cheapPass, 7, costlyPass, 3);
+        double mostlyCostly = pooledMedian(cheapPass, 2, costlyPass, 3);
+        assertEquals(0.42, mostlyCheap, 1e-9);
+        assertEquals(4.10, mostlyCostly, 1e-9);
+        assertTrue("this is the v2 defect: the metric jumped between passes",
+                mostlyCostly - mostlyCheap > 3.0);
+
+        // The composite is the sum of the per-pass medians, so it answers the
+        // question the workload actually asks: what does one emulator-shaped
+        // frame cost. It cannot move unless a pass gets faster or slower.
+        assertEquals(0.41 + 4.15, composite(cheapPass, costlyPass), 1e-9);
+    }
+
+    private static double composite(double[]... passes) {
+        double total = 0.0;
+        for (double[] pass : passes) total += median(pass, pass.length);
+        return total;
+    }
+
+    private static double pooledMedian(double[] first, int firstCount,
+                                       double[] second, int secondCount) {
+        double[] pooled = new double[firstCount + secondCount];
+        System.arraycopy(first, 0, pooled, 0, firstCount);
+        System.arraycopy(second, 0, pooled, firstCount, secondCount);
+        return median(pooled, pooled.length);
+    }
+
+    private static double median(double[] values, int count) {
+        double[] copy = new double[count];
+        System.arraycopy(values, 0, copy, 0, count);
+        java.util.Arrays.sort(copy);
+        return copy[count / 2];
     }
 }
