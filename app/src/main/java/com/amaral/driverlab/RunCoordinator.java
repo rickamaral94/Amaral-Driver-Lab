@@ -1269,7 +1269,20 @@ final class RunCoordinator {
         JSONObject systemCapabilities = firstCapabilities(false);
         JSONObject candidateCapabilities = firstCapabilities(true);
         if (systemCapabilities == null || candidateCapabilities == null) return null;
+        // A side that never enumerated extensions is not "an arm without them":
+        // comparing against it reports the other arm's entire list as gained.
+        // A run of two builds of the same Mesa source produced "+42 extensions",
+        // which is impossible and was published as if it explained something.
+        if (!enumeratedExtensions(systemCapabilities)
+                || !enumeratedExtensions(candidateCapabilities)) {
+            return null;
+        }
         return CapabilityDiff.compare(systemCapabilities, candidateCapabilities);
+    }
+
+    private static boolean enumeratedExtensions(JSONObject capabilities) {
+        org.json.JSONArray extensions = capabilities.optJSONArray("extensions");
+        return extensions != null && extensions.length() > 0;
     }
 
     private JSONObject firstCapabilities(boolean candidateArm) {
