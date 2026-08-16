@@ -180,7 +180,7 @@ final class RankingMeasurementExtractor {
         return values.get(values.size() / 2);
     }
 
-    private static JSONArray armFrameTimes(JSONArray phases, boolean candidate) {
+    private static JSONArray armFrameTimes(JSONArray phases, boolean candidate) throws Exception {
         JSONArray output = new JSONArray();
         for (int index = 0; phases != null && index < phases.length(); index++) {
             JSONObject phase = phases.optJSONObject(index);
