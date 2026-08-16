@@ -200,6 +200,8 @@ class VisualRenderer {
 public:
     ~VisualRenderer() { cleanup(); }
 
+    void setForceCpuTiming(bool value) { forceCpuTiming = value; }
+
     void initialize(JNIEnv *environment,
                     jobject surfaceObject,
                     const std::string &sceneIdValue,
@@ -507,6 +509,12 @@ public:
              << ",\"p99_gpu_frame_ms\":" << p99
              << ",\"mean_gpu_frame_ms\":" << mean
              << ",\"one_percent_low_fps\":" << onePercentLow
+             << ",\"frame_times_ms\":[";
+        for (size_t index = 0; index < measuredFrameTimes.size(); ++index) {
+            if (index > 0) json << ',';
+            json << measuredFrameTimes[index];
+        }
+        json << "]"
              << ",\"checkpoint_frames\":[";
         for (size_t index = 0; index < captured.size(); ++index) {
             if (index > 0) json << ',';
@@ -1118,7 +1126,7 @@ private:
     }
 
     void createPipelines() {
-        setStage("create_visual_pipelines");
+        setStage("create_visual_pipeline_layouts");
         VkPushConstantRange push{};
         push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         push.offset = 0;
@@ -1135,19 +1143,26 @@ private:
         check(vkCreatePipelineLayout(device, &finalLayoutInfo, nullptr, &finalPipelineLayout),
               "vkCreatePipelineLayout(final)");
         const bool stressScene = sceneKind == 3;
+        setStage(stressScene ? "create_stress_vertex_shader" : "create_scene_vertex_shader");
         VkShaderModule sceneVertex = stressScene
                 ? shader(kStressVertexSpirv, sizeof(kStressVertexSpirv))
                 : shader(kSceneVertexSpirv, sizeof(kSceneVertexSpirv));
+        setStage(stressScene ? "create_stress_fragment_shader" : "create_scene_fragment_shader");
         VkShaderModule sceneFragment = stressScene
                 ? shader(kStressFragmentSpirv, sizeof(kStressFragmentSpirv))
                 : shader(kSceneFragmentSpirv, sizeof(kSceneFragmentSpirv));
+        setStage("create_post_vertex_shader");
         VkShaderModule postVertex = shader(kPostVertexSpirv, sizeof(kPostVertexSpirv));
+        setStage(stressScene ? "create_stress_post_fragment_shader"
+                             : "create_post_fragment_shader");
         VkShaderModule postFragment = stressScene
                 ? shader(kStressPostFragmentSpirv, sizeof(kStressPostFragmentSpirv))
                 : shader(kPostFragmentSpirv, sizeof(kPostFragmentSpirv));
         try {
+            setStage(stressScene ? "create_stress_scene_pipeline" : "create_scene_pipeline");
             scenePipeline = createPipeline(sceneRenderPass, scenePipelineLayout,
                                            sceneVertex, sceneFragment, true);
+            setStage(stressScene ? "create_stress_final_pipeline" : "create_final_pipeline");
             finalPipeline = createPipeline(finalRenderPass, finalPipelineLayout,
                                            postVertex, postFragment, false);
         } catch (...) {
@@ -1176,7 +1191,7 @@ private:
         allocate.commandBufferCount = 1;
         check(vkAllocateCommandBuffers(device, &allocate, &commandBuffer),
               "vkAllocateCommandBuffers");
-        timestampsSupported = queueFamilyProperties.timestampValidBits > 0;
+        timestampsSupported = !forceCpuTiming && queueFamilyProperties.timestampValidBits > 0;
         if (timestampsSupported) {
             VkQueryPoolCreateInfo queryInfo{};
             queryInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
@@ -1565,6 +1580,7 @@ private:
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     VkQueryPool queryPool = VK_NULL_HANDLE;
     bool timestampsSupported = false;
+    bool forceCpuTiming = false;
     VkSemaphore imageAvailable = VK_NULL_HANDLE;
     VkSemaphore renderFinished = VK_NULL_HANDLE;
     VkFence frameFence = VK_NULL_HANDLE;
@@ -1667,6 +1683,7 @@ Java_com_amaral_driverlab_VisualRunnerActivity_runNativeVisualScene(
         jint workloadVersion,
         jint repetitionsPerSample,
         jint effectInjectionPercent,
+        jboolean forceCpuTiming,
         jstring driverDirectory,
         jstring driverName,
         jstring nativeLibraryDirectory,
@@ -1678,6 +1695,7 @@ Java_com_amaral_driverlab_VisualRunnerActivity_runNativeVisualScene(
         jstring nativeStagePath) {
     VisualRenderer renderer;
     try {
+        renderer.setForceCpuTiming(forceCpuTiming == JNI_TRUE);
         renderer.initialize(environment, surface,
                             UtfString(environment, sceneId).string(),
                             static_cast<uint32_t>(workloadVersion),

@@ -268,17 +268,20 @@ final class RunCoordinator {
     private void launchCalibrationProbe(int repetitions, int effectPercent, String stage) {
         if (!canContinue()) return;
         try {
-            Phase phase = new Phase(false, 0, reference);
+            // Calibrate on an injected Turnip arm. The system blob may legitimately reject a
+            // workload that the candidate supports; the selected multiplier remains shared by
+            // both arms and therefore is not per-driver calibration.
+            Phase phase = calibrationPhase();
             currentResultFile = new File(suiteDirectory,
                     "calibration-" + stage.replaceAll("[^a-z0-9_-]", "-") + ".json");
             listener.onStatus("Calibração " + stage + " · " + repetitions
                     + " repetição(ões) · injeção GPU " + effectPercent
-                    + "% · braço de referência");
+                    + "% · " + calibrationArmLabel());
             Intent intent = new Intent(activity, VisualSceneContract.isVisualScene(workloadId)
                     ? VisualRunnerActivity.class : RunnerActivity.class);
             intent.putExtra(RunnerActivity.EXTRA_RESULT_PATH,
                     currentResultFile.getAbsolutePath());
-            intent.putExtra(RunnerActivity.EXTRA_PHASE_LABEL, "calibration_reference");
+            intent.putExtra(RunnerActivity.EXTRA_PHASE_LABEL, calibrationPhaseLabel());
             intent.putExtra(RunnerActivity.EXTRA_ROUND, 0);
             intent.putExtra(RunnerActivity.EXTRA_WARMUP_SECONDS, Math.max(1, warmupSeconds));
             intent.putExtra(RunnerActivity.EXTRA_MEASURE_SECONDS, Math.max(2, measureSeconds));
@@ -287,6 +290,8 @@ final class RunCoordinator {
             intent.putExtra(RunnerActivity.EXTRA_WORKLOAD_VERSION, workloadVersion);
             intent.putExtra(RunnerActivity.EXTRA_REPETITIONS_PER_SAMPLE, repetitions);
             intent.putExtra(RunnerActivity.EXTRA_EFFECT_INJECTION_PERCENT, effectPercent);
+            intent.putExtra(RunnerActivity.EXTRA_FORCE_CPU_TIMING,
+                    mode == MODE_AB && reference == null);
             intent.putExtra(RunnerActivity.EXTRA_PIXEL_TOLERANCE, pixelTolerance);
             intent.putExtra(RunnerActivity.EXTRA_MAX_DIVERGENT_BLOCKS,
                     maximumDivergentBlocks);
@@ -322,11 +327,7 @@ final class RunCoordinator {
     }
 
     private void scheduleCalibrationProbe(int repetitions, int effectPercent, String stage) {
-        // RunnerActivity and VisualRunnerActivity share the :runner process. The activity that
-        // just wrote the result still has a pending self-termination callback, so starting the
-        // next probe immediately lets the old callback kill the new probe in the same process.
-        handler.postDelayed(() -> launchCalibrationProbe(repetitions, effectPercent, stage),
-                RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+        retireCompletedRunner(() -> launchCalibrationProbe(repetitions, effectPercent, stage));
     }
 
     private void handleCalibrationProbe(JSONObject result) throws Exception {
@@ -408,15 +409,14 @@ final class RunCoordinator {
                 calibrationStage = "effect_injection_10";
                 scheduleCalibrationProbe(calibrationRepetitions, 10, calibrationStage);
             } else {
-                handler.postDelayed(this::startSampleSizePilot,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::startSampleSizePilot);
             }
             return;
         }
         if ("post_run_reference_validation".equals(calibrationStage)) {
             postValidationMedianUs = medianUs;
             postCalibrationValidationComplete = true;
-            finishSuite();
+            retireCompletedRunner(this::finishSuite);
             return;
         }
         throw new IllegalStateException("Estado de calibração desconhecido: " + calibrationStage);
@@ -553,6 +553,8 @@ final class RunCoordinator {
         intent.putExtra(RunnerActivity.EXTRA_REPETITIONS_PER_SAMPLE,
                 workloadVersion >= 2 ? calibrationRepetitions : 1);
         intent.putExtra(RunnerActivity.EXTRA_EFFECT_INJECTION_PERCENT, 0);
+        intent.putExtra(RunnerActivity.EXTRA_FORCE_CPU_TIMING,
+                mode == MODE_AB && reference == null);
         intent.putExtra(RunnerActivity.EXTRA_PIXEL_TOLERANCE, pixelTolerance);
         intent.putExtra(RunnerActivity.EXTRA_MAX_DIVERGENT_BLOCKS, maximumDivergentBlocks);
         intent.putExtra(RunnerActivity.EXTRA_DRIVER_MODE_OVERRIDE,
@@ -602,8 +604,7 @@ final class RunCoordinator {
                 if (sampleSizePilotActive) sampleSizePilotResults.put(completed);
                 else phaseResults.put(completed);
                 phaseIndex++;
-                handler.postDelayed(this::launchNext,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             if (runnerExitedUnexpectedly()) {
@@ -616,8 +617,7 @@ final class RunCoordinator {
                 }
                 recordSyntheticFailure("crash", "runner_crash", false);
                 phaseIndex++;
-                handler.postDelayed(this::launchNext,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             if (SystemClock.elapsedRealtime() >= phaseDeadlineElapsed) {
@@ -630,8 +630,7 @@ final class RunCoordinator {
                 }
                 recordSyntheticFailure("timeout", "runner_timeout", false);
                 phaseIndex++;
-                handler.postDelayed(this::launchNext,
-                        RunnerProcessLifecycle.RELAUNCH_DELAY_MS);
+                retireCompletedRunner(this::launchNext);
                 return;
             }
             handler.postDelayed(this::pollCurrent, 500);
@@ -655,12 +654,11 @@ final class RunCoordinator {
 
     private JSONObject recordSyntheticFailure(String failureType, String error,
                                               boolean calibration) throws Exception {
-        Phase phase = calibration
-                ? new Phase(false, 0, reference) : phases.get(phaseIndex);
+        Phase phase = calibration ? calibrationPhase() : phases.get(phaseIndex);
         JSONObject failure = new JSONObject();
         failure.put("schema_version", WorkloadContract.RESULT_SCHEMA_VERSION);
         failure.put("success", false);
-        failure.put("phase", calibration ? "calibration_reference" : phase.label);
+        failure.put("phase", calibration ? calibrationPhaseLabel() : phase.label);
         failure.put("driver_mode",
                 DriverExecutionIdentity.mode(phase.usesCustomDriver()));
         failure.put("driver_role", phase.executionRole());
@@ -695,7 +693,48 @@ final class RunCoordinator {
                 .put("failure_stage", failure.optString("failure_stage", "runner_process"))
                 .put("runner_last_stage", failure.opt("runner_last_stage")));
         phaseResults.put(failure);
-        finishSuite();
+        retireCompletedRunner(this::finishSuite);
+    }
+
+    private Phase calibrationPhase() {
+        return reference != null
+                ? new Phase(false, 0, reference)
+                : new Phase(true, 0, candidate);
+    }
+
+    private String calibrationPhaseLabel() {
+        return reference != null ? "calibration_reference" : "calibration_candidate";
+    }
+
+    private String calibrationArmLabel() {
+        return reference != null ? "braço Turnip de referência" : "braço Turnip candidato";
+    }
+
+    static boolean calibrationRequiresQualificationAbort(JSONObject failure) {
+        if (failure == null) return false;
+        String type = failure.optString("failure_type", "");
+        return "crash".equals(type) || "timeout".equals(type)
+                || "runner_crash".equals(type) || "runner_timeout".equals(type)
+                || failure.optBoolean("runner_process_died", false);
+    }
+
+    private void retireCompletedRunner(Runnable continuation) {
+        File completedResultFile = currentResultFile;
+        RunnerProcessLifecycle.retireCompletedRunner(handler, completedResultFile,
+                this::canContinue, new RunnerProcessLifecycle.Callback() {
+                    @Override
+                    public void onRetired() {
+                        if (canContinue()) continuation.run();
+                    }
+
+                    @Override
+                    public void onFailure(Throwable error) {
+                        if (!canContinue()) return;
+                        cancelled = true;
+                        handler.removeCallbacksAndMessages(null);
+                        listener.onFailure("Falha ao encerrar o processo isolado", error);
+                    }
+                });
     }
 
     private void killTimedOutRunner() {
@@ -767,7 +806,11 @@ final class RunCoordinator {
                     driverIdentityAudit.getJSONObject("identity_observation_coverage"));
             report.put("loader_isolation_verified",
                     driverIdentityAudit.get("loader_isolation_verified"));
-            report.put("qualification_abort_recommended", calibrationFailure != null);
+            report.put("calibration_failure", calibrationFailure == null
+                    ? JSONObject.NULL : calibrationFailure);
+            report.put("calibration_arm", calibrationPhaseLabel());
+            report.put("qualification_abort_recommended",
+                    calibrationRequiresQualificationAbort(calibrationFailure));
             report.put("qualification_abort_reason", calibrationFailure == null
                     ? JSONObject.NULL
                     : calibrationFailure.optString("failure_type", "calibration_failure"));

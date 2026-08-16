@@ -24,14 +24,20 @@ final class QualificationStore {
     static File create(File filesDir, DriverPackage driver, DriverPackage referenceDriver,
                        String comparisonMode, int profileVersion, JSONObject preflight)
             throws Exception {
-        String normalizedMode = "turnip_vs_turnip".equals(comparisonMode)
+        String normalizedMode = "null_test".equals(comparisonMode) ? "null_test"
+                : "turnip_vs_turnip".equals(comparisonMode)
                 ? "turnip_vs_turnip" : "system_vs_turnip";
-        if ("turnip_vs_turnip".equals(normalizedMode)) {
+        if ("turnip_vs_turnip".equals(normalizedMode) || "null_test".equals(normalizedMode)) {
             if (referenceDriver == null || !referenceDriver.isUsable()) {
                 throw new IllegalArgumentException("Driver de referência inválido");
             }
-            if (driver.sha256.equalsIgnoreCase(referenceDriver.sha256)) {
+            if ("turnip_vs_turnip".equals(normalizedMode)
+                    && driver.sha256.equalsIgnoreCase(referenceDriver.sha256)) {
                 throw new IllegalArgumentException("Candidato e referência devem ser diferentes");
+            }
+            if ("null_test".equals(normalizedMode)
+                    && !driver.sha256.equalsIgnoreCase(referenceDriver.sha256)) {
+                throw new IllegalArgumentException("Teste nulo exige o mesmo driver nos dois braços");
             }
         }
         long now = System.currentTimeMillis();
@@ -145,13 +151,16 @@ final class QualificationStore {
             if (driver == null || driver.optString("sha256", "").length() != 64) return false;
             String comparisonMode = manifest.optString("comparison_mode", "system_vs_turnip");
             if (!"system_vs_turnip".equals(comparisonMode)
-                    && !"turnip_vs_turnip".equals(comparisonMode)) return false;
+                    && !"turnip_vs_turnip".equals(comparisonMode)
+                    && !"null_test".equals(comparisonMode)) return false;
             JSONObject referenceDriver = manifest.optJSONObject("reference_driver");
-            if ("turnip_vs_turnip".equals(comparisonMode)) {
+            if ("turnip_vs_turnip".equals(comparisonMode) || "null_test".equals(comparisonMode)) {
                 if (referenceDriver == null
-                        || referenceDriver.optString("sha256", "").length() != 64
-                        || driver.optString("sha256").equalsIgnoreCase(
-                                referenceDriver.optString("sha256"))) return false;
+                        || referenceDriver.optString("sha256", "").length() != 64) return false;
+                boolean same = driver.optString("sha256").equalsIgnoreCase(
+                        referenceDriver.optString("sha256"));
+                if ("turnip_vs_turnip".equals(comparisonMode) && same) return false;
+                if ("null_test".equals(comparisonMode) && !same) return false;
             }
             JSONObject execution = manifest.optJSONObject("execution");
             JSONArray states = execution == null ? null : execution.optJSONArray("steps");

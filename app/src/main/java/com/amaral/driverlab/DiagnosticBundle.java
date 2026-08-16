@@ -35,7 +35,8 @@ final class DiagnosticBundle {
         JSONArray states = manifest.getJSONObject("execution").getJSONArray("steps");
         for (int index = 0; index < states.length(); ++index) {
             JSONObject state = states.getJSONObject(index);
-            if (!"completed".equals(state.optString("status"))) continue;
+            String status = state.optString("status");
+            if (!"completed".equals(status) && !"failed".equals(status)) continue;
             File suite = QualificationStore.suiteFile(filesDir, state);
             if (suite == null || !suite.isFile()) continue;
             collectDirectory(sources, suite.getParentFile(),

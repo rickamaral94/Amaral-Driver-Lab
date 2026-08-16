@@ -51,6 +51,7 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             int workloadVersion,
             int repetitionsPerSample,
             int effectInjectionPercent,
+            boolean forceCpuTiming,
             String driverDirectory,
             String driverName,
             String nativeLibraryDirectory,
@@ -191,7 +192,7 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
     protected void onDestroy() {
         super.onDestroy();
         if (retireRunnerOnDestroy && isFinishing()) {
-            RunnerProcessLifecycle.retireAfterActivityDestroyed();
+            RunnerProcessState.markActivityDestroyed(resultFile, Process.myPid());
         }
     }
 
@@ -232,6 +233,8 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
             int effectInjectionPercent = Math.max(0, Math.min(10,
                     getIntent().getIntExtra(
                             RunnerActivity.EXTRA_EFFECT_INJECTION_PERCENT, 0)));
+            boolean forceCpuTiming = getIntent().getBooleanExtra(
+                    RunnerActivity.EXTRA_FORCE_CPU_TIMING, false);
             if (workloadVersion < 2 && (repetitionsPerSample != 1
                     || effectInjectionPercent != 0)) {
                 throw new IllegalArgumentException("Cena v1 não aceita repetição calibrada");
@@ -276,6 +279,9 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                             || "custom".equals(driverModeOverride)
                             ? driverModeOverride
                             : driverDir == null || driverDir.isEmpty() ? "system" : "custom")
+                    .put("driver_injection_mode", DriverExecutionIdentity.injectionMode(
+                            !(driverDir == null || driverDir.isEmpty())))
+                    .put("custom_driver_injected", !(driverDir == null || driverDir.isEmpty()))
                     .put("driver_role", driverRole == null || driverRole.isEmpty()
                             ? DriverExecutionIdentity.role("candidate".equals(phase),
                             driverDir != null && !driverDir.isEmpty())
@@ -319,6 +325,7 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                     workloadVersion,
                     repetitionsPerSample,
                     effectInjectionPercent,
+                    forceCpuTiming,
                     driverDir == null ? "" : driverDir,
                     driverName == null ? "" : driverName,
                     getApplicationInfo().nativeLibraryDir,
@@ -348,6 +355,14 @@ public final class VisualRunnerActivity extends LocalizedActivity implements Sur
                         nativeResult.optString("failure_stage", "visual_scene_native"));
                 result.put("error",
                         nativeResult.optString("error", "Falha na cena Vulkan visível"));
+                AppDiagnostics.event("visual_native_failure", AppDiagnostics.details(
+                        "workload_id", workloadId,
+                        "failure_type", result.optString("failure_type"),
+                        "failure_stage", result.optString("failure_stage"),
+                        "error", result.optString("error"),
+                        "vk_result", nativeResult.opt("vk_result"),
+                        "vulkan_operation", nativeResult.opt("vulkan_operation"),
+                        "device_lost", nativeResult.optBoolean("device_lost", false)));
             }
         } catch (Throwable error) {
             try {

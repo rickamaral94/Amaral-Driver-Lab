@@ -172,6 +172,8 @@ final class QualificationCoordinator {
                         currentRun = null;
                         if (report.optBoolean("qualification_abort_recommended", false)) {
                             abortAfterRunnerFailure(step, reportFile, report);
+                        } else if (report.optJSONObject("calibration_failure") != null) {
+                            failSuiteStepAndContinue(step, reportFile, report);
                         } else {
                             completeSuiteStep(step, reportFile, report);
                         }
@@ -230,6 +232,23 @@ final class QualificationCoordinator {
         }
     }
 
+    private void failSuiteStepAndContinue(QualificationProfile.Step step, File reportFile,
+                                          JSONObject report) {
+        try {
+            JSONObject failure = report.optJSONObject("calibration_failure");
+            String reason = failure == null ? "calibration_failure"
+                    : failure.optString("failure_type", "calibration_failure");
+            QualificationStore.markStepFailedArtifact(activity.getFilesDir(), manifest,
+                    step.stepId, reportFile, report,
+                    "Falha controlada durante a calibração (" + reason + ")");
+            listener.onStatus("Etapa " + step.label
+                    + " falhou; o runner permaneceu íntegro e o diagnóstico continuará.");
+            persistAndContinue(step);
+        } catch (Throwable error) {
+            failStep(step, "Falha ao registrar suite com erro: " + error.getMessage());
+        }
+    }
+
     private void persistAndContinue(QualificationProfile.Step step) throws Exception {
         QualificationStore.save(qualificationFile, manifest);
         listener.onUpdated(qualificationFile, manifest);
@@ -263,11 +282,16 @@ final class QualificationCoordinator {
                     .put("abort_reason", reason)
                     .put("aborted_at_ms", System.currentTimeMillis());
             QualificationStore.save(qualificationFile, manifest);
+            JSONObject bundle = DiagnosticBundle.create(
+                    activity.getFilesDir(), qualificationFile, manifest, report);
+            manifest.put("diagnostic_bundle", bundle);
+            QualificationStore.save(qualificationFile, manifest);
+            listener.onUpdated(qualificationFile, manifest);
             active = false;
             handler.removeCallbacksAndMessages(null);
             listener.onUpdated(qualificationFile, manifest);
-            listener.onFailure("Teste interrompido com segurança após o crash do runner; "
-                    + "o relatório e os logs foram preservados", null);
+            listener.onFailure("Teste interrompido com segurança após falha real do runner; "
+                    + "o relatório e o ZIP parcial foram preservados", null);
         } catch (Throwable error) {
             active = false;
             listener.onFailure("Falha ao registrar a interrupção segura", error);
@@ -314,6 +338,24 @@ final class QualificationCoordinator {
                     activity.getFilesDir(), qualificationFile, manifest, report);
             QualificationStore.finish(manifest, finalEnvironment, comparison, report, bundle);
             QualificationStore.save(qualificationFile, manifest);
+            try {
+                JSONObject fingerprint = EnvironmentFingerprint.capture(activity);
+                MeasurementRecord measurement = RankingMeasurementExtractor.fromQualification(
+                        activity.getFilesDir(), manifest, fingerprint);
+                java.util.List<MeasurementRecord> prior = RankingStore.load(activity.getFilesDir());
+                prior.add(measurement);
+                JSONObject enriched = measurement.toJson().put("noise_floor_at_capture",
+                        DriverRanking.noiseFloorForRecords(prior,
+                                fingerprint.getString("device_fingerprint_sha256"),
+                                fingerprint.getString("epoch_sha256")));
+                measurement = new MeasurementRecord(enriched);
+                RankingStore.append(activity.getFilesDir(), measurement);
+            } catch (Throwable rankingError) {
+                AppDiagnostics.event("ranking_measurement_capture_failed",
+                        AppDiagnostics.details("qualification_id",
+                                manifest.optString("qualification_id"),
+                                "error", rankingError.toString()));
+            }
             active = false;
             listener.onComplete(qualificationFile, manifest,
                     new File(directory, bundle.getString("relative_path")));

@@ -25,8 +25,8 @@ public final class RunnerLifecycleContractTest {
                     java.contains("finishAndRemoveTask("));
             assertTrue(runner + " must finish only its own Activity",
                     java.contains("finish();"));
-            assertTrue(runner + " must retire only after Activity destruction",
-                    java.contains("RunnerProcessLifecycle.retireAfterActivityDestroyed()"));
+            assertTrue(runner + " must persist Activity destruction for the coordinator",
+                    java.contains("RunnerProcessState.markActivityDestroyed("));
             assertFalse(runner + " must not kill its process from the finish callback",
                     java.contains("Process.killProcess("));
         }
@@ -44,6 +44,11 @@ public final class RunnerLifecycleContractTest {
         assertTrue(diagnosticsCoordinator.contains(
                 "RunnerProcessState.attachToSyntheticFailure"));
         assertTrue(diagnosticsCoordinator.contains("runnerExitedUnexpectedly"));
+        assertTrue(runCoordinator.contains("RunnerProcessLifecycle.retireCompletedRunner"));
+        assertTrue(diagnosticsCoordinator.contains(
+                "RunnerProcessLifecycle.retireCompletedRunner"));
+        assertFalse(runCoordinator.contains("RELAUNCH_DELAY_MS"));
+        assertFalse(diagnosticsCoordinator.contains("RELAUNCH_DELAY_MS"));
     }
 
     @Test

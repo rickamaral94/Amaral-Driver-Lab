@@ -591,7 +591,7 @@ public final class MainActivity extends LocalizedActivity {
                 R.string.phase13_history_detail, view -> open(Phase4Activity.class)));
         card.addView(AppTheme.divider(this), dividerParams());
         card.addView(actionButton(R.string.phase13_rankings,
-                R.string.phase13_rankings_detail, view -> open(Phase4Activity.class)));
+                R.string.phase13_rankings_detail, view -> open(DriverRankingActivity.class)));
         card.addView(AppTheme.divider(this), dividerParams());
         card.addView(actionButton(R.string.phase13_reports,
                 R.string.phase13_reports_detail, view -> {
