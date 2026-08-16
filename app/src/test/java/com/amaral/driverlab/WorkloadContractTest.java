@@ -39,6 +39,29 @@ public final class WorkloadContractTest {
         }
     }
 
+    /**
+     * The invariant that was missing. Every guard asserted isSupportedVersion for
+     * the literals 1 and 2, so bumping a workload to 3 passed the whole suite while
+     * the runner refused to launch it on the device. A workload must accept the
+     * version its own contract declares current.
+     */
+    @Test
+    public void everyWorkloadSupportsTheVersionItDeclaresCurrent() {
+        java.util.List<String> everyId = new java.util.ArrayList<>(WorkloadContract.PHASE2_IDS);
+        everyId.addAll(VisualSceneContract.IDS);
+        everyId.add(WorkloadContract.RENDER_CORRECTNESS_ID);
+        everyId.add(WorkloadContract.TRANSFER_ID);
+        for (String workloadId : everyId) {
+            int current = WorkloadContract.versionFor(workloadId);
+            assertTrue(workloadId + " precisa aceitar a própria versão corrente " + current,
+                    WorkloadContract.isSupportedVersion(workloadId, current));
+            assertFalse(workloadId + " não pode aceitar versão acima da corrente",
+                    WorkloadContract.isSupportedVersion(workloadId, current + 1));
+            assertFalse(workloadId + " não pode aceitar versão zero",
+                    WorkloadContract.isSupportedVersion(workloadId, 0));
+        }
+    }
+
     @Test
     public void phaseThreeAnalysisContractIsVersionedIndependently() {
         assertEquals(1, WorkloadContract.STATISTICAL_ANALYSIS_VERSION);

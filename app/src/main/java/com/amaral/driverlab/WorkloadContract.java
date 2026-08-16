@@ -152,12 +152,17 @@ final class WorkloadContract {
         throw new IllegalArgumentException("Workload desconhecido: " + workloadId);
     }
 
+    /**
+     * Every version from 1 up to the workload's current one is supported. The
+     * ceiling has to be derived from versionFor: hard-coding it meant that bumping
+     * a workload left the runner rejecting the very version the profile declared.
+     * emulator_frame_pattern v3 and the visible scenes v3 both shipped that way —
+     * the suite aborted before launching the runner, with no failure recorded,
+     * because the abort happened on the coordinator side.
+     */
     static boolean isSupportedVersion(String workloadId, int version) {
         if (!isSupported(workloadId)) return false;
-        if (TRANSFER_ID.equals(workloadId) || RENDER_CORRECTNESS_ID.equals(workloadId)) {
-            return version == 1;
-        }
-        return version == 1 || version == 2;
+        return version >= 1 && version <= versionFor(workloadId);
     }
 
     static String limitationFor(String workloadId) {
