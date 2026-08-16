@@ -8,16 +8,43 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 public final class QualificationProfileTest {
     @Test
+    public void profileSevenStaysReadableAndPinsTheOldEmulatorFrameVersion() throws Exception {
+        JSONObject seven = QualificationProfile.definitionForVersion(
+                Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION);
+        assertTrue(QualificationProfile.verify(seven));
+        assertEquals(7, seven.getInt("profile_version"));
+
+        // v7 must keep declaring emulator_frame_pattern at 2. Runs recorded under
+        // v7 used the pooled-median metric; letting v7 drift to 3 would make two
+        // incomparable measurements share one profile identity.
+        JSONArray steps = seven.getJSONArray("steps");
+        int checked = 0;
+        for (int index = 0; index < steps.length(); ++index) {
+            JSONObject step = steps.getJSONObject(index);
+            if (WorkloadContract.EMULATOR_FRAME_ID.equals(step.getString("workload_id"))) {
+                assertEquals(2, step.getInt("workload_version"));
+                checked++;
+            }
+        }
+        assertEquals(1, checked);
+
+        JSONObject eight = QualificationProfile.definition();
+        assertFalse("v7 and v8 must not share an identity",
+                seven.getString("profile_sha256").equals(eight.getString("profile_sha256")));
+    }
+
+    @Test
     public void currentRecommendedProfileIsFocusedAndWeightsSumToOneHundred() throws Exception {
         JSONObject profile = QualificationProfile.definition();
         assertTrue(QualificationProfile.verify(profile));
         assertEquals(Phase7Contract.PROFILE_ID, profile.getString("profile_id"));
-        assertEquals(7, profile.getInt("profile_version"));
+        assertEquals(8, profile.getInt("profile_version"));
         assertEquals(9, profile.getInt("step_count"));
         assertEquals(9, profile.getInt("automated_logical_test_count"));
         assertEquals(1, profile.getInt("optional_evidence_slot_count"));

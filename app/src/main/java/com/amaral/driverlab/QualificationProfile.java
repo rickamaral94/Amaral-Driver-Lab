@@ -120,7 +120,10 @@ final class QualificationProfile {
         if (version == Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION) {
             return recommendedV6Steps();
         }
-        if (version == Phase15DynamicRangeContract.PROFILE_VERSION) return emulatorV7Steps();
+        if (version == Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION) {
+            return emulatorV7Steps();
+        }
+        if (version == Phase15DynamicRangeContract.PROFILE_VERSION) return emulatorV8Steps();
         throw new IllegalArgumentException("Versão de Qualification desconhecida: " + version);
     }
 
@@ -335,6 +338,28 @@ final class QualificationProfile {
         return Collections.unmodifiableList(output);
     }
 
+    /**
+     * v8 differs from v7 in one field: emulator_frame_pattern moves to workload
+     * version 3, whose primary metric is composite_frame_ms — the sum of the
+     * per-pass medians, which keeps the frame composition fixed. The v2 metric
+     * pooled the five passes and moved with the sample mix, which is why the step
+     * kept failing the linearity gate while carrying 70% of the weight.
+     */
+    private static List<Step> emulatorV8Steps() {
+        List<Step> output = new ArrayList<>();
+        for (Step step : emulatorV7Steps()) {
+            if (WorkloadContract.EMULATOR_FRAME_ID.equals(step.workloadId)) {
+                output.add(new Step(step.stepId, step.label, step.workloadId,
+                        WorkloadContract.EMULATOR_FRAME_VERSION, step.traceId, step.rounds,
+                        step.warmupSeconds, step.measureSeconds, step.cooldownSeconds,
+                        step.weight, step.compatibilityGate));
+            } else {
+                output.add(step);
+            }
+        }
+        return Collections.unmodifiableList(output);
+    }
+
     static JSONObject definition() throws Exception { return definitionForVersion(currentVersion()); }
 
     static JSONObject definitionForVersion(int version) throws Exception {
@@ -349,6 +374,8 @@ final class QualificationProfile {
                 : version == 3 ? Phase11Contract.PROFILE_LABEL
                 : version == Phase15DynamicRangeContract.PROFILE_VERSION
                 ? Phase15DynamicRangeContract.PROFILE_LABEL
+                : version == Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION
+                ? Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_LABEL
                 : version == Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION
                 ? Phase15DynamicRangeContract.LEGACY_PROFILE_LABEL
                 : Phase13ValidationContract.profileLabelForVersion(version);
@@ -356,6 +383,7 @@ final class QualificationProfile {
                 : version == 2 ? Phase8Contract.LIMITATION
                 : version == 3 ? Phase11Contract.LIMITATION
                 : version == Phase15DynamicRangeContract.PROFILE_VERSION
+                || version == Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION
                 || version == Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION
                 ? Phase15DynamicRangeContract.LIMITATION
                 : Phase13ValidationContract.limitationForVersion(version);
@@ -396,6 +424,7 @@ final class QualificationProfile {
                     && version != Phase13ValidationContract.LEGACY_PROFILE_VERSION
                     && version != Phase13ValidationContract.PROFILE_VERSION
                     && version != Phase15DynamicRangeContract.LEGACY_PROFILE_VERSION
+                    && version != Phase15DynamicRangeContract.EMULATOR_V7_PROFILE_VERSION
                     && version != Phase15DynamicRangeContract.PROFILE_VERSION) return false;
             JSONArray steps = profile.optJSONArray("steps");
             if (steps == null || steps.length() != stepsForVersion(version).size()) return false;
