@@ -347,7 +347,8 @@ final class QualificationStore {
         manifest.put("final_environment", finalEnvironment)
                 .put("environment_comparison", environmentComparison)
                 .put("report", report)
-                .put("diagnostic_bundle", bundleDescriptor);
+                .put("diagnostic_bundle", bundleDescriptor == null
+                        ? JSONObject.NULL : bundleDescriptor);
     }
 
     static int countStatus(JSONObject manifest, String status) {

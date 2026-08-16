@@ -25,6 +25,7 @@ final class DiagnosticBundle {
         File directory = qualificationFile.getParentFile();
         File bundle = new File(directory, "diagnostic-bundle.zip");
         List<EntrySource> sources = new ArrayList<>();
+        addFile(sources, qualificationFile, "qualification.json");
         addFile(sources, new File(directory, "profile.json"), "profile.json");
         addFile(sources, new File(directory, "preflight.json"), "preflight.json");
         addFile(sources, new File(directory, "final-environment.json"), "final-environment.json");
