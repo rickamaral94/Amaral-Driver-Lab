@@ -99,13 +99,6 @@ final class DriverRanking {
         for (MeasurementRecord record : all) hasCampaignMeasurement |= !record.nullTest();
         if (!hasCampaignMeasurement) return;
         all.sort(Comparator.comparingLong(MeasurementRecord::timestampMs));
-        MeasurementRecord newest = all.get(all.size() - 1);
-        JSONObject identity = newest.candidateIdentity();
-        String name = text(identity, "driver_name", "Driver " + shortSha(sha));
-        String api = text(identity, "api_version", "");
-        JSONArray history = history(all, epoch, localDevice);
-        JSONArray reasons = new JSONArray();
-
         List<MeasurementRecord> current = new ArrayList<>();
         for (MeasurementRecord record : all) {
             if (!record.imported() && !record.foreignDevice()
@@ -114,6 +107,16 @@ final class DriverRanking {
                 current.add(record);
             }
         }
+        // Foreign imports and previous epochs remain in history, but can never replace the
+        // newest trustworthy local measurement used to derive the current ranking.
+        MeasurementRecord newest = current.isEmpty()
+                ? all.get(all.size() - 1) : latest(current);
+        JSONObject identity = newest.candidateIdentity();
+        String name = text(identity, "driver_name", "Driver " + shortSha(sha));
+        String api = text(identity, "api_version", "");
+        JSONArray history = history(all, epoch, localDevice);
+        JSONArray reasons = new JSONArray();
+
         List<JSONObject> disqualifications = disqualifications(current);
         if (!disqualifications.isEmpty()) {
             for (JSONObject reason : disqualifications) reasons.put(reason);
