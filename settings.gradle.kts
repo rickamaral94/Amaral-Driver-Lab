@@ -20,3 +20,4 @@ rootProject.name = "AmaralDriverLab"
 include(":core-stats")
 include(":core-driver")
 include(":core-vk")
+include(":core-telemetry")
