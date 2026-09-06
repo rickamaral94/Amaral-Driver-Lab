@@ -21,6 +21,11 @@ public data class LoadRequest(
     val libraryDirectory: File?,
     /** File name of the ICD inside [libraryDirectory]; null for [DriverSource.SYSTEM]. */
     val libraryName: String?,
+    /**
+     * SHA-256 of that file, carried through so the identity that comes back names the
+     * bytes that ran. Empty for [DriverSource.SYSTEM], which has no file to hash.
+     */
+    val libraryChecksum: String? = null,
     /** Writable scratch directory the loader may use for its own temporary files. */
     val temporaryDirectory: File,
     /** Enables VK_LAYER_KHRONOS_validation. Diagnostic only — never set for a ranking run. */

@@ -19,3 +19,4 @@ rootProject.name = "AmaralDriverLab"
 // Modules are added here as they land, so the tree always builds.
 include(":core-stats")
 include(":core-driver")
+include(":core-vk")
