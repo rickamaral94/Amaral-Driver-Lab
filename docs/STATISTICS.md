@@ -1,0 +1,102 @@
+# Statistics: what the harness claims, and what it refuses to claim
+
+This is the design record for `:core-stats`. It covers principles P3, P5 and P6, and it records
+three things that turned out to be false when they were measured rather than assumed.
+
+## The unit of comparison is a run, not a frame
+
+A workload produces thousands of frametimes. Feeding them straight into a significance test is
+pseudo-replication: consecutive frames are correlated, so the test treats one run's worth of
+evidence as thousands of independent observations and reports significance for any two runs at
+all. Each run is therefore reduced to a single number — its median frametime — and the A/B test
+compares the handful of runs. With the protocol's five runs per arm, the smallest two-sided
+p value Mann-Whitney can produce is 0.0079, so five runs is enough to detect something and not
+enough to detect everything. That is the honest resolution of the design.
+
+## Two estimators, one quantity
+
+`AbComparison` reports a single quantity: the ratio of median frametimes, oriented so that above
+1.0 means the first driver is better. The headline percentage and the bootstrap interval are the
+same number, which is what stops the app from ever showing "A is 3% faster" beside an interval
+that allows B to be faster. When the rank test and the interval disagree about whether there is
+any difference at all, the comparison returns `INCONCLUSIVE` with reason `ESTIMATORS_DISAGREE`
+rather than picking the more flattering one.
+
+Percentiles are always percentiles of frametime. FPS is produced at the very last moment, for
+display only. A percentile of FPS converted back to frametime is a different number, and the
+difference lands exactly on the slow frames that matter.
+
+## Finding 1: a fixed noise floor does not work
+
+The first implementation declared a 2% minimum practical difference — anything smaller is a tie.
+Simulating a device with a 1% run-to-run spread and five runs per arm showed the harness's own
+A/A dispersion sitting at a median of 2.2% and a 90th percentile of 3.1%. The harness could not
+resolve the 2% it claimed, so a driver compared with itself failed the null test about a quarter
+of the time.
+
+The floor is therefore measured, not asserted. `NullTest.calibrate` spends its own A/A runs
+establishing how far apart the device puts a driver from itself, and later comparisons are judged
+against that. The measured figure is shown to the user: *this device resolves differences of about
+5% or larger*. It also makes the trade-off legible — more runs per arm buy a finer floor, and the
+test `more runs per arm buy a finer floor` holds that property in place.
+
+## Finding 2: a calibrated floor absorbs the defect it should expose
+
+Measuring the floor on the same data the null test is judged on makes the null test pass by
+construction, which is worse than not running it. Calibration and the null test therefore consume
+separate runs.
+
+That is still not sufficient. A device so unstable that it resolves nothing calibrates itself an
+enormous floor, inside which every A/A comparison trivially ties — the harness reports "steady"
+precisely when it has gone blind. `MAXIMUM_USABLE_NOISE_FLOOR` (10%) closes this: a floor coarser
+than that fails the null test outright, with an explanation that tells the user to cool the device
+or raise the run count.
+
+## Finding 3: A,B,A,B interleaving is not enough
+
+The spec asks for interleaved arms to dilute thermal drift. Plain alternation does reduce the
+drift each arm sees, but it leaves a systematic effect: the first arm takes the earlier, cooler
+slot of *every* pair, so under drift it wins every single comparison by a hair. The margin is
+small enough for the calibrated floor to swallow, so all ten comparisons tie and the null test
+passes while the protocol is quietly biased.
+
+Two changes fix it:
+
+- **Counterbalancing.** Pairs run AB, BA, AB, BA so each arm spends equal time in the cool slots
+  and the hot ones. With an odd number of runs per arm the balance cannot be exact within one
+  comparison, so the leading arm also flips between successive comparisons and the remainder
+  cancels across the ten.
+- **A sign test on direction.** A driver compared with itself has no reason to favour either arm,
+  so the ten comparisons should split like coin flips. Ten wins out of ten is p = 0.002. This
+  catches an ordering effect that is too small to break any individual comparison and too
+  systematic to be chance — which is exactly the class of bug calibration hides.
+
+`plain alternation still leaves a one-sided ordering effect` and `counterbalanced order survives
+the same drift` are the two tests that pin this down.
+
+## What passing the null test means
+
+`NullTestResult.passed` requires all four of:
+
+1. ten consecutive A/A comparisons completed;
+2. every one of them a technical tie;
+3. no ordering bias (sign test p ≥ 0.05);
+4. a calibrated floor at or under 10%.
+
+Until all four hold, `RankingGate` blocks ranking and stamps every comparison as untrustworthy.
+A harness that ties everything would satisfy 1–3, so the suite also checks the other direction:
+`the same harness settings still detect a real ten percent regression` fails if the gate's
+settings have been loosened into uselessness.
+
+## Reproducibility
+
+The bootstrap is seeded (`SplitMix64`, default seed in `Bootstrap`). Two devices given the same
+raw series and the same seed derive the same interval, so an ingested run can be re-checked from
+its published frametimes. A clock-seeded bootstrap would make every published interval unverifiable.
+
+## Reference values
+
+`MannWhitneyUTest` and `QuantilesTest` check against values produced by `scipy.stats.mannwhitneyu`
+(two-sided; exact where there are no ties, asymptotic with continuity correction otherwise) and
+`numpy.percentile`. They are not regression snapshots of this implementation — they are an
+independent implementation's answers.
