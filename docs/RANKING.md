@@ -68,13 +68,27 @@ ranking** only when all of these hold:
 A score whose interval straddles 1000 ties with the anchor. That is a result, not a missing
 one — P6 — and the table says so rather than breaking the tie on the point estimate.
 
+## Where the score is computed
+
+Twice, from different code, on purpose.
+
+- `core-report/.../AnchorScore.kt` derives it from a comparison so the app can show the
+  user their own score.
+- `tools/ingest/scoring.py` derives it again during ingestion, and **ignores the published
+  ratio** for the point estimate: it recomputes the run medians from the frametime series
+  in the payload. A score is what places a driver in a public table, so it is not taken on
+  the submitter's word. What cannot be recomputed without re-running the bootstrap is the
+  interval, so that is read from the payload and used only to say whether the result ties
+  with the anchor.
+
+The leaderboard groups scores by workload **and by anchor**. Comparing a score measured
+against one anchor with a score measured against another is the same mistake as comparing
+raw scores across devices, one level up.
+
 ## Status
 
-The score model and its tests are implemented in
-`core-report/src/main/kotlin/com/amaral/driverlab/report/AnchorScore.kt`. Two things are
-not:
+The score model, the ingestion side and the leaderboard section are implemented and tested.
+One thing is missing, and it is a decision rather than code:
 
-- **The registry is empty.** No anchor has been chosen, so no submission can score yet.
-- **The ingestion pipeline and the leaderboard page still rank by headline comparison**, not
-  by score. They recompute what they publish from the raw series, so the score will be
-  derived there too rather than trusted from the payload.
+- **The registry is empty.** No anchor has been chosen, so nothing scores yet and the page
+  says so instead of showing an empty table. Choosing one is close to permanent.

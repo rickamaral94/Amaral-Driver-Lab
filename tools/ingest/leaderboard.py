@@ -14,6 +14,8 @@ import json
 import pathlib
 from collections import defaultdict
 
+import scoring
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 RESULTS = REPO_ROOT / "data" / "results.jsonl"
 PAGES_DIR = REPO_ROOT / "docs" / "leaderboard"
@@ -66,6 +68,9 @@ def row_from_report(report: dict, issue_number: int, rankable: bool, reason: str
             "cliffsDelta": headline["cliffsDelta"],
             "noiseFloor": headline["noiseFloor"],
         },
+        # Derived here from the published series rather than read from the payload, and
+        # empty until an anchor is registered. See docs/RANKING.md.
+        "scores": scoring.score_report(report, scoring.load_anchors()),
         "nullTestPassed": bool(null_test.get("passed")),
         "noiseFloor": null_test.get("appliedNoiseFloor"),
         "failures": len(report.get("failures") or []),
@@ -120,6 +125,65 @@ def confidence_of(row: dict, counts: dict[tuple, int]) -> str:
     if counts.get(key, 0) >= CORROBORATION_THRESHOLD:
         return "corroborated"
     return "single submission"
+
+
+def score_tables(rows: list[dict]) -> str:
+    """One table per (workload, anchor), because a score only means something inside one.
+
+    Comparing a score measured against anchor X with one measured against anchor Y is the
+    same mistake as comparing raw scores across devices, one level up.
+    """
+    grouped: dict[tuple, list[dict]] = defaultdict(list)
+    for row in rows:
+        for score in row.get("scores") or []:
+            if not (row.get("rankable") and score.get("rankable")):
+                continue
+            grouped[(score["workloadId"], score["anchorId"])].append((score, row))
+
+    if not grouped:
+        return (
+            '<p class="empty">No scores yet. Scoring needs a registered anchor driver, '
+            'and <code>schema/anchors.json</code> is empty — see '
+            '<a href="https://github.com/rickamaral94/Amaral-Driver-Lab/blob/main/docs/RANKING.md">'
+            "docs/RANKING.md</a>.</p>"
+        )
+
+    sections = []
+    for (workload_id, anchor_id), entries in sorted(grouped.items()):
+        entries.sort(key=lambda pair: -pair[0]["score"])
+        head = (
+            "<tr><th>#</th><th>Driver</th><th>Score</th><th>95% interval</th>"
+            "<th>Device</th><th>GPU</th><th>Source</th></tr>"
+        )
+        body = []
+        for position, (score, row) in enumerate(entries, start=1):
+            interval = (
+                f"{score['low']} – {score['high']}" if score.get("low") is not None else "—"
+            )
+            label = html.escape(score["candidateLabel"])
+            if score.get("tiesWithAnchor"):
+                label += " <em>(ties with the anchor)</em>"
+            body.append(
+                "<tr>"
+                + "".join(
+                    f"<td>{c}</td>"
+                    for c in [
+                        position,
+                        label,
+                        f"<strong>{score['score']}</strong>",
+                        interval,
+                        html.escape(row["device"]["model"]),
+                        html.escape(row.get("gpu", "")),
+                        f'<a href="../../issues/{row["issue"]}">#{row["issue"]}</a>',
+                    ]
+                )
+                + "</tr>"
+            )
+        sections.append(
+            f"<h3>{html.escape(workload_id)} · against {html.escape(anchor_id)}</h3>"
+            f'<div class="wrap"><table>{head}{"".join(body)}</table></div>'
+        )
+    return "".join(sections)
 
 
 def render(rows: list[dict]) -> str:
@@ -181,6 +245,7 @@ def render(rows: list[dict]) -> str:
   body {{ font: 15px/1.5 system-ui, sans-serif; margin: 0 auto; padding: 2rem 1rem; max-width: 72rem; }}
   h1 {{ font-size: 1.6rem; margin-bottom: .25rem; }}
   h2 {{ font-size: 1.1rem; margin-top: 2.5rem; }}
+  h3 {{ font-size: .95rem; margin-top: 1.5rem; opacity: .85; }}
   p.lede {{ opacity: .8; max-width: 46rem; }}
   table {{ border-collapse: collapse; width: 100%; margin-top: .75rem; font-size: 14px; }}
   th, td {{ border-bottom: 1px solid var(--line); padding: .45rem .6rem; text-align: left; vertical-align: top; }}
@@ -199,6 +264,16 @@ def render(rows: list[dict]) -> str:
 </p>
 
 <input id="filter" placeholder="Filter by device, GPU or driver…" aria-label="Filter results">
+
+<h2>Scores</h2>
+<p class="note">
+  A score is a ratio against a pinned anchor driver, measured beside the candidate in the
+  same thermal session: 1000 × median(anchor) / median(candidate). The anchor scores
+  {scoring.PARITY}, so 1240 means 24% faster than it. The device cancels in the division, which is
+  what makes two phones comparable — a raw score would rank the silicon bin and the cooling
+  instead. A result whose interval contains {scoring.PARITY} ties with the anchor, and says so.
+</p>
+{score_tables(rows)}
 
 <h2>Ranked</h2>
 <p class="note">

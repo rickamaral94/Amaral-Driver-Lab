@@ -34,6 +34,12 @@ carried forward; it remains in git history and on `main`.
   system driver can never be one — it is a different binary on every device, so a ratio
   against it is no more comparable across devices than a raw score. Registry at
   `schema/anchors.json`, currently empty: no anchor has been chosen yet.
+- The ingestion pipeline derives the score a second time, from its own code, and **ignores
+  the published ratio** for the point estimate — it recomputes the run medians from the
+  frametime series. A score is what places a driver in a public table, so it is not taken
+  on the submitter's word. The leaderboard groups scores by workload *and* by anchor:
+  comparing a score against one anchor with a score against another is the same mistake as
+  comparing raw scores across devices, one level up.
 
 - `:core-stats` — frametime summaries with tail percentiles taken on frametime, a
   seeded percentile bootstrap, Mann-Whitney U (exact where there are no ties,
