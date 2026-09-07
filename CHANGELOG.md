@@ -17,11 +17,33 @@ carried forward; it remains in git history and on `main`.
   describes measurements this app does not produce.
 - Every raw frametime series is included in the payload. Aggregates alone cannot be
   re-checked, and the ingestion pipeline recomputes them from the series.
+- **`summary.trimmedMeanNs` added**, and it is the statistic the comparison, the noise
+  floor and the anchor score are computed on. `medianNs` stays for the smoothness
+  story it answers well. `schemaVersion` does not rise: a reader written for the old
+  shape still gets the right answer from every field it knows about.
 - Published as [`schema/result-v1.schema.json`](schema/result-v1.schema.json), and
   validated in CI against payloads the app's own serializer produced.
 
 ### Fixed
 
+- **The A/B comparison read a statistic that manufactured the differences it reported.**
+  It summarised each run by its median frametime. A run's frametimes are multimodal —
+  the GPU changes DVFS step during the run — so the median reports whichever step held
+  the middle sample, making it a threshold function of the fast/slow mix rather than a
+  measure of cost. One percentage point of mix moves it a whole 11.8% step. On the
+  reference device this put two arms of the *same driver* 11.8% apart at flat
+  temperature under correct counterbalancing, while their actual costs were 4.4%
+  apart, and it is most of why that device had failed the null test five times. The
+  comparison, the floor and the score now read a 5% trimmed mean of the run's
+  frametimes, which moves continuously with the mix and still ignores a hitch — one
+  500 ms frame in a 1000-frame run moves a plain mean by 6.2% and moves this by
+  nothing. Both statistics are now logged per execution. Full measurement in finding
+  10 of [`docs/STATISTICS.md`](docs/STATISTICS.md).
+- **The published Turnip-versus-Qualcomm magnitudes were an artefact of that statistic**
+  and have been withdrawn. The direction holds — Turnip was faster in every A/B run
+  recorded, under either statistic — but "15.6-23.6%" was quoted off quantised
+  medians; recomputed on run means the same four runs read +18.2%, +29.8%, +13.4% and
+  +7.3%. Five runs per arm cannot pin the magnitude, whichever statistic is used.
 - **The message that abandons a null test now names the comparison that decided it**, with
   both arm medians. It gave a floor and nothing else, so understanding why a fifty-minute run
   stopped meant rebuilding the counterbalanced schedule by hand against the log to work out

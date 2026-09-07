@@ -1,5 +1,7 @@
 import copy
 import json
+import pathlib
+import re
 import statistics
 
 import pytest
@@ -52,8 +54,8 @@ def test_the_score_comes_from_the_series_not_the_payload(report, anchors):
 
     score = scoring.score_report(doc, anchors)[0]
 
-    anchor_runs = scoring._run_medians(doc, "B", "tiling_gmem/v1")
-    candidate_runs = scoring._run_medians(doc, "A", "tiling_gmem/v1")
+    anchor_runs = scoring._run_throughputs(doc, "B", "tiling_gmem/v1")
+    candidate_runs = scoring._run_throughputs(doc, "A", "tiling_gmem/v1")
     expected = round(
         statistics.median(anchor_runs) / statistics.median(candidate_runs) * scoring.PARITY
     )
@@ -195,3 +197,55 @@ def test_an_unrankable_row_contributes_no_score_line(report, anchors):
     row["scores"] = scoring.score_report(report, anchors)
 
     assert "No scores yet" in leaderboard.render([row])
+
+
+def test_trimmed_mean_matches_the_kotlin_constant():
+    """The app and the pipeline must trim the same amount, or recomputing proves nothing.
+
+    The score is derived twice from separate code on purpose, and the second derivation is
+    only a check if it computes the same statistic. Two constants in two languages drift
+    silently, so this reads the Kotlin one rather than trusting a comment.
+    """
+    source = (
+        pathlib.Path(__file__).resolve().parents[3]
+        / "core-stats/src/main/kotlin/com/amaral/driverlab/stats/FrametimeSummary.kt"
+    ).read_text()
+    match = re.search(r"TRIM_FRACTION:\s*Double\s*=\s*([0-9.]+)", source)
+    assert match, "FrametimeSummary.TRIM_FRACTION is gone or was renamed"
+    assert float(match.group(1)) == scoring.TRIM_FRACTION
+
+
+def test_trimmed_mean_matches_scipy_reference():
+    """scipy.stats.trim_mean(series, 0.05) on the same series, to ten decimal places.
+
+    The same series and the same expected value as the Kotlin TrimmedMeanTest, so a change
+    to either implementation alone shows up here.
+    """
+    series = [
+        4.5686526194, 4.7820681322, 4.9561413919, 5.1261337397, 5.1544259244,
+        5.2770768959, 5.7202460735, 6.0749883929, 6.1551636308, 6.3989417027,
+        6.7146294045, 7.2245376099, 7.4437595181, 7.7780964653, 8.3887738958,
+        8.7203003123, 9.3901633186, 10.7153996846, 11.9588314703, 12.9196220890,
+    ]
+    assert scoring.trimmed_mean(series) == pytest.approx(7.109982086854924, abs=1e-9)
+
+
+def test_the_median_would_have_jumped_a_dvfs_step_where_this_does_not():
+    """The measurement that replaced the median, pinned on the pipeline side too.
+
+    A run whose frametimes sit on two DVFS steps has a median that is a threshold function
+    of the mix: one percentage point either side of half reports a whole step apart. The
+    reference device produced exactly this, putting two arms of the same driver 11.8% apart.
+    """
+    fast, slow = 6_770_000.0, 7_570_000.0
+
+    def run(slow_frames):
+        return [slow] * slow_frames + [fast] * (1000 - slow_frames)
+
+    below, above = run(495), run(505)
+
+    median_jump = abs(statistics.median(above) / statistics.median(below) - 1)
+    trimmed_jump = abs(scoring.trimmed_mean(above) / scoring.trimmed_mean(below) - 1)
+
+    assert median_jump > 0.11
+    assert trimmed_jump < 0.005

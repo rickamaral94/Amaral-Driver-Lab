@@ -3,7 +3,7 @@
 
 The report carries `speedupOfA` and its interval, and this module deliberately does not
 use them for the point estimate. A score is what places a driver in a public table, so it
-is derived here from the raw run medians the submission published — the same rule the rest
+is derived here from the raw frametime series the submission published — the same rule the rest
 of the pipeline applies to every aggregate. What cannot be recomputed without re-running
 the bootstrap is the interval, so that is read from the payload and only ever used to say
 whether the result ties with the anchor.
@@ -43,8 +43,32 @@ def load_anchors(path: pathlib.Path | None = None) -> dict[str, dict]:
     return anchors
 
 
-def _run_medians(report: dict, arm: str, workload_id: str) -> list[float]:
-    """The per-run medians for one arm, which is the unit a comparison is made of."""
+#: Dropped from each tail of a run's frametimes before averaging. Must stay equal to
+#: FrametimeSummary.TRIM_FRACTION on the app side — the whole point of recomputing the score
+#: here is that two independent implementations agree, and they only agree on the same
+#: statistic. A test pins the two constants against each other.
+TRIM_FRACTION = 0.05
+
+
+def trimmed_mean(series: list[float]) -> float:
+    """Mean frametime with the fastest and slowest TRIM_FRACTION of frames dropped.
+
+    Not the median, and the difference decides results rather than polishing them. A run's
+    frametimes are multimodal — the GPU hops between DVFS steps during the run — so the
+    median reports whichever step held the middle sample and jumps a whole step when the
+    fast/slow mix crosses half. On the reference device that put two arms of the *same
+    driver* 11.8% apart at flat temperature. The trimmed mean moves continuously with the
+    mix, while still ignoring the hitches a median was chosen to ignore.
+    """
+    ordered = sorted(series)
+    cut = int(len(ordered) * TRIM_FRACTION)
+    if len(ordered) - 2 * cut < 1:
+        return statistics.fmean(ordered)
+    return statistics.fmean(ordered[cut : len(ordered) - cut])
+
+
+def _run_throughputs(report: dict, arm: str, workload_id: str) -> list[float]:
+    """The per-run throughput for one arm, which is the unit a comparison is made of."""
     runs = []
     for execution in report.get("executions") or []:
         if execution.get("arm") != arm:
@@ -53,8 +77,8 @@ def _run_medians(report: dict, arm: str, workload_id: str) -> list[float]:
             continue
         series = execution.get("frametimesNs") or []
         if series:
-            runs.append((execution.get("runIndexWithinArm", 0), statistics.median(series)))
-    return [median for _, median in sorted(runs)]
+            runs.append((execution.get("runIndexWithinArm", 0), trimmed_mean(series)))
+    return [value for _, value in sorted(runs)]
 
 
 def _checksums(report: dict) -> dict[str, str]:
@@ -97,8 +121,8 @@ def score_report(report: dict, anchors: dict[str, dict]) -> list[dict]:
     scores = []
     for comparison in report.get("comparisons") or []:
         workload_id = comparison.get("workloadId", "")
-        anchor_runs = _run_medians(report, anchor_arm, workload_id)
-        candidate_runs = _run_medians(report, candidate_arm, workload_id)
+        anchor_runs = _run_throughputs(report, anchor_arm, workload_id)
+        candidate_runs = _run_throughputs(report, candidate_arm, workload_id)
         if not anchor_runs or not candidate_runs:
             continue
 

@@ -113,8 +113,8 @@ class RunCoordinatorTest {
         assertTrue(outcome.completed)
         assertEquals(benchPlan.totalExecutions, outcome.records.size)
         assertTrue(outcome.failures.isEmpty())
-        assertEquals(3, outcome.runMediansFor(Arm.A, WorkloadIds.BASELINE).size)
-        assertEquals(3, outcome.runMediansFor(Arm.B, WorkloadIds.BASELINE).size)
+        assertEquals(3, outcome.runThroughputsFor(Arm.A, WorkloadIds.BASELINE).size)
+        assertEquals(3, outcome.runThroughputsFor(Arm.B, WorkloadIds.BASELINE).size)
     }
 
     @Test

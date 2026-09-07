@@ -6,7 +6,12 @@ import com.amaral.driverlab.stats.NullTestResult
 import kotlinx.serialization.Serializable
 import java.io.File
 
-/** One A/A comparison: the per-run medians each arm produced, in the order they ran. */
+/**
+ * One A/A comparison: the per-run throughput each arm produced, in the order they ran.
+ *
+ * Throughput is the run's trimmed mean frametime, not its median — see
+ * [com.amaral.driverlab.stats.FrametimeSummary] for the measurement that separated them.
+ */
 @Serializable
 public data class ArmPair(val first: List<Double>, val second: List<Double>) {
     internal fun toArrays(): Pair<DoubleArray, DoubleArray> =
@@ -33,7 +38,7 @@ public data class WorkloadArms(
 /**
  * What a device demonstrated about its own resolution, stored so the next run can ask.
  *
- * Only the **raw run medians** are kept. The verdict, the floor and the p values are
+ * Only the **raw per-run measurements** are kept. The verdict, the floor and the p values are
  * re-derived on every read by the same code that produced them the first time. Storing
  * `passed: true` would make the file the authority on whether ranking is allowed, and a
  * file is a thing a user can edit; storing the series means the claim can only be as good

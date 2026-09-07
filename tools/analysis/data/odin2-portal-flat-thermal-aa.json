@@ -1,0 +1,209 @@
+{
+ "source": "AYN Odin2 Portal (QCS8550, Adreno 740), Android 13, 2026-09-07T14:58 local",
+ "note": "A/A null test, system driver against itself, on the cross-validated build. The device is at flat temperature throughout (51.4-56.1 C) and the counterbalancing is correct, so neither drift nor ordering explains anything here. Comparison 2 is the one that failed the run. Kept because it is the cleanest evidence that the run median, not the hardware, was producing the dispersion: see finding 10.",
+ "workload": "baseline/v1",
+ "framesPerRun": 1000,
+ "runsPerArm": 5,
+ "executions": [
+  {
+   "comparison": 1,
+   "slot": 0,
+   "arm": "A",
+   "medianMs": 6.77,
+   "gpuMs": 6918,
+   "frames": 1000,
+   "meanMs": 6.918,
+   "celsius": 56.1
+  },
+  {
+   "comparison": 1,
+   "slot": 1,
+   "arm": "B",
+   "medianMs": 8.76,
+   "gpuMs": 8391,
+   "frames": 1000,
+   "meanMs": 8.391,
+   "celsius": 53.0
+  },
+  {
+   "comparison": 1,
+   "slot": 2,
+   "arm": "B",
+   "medianMs": 8.76,
+   "gpuMs": 8301,
+   "frames": 1000,
+   "meanMs": 8.301,
+   "celsius": 53.4
+  },
+  {
+   "comparison": 1,
+   "slot": 3,
+   "arm": "A",
+   "medianMs": 7.57,
+   "gpuMs": 8940,
+   "frames": 1000,
+   "meanMs": 8.94,
+   "celsius": 53.0
+  },
+  {
+   "comparison": 1,
+   "slot": 4,
+   "arm": "A",
+   "medianMs": 7.57,
+   "gpuMs": 8134,
+   "frames": 1000,
+   "meanMs": 8.134,
+   "celsius": 52.2
+  },
+  {
+   "comparison": 1,
+   "slot": 5,
+   "arm": "B",
+   "medianMs": 6.77,
+   "gpuMs": 8048,
+   "frames": 1000,
+   "meanMs": 8.048,
+   "celsius": 53.4
+  },
+  {
+   "comparison": 1,
+   "slot": 6,
+   "arm": "B",
+   "medianMs": 6.77,
+   "gpuMs": 7869,
+   "frames": 1000,
+   "meanMs": 7.869,
+   "celsius": 52.2
+  },
+  {
+   "comparison": 1,
+   "slot": 7,
+   "arm": "A",
+   "medianMs": 7.57,
+   "gpuMs": 8506,
+   "frames": 1000,
+   "meanMs": 8.506,
+   "celsius": 53.0
+  },
+  {
+   "comparison": 1,
+   "slot": 8,
+   "arm": "A",
+   "medianMs": 6.77,
+   "gpuMs": 7535,
+   "frames": 1000,
+   "meanMs": 7.535,
+   "celsius": 53.0
+  },
+  {
+   "comparison": 1,
+   "slot": 9,
+   "arm": "B",
+   "medianMs": 7.57,
+   "gpuMs": 8405,
+   "frames": 1000,
+   "meanMs": 8.405,
+   "celsius": 53.8
+  },
+  {
+   "comparison": 2,
+   "slot": 0,
+   "arm": "B",
+   "medianMs": 7.57,
+   "gpuMs": 7994,
+   "frames": 1000,
+   "meanMs": 7.994,
+   "celsius": 51.4
+  },
+  {
+   "comparison": 2,
+   "slot": 1,
+   "arm": "A",
+   "medianMs": 7.57,
+   "gpuMs": 7630,
+   "frames": 1000,
+   "meanMs": 7.63,
+   "celsius": 51.4
+  },
+  {
+   "comparison": 2,
+   "slot": 2,
+   "arm": "A",
+   "medianMs": 7.57,
+   "gpuMs": 8045,
+   "frames": 1000,
+   "meanMs": 8.045,
+   "celsius": 52.2
+  },
+  {
+   "comparison": 2,
+   "slot": 3,
+   "arm": "B",
+   "medianMs": 6.77,
+   "gpuMs": 7560,
+   "frames": 1000,
+   "meanMs": 7.56,
+   "celsius": 53.4
+  },
+  {
+   "comparison": 2,
+   "slot": 4,
+   "arm": "B",
+   "medianMs": 7.57,
+   "gpuMs": 8101,
+   "frames": 1000,
+   "meanMs": 8.101,
+   "celsius": 52.2
+  },
+  {
+   "comparison": 2,
+   "slot": 5,
+   "arm": "A",
+   "medianMs": 7.57,
+   "gpuMs": 8398,
+   "frames": 1000,
+   "meanMs": 8.398,
+   "celsius": 52.2
+  },
+  {
+   "comparison": 2,
+   "slot": 6,
+   "arm": "A",
+   "medianMs": 7.57,
+   "gpuMs": 8025,
+   "frames": 1000,
+   "meanMs": 8.025,
+   "celsius": 51.8
+  },
+  {
+   "comparison": 2,
+   "slot": 7,
+   "arm": "B",
+   "medianMs": 6.77,
+   "gpuMs": 7241,
+   "frames": 1000,
+   "meanMs": 7.241,
+   "celsius": 53.4
+  },
+  {
+   "comparison": 2,
+   "slot": 8,
+   "arm": "B",
+   "medianMs": 6.77,
+   "gpuMs": 7682,
+   "frames": 1000,
+   "meanMs": 7.682,
+   "celsius": 51.8
+  },
+  {
+   "comparison": 2,
+   "slot": 9,
+   "arm": "A",
+   "medianMs": 7.57,
+   "gpuMs": 8150,
+   "frames": 1000,
+   "meanMs": 8.15,
+   "celsius": 51.4
+  }
+ ]
+}

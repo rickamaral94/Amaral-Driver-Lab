@@ -56,11 +56,19 @@ public data class BenchmarkOutcome(
 ) {
     public val completed: Boolean get() = finalState == RunnerState.DONE
 
-    /** Per-run medians for one arm and workload — the unit the A/B test compares. */
-    public fun runMediansFor(arm: Arm, workloadId: String): DoubleArray = records
+    /**
+     * Per-run throughput for one arm and workload — the unit the A/B test compares.
+     *
+     * This reads [FrametimeSummary.trimmedMeanNs] and deliberately not `medianNs`. A run's
+     * frametimes are multimodal on real hardware, so its median snaps to whichever DVFS step
+     * held the middle sample: on the reference device it produced two arms of the *same
+     * driver* 11.8% apart while their actual cost differed by 4.4%. See the comment on
+     * [FrametimeSummary] for the measurement.
+     */
+    public fun runThroughputsFor(arm: Arm, workloadId: String): DoubleArray = records
         .filter { it.slot.arm == arm && it.workload.workloadId == workloadId }
         .sortedBy { it.slot.runIndexWithinArm }
-        .map { it.summary.medianNs }
+        .map { it.summary.trimmedMeanNs }
         .toDoubleArray()
 
     /**

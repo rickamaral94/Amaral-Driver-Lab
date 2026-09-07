@@ -239,8 +239,8 @@ class BenchmarkService : Service() {
                 fun armsSoFar(): List<WorkloadArms> = workloads.map { workload ->
                     val arms = perComparison.map { outcome ->
                         ArmPair(
-                            first = outcome.runMediansFor(Arm.A, workload.workloadId).toList(),
-                            second = outcome.runMediansFor(Arm.B, workload.workloadId).toList(),
+                            first = outcome.runThroughputsFor(Arm.A, workload.workloadId).toList(),
+                            second = outcome.runThroughputsFor(Arm.B, workload.workloadId).toList(),
                         )
                     }
                     WorkloadArms(workloadId = workload.workloadId, comparisons = arms)

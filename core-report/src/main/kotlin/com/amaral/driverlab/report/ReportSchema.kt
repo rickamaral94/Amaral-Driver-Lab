@@ -111,6 +111,8 @@ public data class SummaryEntry(
     val frameCount: Int,
     val medianNs: Double,
     val meanNs: Double,
+    /** The statistic the comparison, the floor and the score were computed on. */
+    val trimmedMeanNs: Double,
     val stdDevNs: Double,
     val p95Ns: Double,
     val p99Ns: Double,

@@ -81,8 +81,8 @@ public class ReportBuilder(
 
         val workloadIds = outcome.plan.workloads.map { it.workloadId }.distinct()
         val comparisons = workloadIds.mapNotNull { workloadId ->
-            val a = outcome.runMediansFor(Arm.A, workloadId)
-            val b = outcome.runMediansFor(Arm.B, workloadId)
+            val a = outcome.runThroughputsFor(Arm.A, workloadId)
+            val b = outcome.runThroughputsFor(Arm.B, workloadId)
             if (a.isEmpty() || b.isEmpty()) return@mapNotNull null
 
             // An execution that barely ran cannot tell two drivers apart, so a tie from it is
@@ -163,6 +163,7 @@ internal fun FrametimeSummary.toEntry(): SummaryEntry = SummaryEntry(
     frameCount = frameCount,
     medianNs = medianNs,
     meanNs = meanNs,
+    trimmedMeanNs = trimmedMeanNs,
     stdDevNs = stdDevNs,
     p95Ns = p95Ns,
     p99Ns = p99Ns,

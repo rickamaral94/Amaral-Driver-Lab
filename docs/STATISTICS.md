@@ -15,8 +15,9 @@ enough to detect everything. That is the honest resolution of the design.
 
 ## Two estimators, one quantity
 
-`AbComparison` reports a single quantity: the ratio of median frametimes, oriented so that above
-1.0 means the first driver is better. The headline percentage and the bootstrap interval are the
+`AbComparison` reports a single quantity: the ratio of *trimmed mean* frametimes, oriented so
+that above 1.0 means the first driver is better. It was the ratio of medians until finding 10
+showed a median cannot do this job on real hardware. The headline percentage and the bootstrap interval are the
 same number, which is what stops the app from ever showing "A is 3% faster" beside an interval
 that allows B to be faster. When the rank test and the interval disagree about whether there is
 any difference at all, the comparison returns `INCONCLUSIVE` with reason `ESTIMATORS_DISAGREE`
@@ -25,6 +26,12 @@ rather than picking the more flattering one.
 Percentiles are always percentiles of frametime. FPS is produced at the very last moment, for
 display only. A percentile of FPS converted back to frametime is a different number, and the
 difference lands exactly on the slow frames that matter.
+
+The median and the percentiles are still reported, and they still answer the question they are
+good at — *what does a typical frame feel like*, where one hitch must not redefine "typical".
+They are simply not what the comparison, the floor or the score read. Those answer a different
+question — *how long did the fixed work take* — and finding 10 is the measurement that forced
+the two apart.
 
 ## Finding 1: a fixed noise floor does not work
 
@@ -104,10 +111,32 @@ Three consequences:
   every frame in a run sits in the same bin. Only more *runs*, spread across the session, sample
   the bins fairly. This is the same reason a run, not a frame, is the unit of comparison.
 
-The A/B measurement on the same log survives it: Turnip's slowest bin (6.39) still beats the
-Qualcomm driver's stable 7.57 by 15.6%, and its fast bin by 23.6% — comfortably outside the
-10.6% the device manufactures on its own. A difference smaller than that is not measurable here,
-which is exactly what the calibrated floor is for.
+  **This is wrong, and finding 10 is the correction.** Frames within a run do *not* all sit in
+  the same bin — the GPU hops between steps during the run, and the ratio of a run's median to
+  its own mean swings from 0.84 to 1.09 across the runs in this very log, which is impossible
+  if a run is single-valued. What is single-valued is the *median*, because a median of a
+  two-valued series reports whichever step held the middle sample. The two-value appearance
+  above is the estimator, not the device. A run, not a frame, is still the unit of comparison,
+  for the reason in the section at the top of this document; but averaging within a run helps
+  after all, and the statistic that does the averaging is now a trimmed mean.
+
+The A/B measurement on the same log survives it, and its *direction* has never been in doubt:
+Turnip beat the Qualcomm driver on `baseline/v1` in every run recorded on this device, under
+either estimator. The magnitude quoted here — 15.6% and 23.6% — does not survive, because it was
+read off the same quantised medians. Recomputed on run means, the four real A/B runs read:
+
+| run   | ratio from run medians | ratio from run means |
+|-------|-----------------------:|---------------------:|
+| 03:00 |                  +5.9% |               +18.2% |
+| 08:09 |                 +37.1% |               +29.8% |
+| 09:14 |                 +31.0% |               +13.4% |
+| 09:29 |                 +20.8% |                +7.3% |
+
+Consistent in sign, nowhere near consistent in size, and the two estimators disagree by up to
+17 points on the same runs. The honest statement is that Turnip is faster here and this app
+cannot yet say by how much — five runs per arm is not enough to pin the magnitude, whichever
+statistic is used. The precision of "15.6-23.6%" was an artefact of quoting a quantised number
+to one decimal place.
 
 ## Finding 5: five calibration comparisons cannot measure a bin-hopping device
 
@@ -303,6 +332,100 @@ There is a smaller lesson, and it is the second time the same one: the line that
 run named a floor but not the comparison behind it, so understanding the decision meant
 rebuilding the counterbalanced schedule by hand to work out which executions had been which
 arm. The settle message now spells out the deciding comparison's arm medians.
+
+## Finding 10: the median was manufacturing the instability, not measuring it
+
+Nine findings treated this device's A/A dispersion as a property of the hardware. Most of it was
+the summary statistic.
+
+The run that settled it is an A/A null test of the system driver against itself, 14:58 on the
+reference Odin2. Its second comparison, the one that failed the run:
+
+```
+slot :     0     1     2     3     4     5     6     7     8     9
+arm  :     B     A     A     B     B     A     A     B     B     A
+med  :  7.57  7.57  7.57  6.77  7.57  7.57  7.57  6.77  6.77  7.57   ms
+degC :  51.4  51.4  52.2  53.4  52.2  52.2  51.8  53.4  51.8  51.4
+
+arm A medians : 7.57 7.57 7.57 7.57 7.57  ->  7.570
+arm B medians : 7.57 6.77 7.57 6.77 6.77  ->  6.770   ratio 1.1182, floor 15.8%
+```
+
+Nothing is wrong with that run. The counterbalancing is correct (BAAB BAAB BA), the temperature
+is flat across two degrees, there is no drift to cancel, and both arms are the same driver. It
+still reported an 11.8% difference, and the noise floor it produced failed the device.
+
+The same ten runs, summarised by mean frametime per run instead — a number the log already
+carried, as GPU time over frames:
+
+```
+arm A means : 7.63 8.04 8.40 8.03 8.15  ->  8.05
+arm B means : 7.99 7.56 8.10 7.24 7.68  ->  7.71   ratio 1.044
+```
+
+Two arms of one driver, 4.4% apart on a continuous statistic and 11.8% apart on a median.
+
+**Why.** The GPU changes DVFS step *during* a run, so a run's frametimes are multimodal. The
+median then reports whichever step held the middle sample, which makes it a threshold function
+of the fast/slow mix. Simulated on the two steps this device actually uses:
+
+| slow frames in the run | median  | trimmed mean |
+|-----------------------:|--------:|-------------:|
+|                  49.5% | 6.77 ms |      7.17 ms |
+|                  50.5% | 7.57 ms |      7.17 ms |
+
+One percentage point of mix — a fraction of a percent of real cost — moves the median a whole
+11.8% step and the trimmed mean by 0.12%. A hundredfold difference in sensitivity to something
+that is not the drivers. That is the whole of finding 4's "two values and nothing between":
+the ladder `6.12 / 6.77 / 7.57 / 8.76 ms` that 122 run medians landed on is the DVFS ladder
+being reported verbatim by an estimator that rounds to it. The runs' actual mean costs are
+spread continuously and overlap between the arms.
+
+**The fix.** The comparison, the noise floor and the anchor score now read a 5% trimmed mean of
+each run's frametimes. Trimming rather than a plain mean keeps the one property the median was
+chosen for: a single 500 ms hitch in a 1000-frame run moves a plain mean by 6.2% and moves this
+by nothing at all. Both statistics are logged per execution, the trimmed mean first, because
+logging only the median is what cost a day of reading device instability into a file that
+contained the answer.
+
+**What it does not fix.** Replaying every A/A comparison ever recorded on this device under both
+statistics:
+
+| session | floor from medians | floor from means |
+|---------|-------------------:|-----------------:|
+| 13:22   |        23.6%  fail |       9.5%  pass |
+| 13:55   |        44.1%  fail |      25.3%  fail |
+| 14:00   |        17.7%  fail |      16.6%  fail |
+| 14:42   |        45.2%  fail |      32.6%  fail |
+| 14:58   |        44.1%  fail |      30.0%  fail |
+
+Better everywhere, decisive only where the session was long: 13:22 is the one with 34 runs per
+arm. The sessions that still fail are the ones with five runs per arm, and there a second effect
+dominates that has nothing to do with the estimator — **a bootstrap interval from five samples is
+intrinsically wide**. The 14:58 comparison whose arms differ by 2.0% on means still produces an
+interval reaching 20% from parity, because resampling five values cannot say more than that.
+
+Simulating a device with pure Gaussian run-to-run noise and no DVFS steps at all, the floor it
+calibrates and whether it clears the 10% limit:
+
+| run-to-run noise | n=5   | n=11  | n=21  | n=41 |
+|------------------|------:|------:|------:|-----:|
+| 0.5%             |  2.4% |  1.6% |  1.1% | 0.8% |
+| 1%               |  4.7% |  3.2% |  2.2% | 1.5% |
+| 2%               |  9.8% |  6.0% |  4.5% | 3.2% |
+| 5%               | 23.8% | 15.3% | 11.1% | 8.1% |
+
+So the gate is reachable and the 10% limit is not absurd: a device with 1% run-to-run noise
+passes at five runs per arm, and one with 2% passes at eleven. What is not reachable is passing
+it with an estimator that quantises to 11.8% steps — which is what every failure before this
+finding was really reporting.
+
+The reference device sits near 4% run-to-run noise on the trimmed mean, which the table puts at
+roughly twenty runs per arm to pass. Whether that is best bought with more runs or with longer
+runs is open and is the next thing to measure: if the 4% is the GPU hopping steps *within* a run,
+more frames per run buys the same variance reduction at a quarter of the wall time, because the
+20 s cooldown is charged per run and not per frame. The logs cannot settle it — every run so far
+is 1000 frames — so it needs one deliberate experiment at two frame counts.
 
 ## What passing the null test means
 

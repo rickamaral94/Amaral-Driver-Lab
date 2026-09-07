@@ -7,3 +7,7 @@ local.properties
 *.jks
 *.keystore
 captures/
+
+# Python bytecode. Committed by accident in 633ae47; it is build output.
+__pycache__/
+*.py[cod]

@@ -628,6 +628,7 @@
         "frameCount",
         "medianNs",
         "meanNs",
+        "trimmedMeanNs",
         "stdDevNs",
         "p95Ns",
         "p99Ns",
@@ -650,6 +651,10 @@
           "exclusiveMinimum": 0
         },
         "meanNs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "trimmedMeanNs": {
           "type": "number",
           "exclusiveMinimum": 0
         },

@@ -199,10 +199,19 @@ public class RunCoordinator(
                                     // a cold device is the fast one and this device never
                                     // settles within a run. That should not have needed
                                     // inferring from a file that had the number in hand.
+                                    //
+                                    // Both statistics are on the line, and the order is
+                                    // deliberate: the trimmed mean is what the comparison
+                                    // reads, so it comes first. Logging only the median cost
+                                    // a day — every A/A dispersion in this file was read as
+                                    // the device being unstable, when the medians were
+                                    // quantising onto DVFS steps that the trimmed means show
+                                    // sitting a few percent apart.
                                     DiagnosticLog.i(
                                         TAG,
                                         "${execution.workload.workloadId}: ${series.size} frames, " +
                                             "${summary.totalDurationNs / 1_000_000} ms of GPU time, " +
+                                            "${"%.2f".format(summary.trimmedMeanNs / 1_000_000)} ms trimmed mean, " +
                                             "median ${"%.2f".format(summary.medianNs / 1_000_000)} ms, " +
                                             (after.representativeCelsius?.let { "%.1f C".format(it) }
                                                 ?: "temperature unavailable") +

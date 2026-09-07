@@ -68,7 +68,7 @@ public object NullTestDecision {
         val (index, pair) = widest
         val a = pair.first.median() / 1_000_000
         val b = pair.second.median() / 1_000_000
-        return "Widest was #${index + 1}: arm 1 median ${"%.2f".format(a)} ms against arm 2 " +
+        return "Widest was #${index + 1}: arm 1 at ${"%.2f".format(a)} ms against arm 2 " +
             "${"%.2f".format(b)} ms over ${pair.first.size} and ${pair.second.size} runs."
     }
 
