@@ -6,25 +6,70 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schemaVersion", "appVersion", "generatedAtEpochMs", "session", "device",
-    "preflight", "drivers", "executions", "failures", "nullTest", "comparisons", "plainVerdict"
+    "schemaVersion",
+    "appVersion",
+    "generatedAtEpochMs",
+    "session",
+    "device",
+    "preflight",
+    "drivers",
+    "executions",
+    "failures",
+    "nullTest",
+    "comparisons",
+    "plainVerdict"
   ],
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 1 },
-    "appVersion": { "type": "string", "minLength": 1 },
-    "generatedAtEpochMs": { "type": "integer", "minimum": 1600000000000 },
-    "plainVerdict": { "type": "string", "minLength": 1 },
-
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "appVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generatedAtEpochMs": {
+      "type": "integer",
+      "minimum": 1600000000000
+    },
+    "plainVerdict": {
+      "type": "string",
+      "minLength": 1
+    },
     "session": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "thermalSessionId", "startedAtEpochMs", "runnerFinalState"],
+      "required": [
+        "id",
+        "thermalSessionId",
+        "startedAtEpochMs",
+        "runnerFinalState"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "thermalSessionId": { "type": "string", "minLength": 1 },
-        "startedAtEpochMs": { "type": "integer", "minimum": 1600000000000 },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "thermalSessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startedAtEpochMs": {
+          "type": "integer",
+          "minimum": 1600000000000
+        },
         "runnerFinalState": {
-          "enum": ["IDLE", "PREFLIGHT", "LOADING", "WARMUP", "RUNNING", "COOLDOWN", "DONE", "FAILED", "ABORTED"]
+          "enum": [
+            "IDLE",
+            "PREFLIGHT",
+            "LOADING",
+            "WARMUP",
+            "RUNNING",
+            "COOLDOWN",
+            "DONE",
+            "FAILED",
+            "ABORTED"
+          ]
         },
         "submitterAlias": {
           "type": "string",
@@ -33,218 +78,508 @@
         }
       }
     },
-
     "device": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["manufacturer", "model", "device", "soc", "androidRelease", "sdkInt", "buildFingerprint"],
+      "required": [
+        "manufacturer",
+        "model",
+        "device",
+        "soc",
+        "androidRelease",
+        "sdkInt",
+        "buildFingerprint"
+      ],
       "properties": {
-        "manufacturer": { "type": "string" },
-        "model": { "type": "string" },
-        "device": { "type": "string" },
-        "soc": { "type": "string" },
-        "androidRelease": { "type": "string" },
-        "sdkInt": { "type": "integer", "minimum": 30, "maximum": 100 },
-        "buildFingerprint": { "type": "string" },
-        "displayRefreshRateHz": { "type": "number" },
-        "screenBrightness": { "type": "integer" }
+        "manufacturer": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "device": {
+          "type": "string"
+        },
+        "soc": {
+          "type": "string"
+        },
+        "androidRelease": {
+          "type": "string"
+        },
+        "sdkInt": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 100
+        },
+        "buildFingerprint": {
+          "type": "string"
+        },
+        "displayRefreshRateHz": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Null when the display could not be queried. Never NaN: a missing reading is null, because JSON has no way to say NaN and an app that tried to write one crashed instead of publishing."
+        },
+        "screenBrightness": {
+          "type": "integer"
+        }
       }
     },
-
     "preflight": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["issues", "overridden", "lowConfidence"],
+      "required": [
+        "issues",
+        "overridden",
+        "lowConfidence"
+      ],
       "properties": {
         "issues": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["code", "message", "blocking"],
+            "required": [
+              "code",
+              "message",
+              "blocking"
+            ],
             "properties": {
               "code": {
-                "enum": ["BATTERY_TOO_LOW", "PLUGGED_IN", "ALREADY_THROTTLING", "DEVICE_TOO_HOT", "NOT_COOLED_DOWN", "NO_THERMAL_TELEMETRY"]
+                "enum": [
+                  "BATTERY_TOO_LOW",
+                  "PLUGGED_IN",
+                  "ALREADY_THROTTLING",
+                  "DEVICE_TOO_HOT",
+                  "NOT_COOLED_DOWN",
+                  "NO_THERMAL_TELEMETRY"
+                ]
               },
-              "message": { "type": "string" },
-              "blocking": { "type": "boolean" }
+              "message": {
+                "type": "string"
+              },
+              "blocking": {
+                "type": "boolean"
+              }
             }
           }
         },
-        "overridden": { "type": "boolean" },
-        "lowConfidence": { "type": "boolean" }
+        "overridden": {
+          "type": "boolean"
+        },
+        "lowConfidence": {
+          "type": "boolean"
+        }
       }
     },
-
     "drivers": {
       "type": "array",
       "minItems": 1,
       "maxItems": 2,
-      "items": { "$ref": "#/$defs/driverEntry" }
+      "items": {
+        "$ref": "#/$defs/driverEntry"
+      }
     },
-
     "executions": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/execution" }
+      "items": {
+        "$ref": "#/$defs/execution"
+      }
     },
-
     "failures": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["slot", "arm", "label", "workloadId", "stage", "message"],
+        "required": [
+          "slot",
+          "arm",
+          "label",
+          "workloadId",
+          "stage",
+          "message"
+        ],
         "properties": {
-          "slot": { "type": "integer", "minimum": 0 },
-          "arm": { "enum": ["A", "B"] },
-          "label": { "type": "string" },
-          "workloadId": { "type": "string" },
-          "stage": { "type": "string" },
-          "message": { "type": "string" }
+          "slot": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "arm": {
+            "enum": [
+              "A",
+              "B"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "workloadId": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
         }
       }
     },
-
     "nullTest": {
       "description": "Null when the device has never run an A/A test. Such a result is accepted and stored, but never ranked.",
       "oneOf": [
-        { "type": "null" },
+        {
+          "type": "null"
+        },
         {
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "passed", "driverSha256", "requiredConsecutivePasses", "completedPasses",
-            "appliedNoiseFloor", "observedNoiseFloor", "firstArmWins", "orderingBiasP",
-            "floorTooCoarse", "hasOrderingBias", "explanation"
+            "passed",
+            "driverSha256",
+            "requiredConsecutivePasses",
+            "completedPasses",
+            "appliedNoiseFloor",
+            "observedNoiseFloor",
+            "firstArmWins",
+            "orderingBiasP",
+            "floorTooCoarse",
+            "hasOrderingBias",
+            "explanation"
           ],
           "properties": {
-            "passed": { "type": "boolean" },
-            "driverSha256": { "$ref": "#/$defs/sha256" },
-            "requiredConsecutivePasses": { "type": "integer", "minimum": 1 },
-            "completedPasses": { "type": "integer", "minimum": 0 },
-            "appliedNoiseFloor": { "type": "number", "minimum": 0, "maximum": 1 },
-            "observedNoiseFloor": { "type": "number", "minimum": 0 },
-            "firstArmWins": { "type": "integer", "minimum": 0 },
-            "orderingBiasP": { "type": "number", "minimum": 0, "maximum": 1 },
-            "floorTooCoarse": { "type": "boolean" },
-            "hasOrderingBias": { "type": "boolean" },
-            "explanation": { "type": "string" }
+            "passed": {
+              "type": "boolean"
+            },
+            "driverSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "requiredConsecutivePasses": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "completedPasses": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "appliedNoiseFloor": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "observedNoiseFloor": {
+              "type": "number",
+              "minimum": 0
+            },
+            "firstArmWins": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "orderingBiasP": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "floorTooCoarse": {
+              "type": "boolean"
+            },
+            "hasOrderingBias": {
+              "type": "boolean"
+            },
+            "explanation": {
+              "type": "string"
+            }
           }
         }
       ]
     },
-
     "comparisons": {
       "type": "array",
-      "items": { "$ref": "#/$defs/comparison" }
+      "items": {
+        "$ref": "#/$defs/comparison"
+      }
     }
   },
-
   "$defs": {
-    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "conformanceVersion": {
       "oneOf": [
-        { "type": "null" },
+        {
+          "type": "null"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["major", "minor", "subminor", "patch"],
+          "required": [
+            "major",
+            "minor",
+            "subminor",
+            "patch"
+          ],
           "properties": {
-            "major": { "type": "integer" },
-            "minor": { "type": "integer" },
-            "subminor": { "type": "integer" },
-            "patch": { "type": "integer" }
+            "major": {
+              "type": "integer"
+            },
+            "minor": {
+              "type": "integer"
+            },
+            "subminor": {
+              "type": "integer"
+            },
+            "patch": {
+              "type": "integer"
+            }
           }
         }
       ]
     },
-
     "identity": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "libraryChecksum", "driverId", "driverName", "driverInfo", "conformanceVersion",
-        "deviceName", "vendorId", "deviceId", "apiVersion", "driverVersion",
-        "instanceExtensions", "deviceExtensions", "source"
+        "libraryChecksum",
+        "driverId",
+        "driverName",
+        "driverInfo",
+        "conformanceVersion",
+        "deviceName",
+        "vendorId",
+        "deviceId",
+        "apiVersion",
+        "driverVersion",
+        "instanceExtensions",
+        "deviceExtensions",
+        "source"
       ],
       "properties": {
-        "libraryChecksum": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "const": "" }] },
+        "libraryChecksum": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "const": ""
+            }
+          ]
+        },
         "driverId": {
           "type": "integer",
           "minimum": 1,
           "description": "VkDriverId as reported by the ICD that ran. Zero is refused: it means the driver could not be identified, and an unattributable result must not be ingested."
         },
-        "driverName": { "type": "string" },
-        "driverInfo": { "type": "string" },
-        "conformanceVersion": { "$ref": "#/$defs/conformanceVersion" },
-        "deviceName": { "type": "string", "minLength": 1 },
-        "vendorId": { "type": "integer" },
-        "deviceId": { "type": "integer" },
-        "apiVersion": { "type": "integer", "minimum": 4194304 },
-        "driverVersion": { "type": "integer" },
-        "instanceExtensions": { "type": "array", "items": { "type": "string" } },
-        "deviceExtensions": { "type": "array", "items": { "type": "string" } },
-        "source": { "enum": ["SYSTEM", "IMPORTED_PACKAGE"] }
+        "driverName": {
+          "type": "string"
+        },
+        "driverInfo": {
+          "type": "string"
+        },
+        "conformanceVersion": {
+          "$ref": "#/$defs/conformanceVersion"
+        },
+        "deviceName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vendorId": {
+          "type": "integer"
+        },
+        "deviceId": {
+          "type": "integer"
+        },
+        "apiVersion": {
+          "type": "integer",
+          "minimum": 4194304
+        },
+        "driverVersion": {
+          "type": "integer"
+        },
+        "instanceExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deviceExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "enum": [
+            "SYSTEM",
+            "IMPORTED_PACKAGE"
+          ]
+        }
       }
     },
-
     "driverEntry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["arm", "label", "unverified", "libraryChecksum", "systemDriver", "identity"],
+      "required": [
+        "arm",
+        "label",
+        "unverified",
+        "libraryChecksum",
+        "systemDriver",
+        "identity"
+      ],
       "properties": {
-        "arm": { "enum": ["A", "B"] },
-        "label": { "type": "string", "minLength": 1 },
-        "unverified": { "type": "boolean" },
-        "libraryChecksum": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "const": "" }] },
-        "systemDriver": { "type": "boolean" },
-        "identity": { "$ref": "#/$defs/identity" }
+        "arm": {
+          "enum": [
+            "A",
+            "B"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unverified": {
+          "type": "boolean"
+        },
+        "libraryChecksum": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "const": ""
+            }
+          ]
+        },
+        "systemDriver": {
+          "type": "boolean"
+        },
+        "identity": {
+          "$ref": "#/$defs/identity"
+        }
       },
       "allOf": [
         {
           "description": "An imported package must be identified by the hash of the library that ran. Only the system driver has no file to hash.",
-          "if": { "properties": { "systemDriver": { "const": false } } },
-          "then": { "properties": { "libraryChecksum": { "$ref": "#/$defs/sha256" } } }
+          "if": {
+            "properties": {
+              "systemDriver": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "libraryChecksum": {
+                "$ref": "#/$defs/sha256"
+              }
+            }
+          }
         }
       ]
     },
-
     "workload": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["workloadId", "width", "height", "frameCount", "warmupFrames", "drawsPerFrame", "trianglesPerDraw"],
+      "required": [
+        "workloadId",
+        "width",
+        "height",
+        "frameCount",
+        "warmupFrames",
+        "drawsPerFrame",
+        "trianglesPerDraw"
+      ],
       "properties": {
-        "workloadId": { "type": "string", "pattern": "^[a-z0-9_]+/v[0-9]+$" },
-        "width": { "type": "integer", "minimum": 1 },
-        "height": { "type": "integer", "minimum": 1 },
-        "frameCount": { "type": "integer", "minimum": 1 },
-        "warmupFrames": { "type": "integer", "minimum": 0 },
-        "drawsPerFrame": { "type": "integer", "minimum": 1 },
-        "trianglesPerDraw": { "type": "integer", "minimum": 0 }
+        "workloadId": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+/v[0-9]+$"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frameCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "warmupFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "drawsPerFrame": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "trianglesPerDraw": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
-
     "telemetrySample": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["elapsedRealtimeMs", "thermalStatus", "battery", "zones"],
+      "required": [
+        "elapsedRealtimeMs",
+        "thermalStatus",
+        "battery",
+        "zones"
+      ],
       "properties": {
-        "elapsedRealtimeMs": { "type": "integer", "minimum": 0 },
+        "elapsedRealtimeMs": {
+          "type": "integer",
+          "minimum": 0
+        },
         "thermalStatus": {
-          "enum": ["NONE", "LIGHT", "MODERATE", "SEVERE", "CRITICAL", "EMERGENCY", "SHUTDOWN", "UNKNOWN"]
+          "enum": [
+            "NONE",
+            "LIGHT",
+            "MODERATE",
+            "SEVERE",
+            "CRITICAL",
+            "EMERGENCY",
+            "SHUTDOWN",
+            "UNKNOWN"
+          ]
         },
         "battery": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["levelPercent", "currentNowMicroamps", "charging", "plugged", "temperatureCelsius"],
+          "required": [
+            "levelPercent",
+            "currentNowMicroamps",
+            "charging",
+            "plugged",
+            "temperatureCelsius"
+          ],
           "properties": {
-            "levelPercent": { "type": "integer", "minimum": -1, "maximum": 100 },
-            "currentNowMicroamps": { "type": "integer" },
-            "charging": { "type": "boolean" },
-            "plugged": { "type": "boolean" },
-            "temperatureCelsius": { "type": ["number", "string"] }
+            "levelPercent": {
+              "type": "integer",
+              "minimum": -1,
+              "maximum": 100
+            },
+            "currentNowMicroamps": {
+              "type": "integer"
+            },
+            "charging": {
+              "type": "boolean"
+            },
+            "plugged": {
+              "type": "boolean"
+            },
+            "temperatureCelsius": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
           }
         },
         "zones": {
@@ -252,122 +587,325 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["zone", "type", "celsius"],
+            "required": [
+              "zone",
+              "type",
+              "celsius",
+              "role"
+            ],
             "properties": {
-              "zone": { "type": "string" },
-              "type": { "type": "string" },
-              "celsius": { "type": "number", "minimum": -40, "maximum": 150 }
+              "zone": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "celsius": {
+                "type": "number",
+                "minimum": -40,
+                "maximum": 150
+              },
+              "role": {
+                "enum": [
+                  "CPU",
+                  "GPU",
+                  "SKIN",
+                  "POWER",
+                  "PERIPHERAL",
+                  "UNKNOWN"
+                ],
+                "description": "What the app guessed the zone measures, from its type string. A guess, and labelled as one: zone naming is device-specific, so this decides which sensors are worth showing the user and never whether a run may start."
+              }
             }
           }
         }
       }
     },
-
     "summary": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "frameCount", "medianNs", "meanNs", "stdDevNs", "p95Ns", "p99Ns", "p999Ns",
-        "jitterNs", "stutterCount", "stuttersPerMinute", "openingMedianNs",
-        "sustainedMedianNs", "thermalDegradation", "totalDurationNs"
+        "frameCount",
+        "medianNs",
+        "meanNs",
+        "stdDevNs",
+        "p95Ns",
+        "p99Ns",
+        "p999Ns",
+        "jitterNs",
+        "stutterCount",
+        "stuttersPerMinute",
+        "openingMedianNs",
+        "sustainedMedianNs",
+        "thermalDegradation",
+        "totalDurationNs"
       ],
       "properties": {
-        "frameCount": { "type": "integer", "minimum": 1 },
-        "medianNs": { "type": "number", "exclusiveMinimum": 0 },
-        "meanNs": { "type": "number", "exclusiveMinimum": 0 },
-        "stdDevNs": { "type": "number", "minimum": 0 },
-        "p95Ns": { "type": "number", "exclusiveMinimum": 0 },
-        "p99Ns": { "type": "number", "exclusiveMinimum": 0 },
-        "p999Ns": { "type": "number", "exclusiveMinimum": 0 },
-        "jitterNs": { "type": "number", "minimum": 0 },
-        "stutterCount": { "type": "integer", "minimum": 0 },
-        "stuttersPerMinute": { "type": "number", "minimum": 0 },
-        "openingMedianNs": { "type": "number", "exclusiveMinimum": 0 },
-        "sustainedMedianNs": { "type": "number", "exclusiveMinimum": 0 },
-        "thermalDegradation": { "type": "number" },
-        "totalDurationNs": { "type": "integer", "minimum": 1 }
+        "frameCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "medianNs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "meanNs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "stdDevNs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "p95Ns": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "p99Ns": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "p999Ns": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "jitterNs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "stutterCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stuttersPerMinute": {
+          "type": "number",
+          "minimum": 0
+        },
+        "openingMedianNs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sustainedMedianNs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "thermalDegradation": {
+          "type": "number"
+        },
+        "totalDurationNs": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
-
     "execution": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "slot", "arm", "runIndexWithinArm", "workload", "frametimesNs", "cpuFrametimesNs",
-        "usedGpuTimestamps", "imageSha256", "summary", "telemetryBefore", "telemetryAfter"
+        "slot",
+        "arm",
+        "runIndexWithinArm",
+        "workload",
+        "frametimesNs",
+        "cpuFrametimesNs",
+        "usedGpuTimestamps",
+        "imageSha256",
+        "summary",
+        "telemetryBefore",
+        "telemetryAfter"
       ],
       "properties": {
-        "slot": { "type": "integer", "minimum": 0 },
-        "arm": { "enum": ["A", "B"] },
-        "runIndexWithinArm": { "type": "integer", "minimum": 0 },
-        "workload": { "$ref": "#/$defs/workload" },
+        "slot": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "arm": {
+          "enum": [
+            "A",
+            "B"
+          ]
+        },
+        "runIndexWithinArm": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "workload": {
+          "$ref": "#/$defs/workload"
+        },
         "frametimesNs": {
           "description": "The complete series, in submission order. Aggregates alone cannot be re-checked, and a leaderboard that cannot re-check its entries is a leaderboard of claims.",
           "type": "array",
           "minItems": 1,
-          "items": { "type": "integer", "exclusiveMinimum": 0 }
+          "items": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          }
         },
         "cpuFrametimesNs": {
           "type": "array",
-          "items": { "type": "integer", "minimum": 0 }
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
         },
-        "usedGpuTimestamps": { "type": "boolean" },
-        "imageSha256": { "$ref": "#/$defs/sha256" },
-        "summary": { "$ref": "#/$defs/summary" },
-        "telemetryBefore": { "$ref": "#/$defs/telemetrySample" },
-        "telemetryAfter": { "$ref": "#/$defs/telemetrySample" }
+        "usedGpuTimestamps": {
+          "type": "boolean"
+        },
+        "imageSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "telemetryBefore": {
+          "$ref": "#/$defs/telemetrySample"
+        },
+        "telemetryAfter": {
+          "$ref": "#/$defs/telemetrySample"
+        }
       }
     },
-
     "comparison": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "workloadId", "labelA", "labelB", "verdict", "reason", "runsA", "runsB",
-        "medianANs", "medianBNs", "speedupOfA", "percentDifference", "speedupInterval",
-        "pValue", "exactTest", "cliffsDelta", "effectMagnitude", "noiseFloor",
-        "trustworthy", "warnings"
+        "workloadId",
+        "labelA",
+        "labelB",
+        "verdict",
+        "reason",
+        "runsA",
+        "runsB",
+        "medianANs",
+        "medianBNs",
+        "speedupOfA",
+        "percentDifference",
+        "speedupInterval",
+        "pValue",
+        "exactTest",
+        "cliffsDelta",
+        "effectMagnitude",
+        "noiseFloor",
+        "trustworthy",
+        "warnings"
       ],
       "properties": {
-        "workloadId": { "type": "string" },
-        "labelA": { "type": "string" },
-        "labelB": { "type": "string" },
-        "verdict": { "enum": ["A_FASTER", "B_FASTER", "TECHNICAL_TIE", "INCONCLUSIVE"] },
-        "reason": {
+        "workloadId": {
+          "type": "string"
+        },
+        "labelA": {
+          "type": "string"
+        },
+        "labelB": {
+          "type": "string"
+        },
+        "verdict": {
           "enum": [
-            "SIGNIFICANT_EFFECT", "WITHIN_NOISE_FLOOR", "NOT_SIGNIFICANT",
-            "NEGLIGIBLE_EFFECT", "HIGH_VARIANCE", "ESTIMATORS_DISAGREE", "INSUFFICIENT_RUNS"
+            "A_FASTER",
+            "B_FASTER",
+            "TECHNICAL_TIE",
+            "INCONCLUSIVE"
           ]
         },
-        "runsA": { "type": "integer", "minimum": 1 },
-        "runsB": { "type": "integer", "minimum": 1 },
-        "medianANs": { "type": "number", "exclusiveMinimum": 0 },
-        "medianBNs": { "type": "number", "exclusiveMinimum": 0 },
-        "speedupOfA": { "type": "number", "exclusiveMinimum": 0 },
-        "percentDifference": { "type": "number" },
+        "reason": {
+          "enum": [
+            "SIGNIFICANT_EFFECT",
+            "WITHIN_NOISE_FLOOR",
+            "NOT_SIGNIFICANT",
+            "NEGLIGIBLE_EFFECT",
+            "HIGH_VARIANCE",
+            "ESTIMATORS_DISAGREE",
+            "INSUFFICIENT_RUNS"
+          ]
+        },
+        "runsA": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runsB": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "medianANs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "medianBNs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "speedupOfA": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "percentDifference": {
+          "type": "number"
+        },
         "speedupInterval": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["point", "low", "high", "confidence"],
+          "required": [
+            "point",
+            "low",
+            "high",
+            "confidence"
+          ],
           "properties": {
-            "point": { "type": "number" },
-            "low": { "type": "number" },
-            "high": { "type": "number" },
-            "confidence": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 }
+            "point": {
+              "type": "number"
+            },
+            "low": {
+              "type": "number"
+            },
+            "high": {
+              "type": "number"
+            },
+            "confidence": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "exclusiveMaximum": 1
+            }
           }
         },
-        "pValue": { "type": "number", "minimum": 0, "maximum": 1 },
-        "exactTest": { "type": "boolean" },
-        "cliffsDelta": { "type": "number", "minimum": -1, "maximum": 1 },
-        "effectMagnitude": { "enum": ["NEGLIGIBLE", "SMALL", "MEDIUM", "LARGE"] },
-        "noiseFloor": { "type": "number", "minimum": 0, "maximum": 1 },
-        "trustworthy": { "type": "boolean" },
+        "pValue": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "exactTest": {
+          "type": "boolean"
+        },
+        "cliffsDelta": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "effectMagnitude": {
+          "enum": [
+            "NEGLIGIBLE",
+            "SMALL",
+            "MEDIUM",
+            "LARGE"
+          ]
+        },
+        "noiseFloor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "trustworthy": {
+          "type": "boolean"
+        },
         "warnings": {
           "type": "array",
           "items": {
             "enum": [
-              "DIFFERENT_THERMAL_SESSION", "THROTTLED_DURING_RUN", "PREFLIGHT_OVERRIDDEN",
-              "DIFFERENT_WORKLOAD_SPEC", "DIFFERENT_DEVICE", "NULL_TEST_NOT_PASSED"
+              "DIFFERENT_THERMAL_SESSION",
+              "THROTTLED_DURING_RUN",
+              "PREFLIGHT_OVERRIDDEN",
+              "DIFFERENT_WORKLOAD_SPEC",
+              "DIFFERENT_DEVICE",
+              "NULL_TEST_NOT_PASSED"
             ]
           }
         }

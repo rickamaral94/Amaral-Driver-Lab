@@ -5,10 +5,15 @@ import java.io.File
 /**
  * Reads `/sys/class/thermal` without root.
  *
- * Zone naming is entirely device-specific and half of them are not GPU or CPU at
- * all. Nothing here tries to interpret the names — every readable zone is recorded
- * with its type, and working out which ones matter on a given device is a job for
- * whoever reads the report, not for a heuristic that would be wrong somewhere.
+ * Zone naming is entirely device-specific and half of them are not GPU or CPU at all.
+ * Every readable zone is recorded with its type, so whoever reads the report can work
+ * out which ones matter on their device.
+ *
+ * Each zone also gets a guessed [ThermalRole]. The guess decides which sensors are worth
+ * mentioning to the user and never decides whether a run may start: the first version of
+ * this file refused to interpret zone names and then blocked runs on the maximum across
+ * all of them, which stopped a freshly booted device because a power-management sensor
+ * was reading 62 °C.
  */
 public class ThermalZoneReader(private val root: File = File("/sys/class/thermal")) {
 

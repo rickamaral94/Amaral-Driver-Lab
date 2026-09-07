@@ -1,6 +1,7 @@
 package com.amaral.driverlab.telemetry
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -75,5 +76,34 @@ class ThermalZoneReaderTest {
         val reading = ThermalZoneReader(temporaryFolder.root).read().single()
         assertEquals("", reading.type)
         assertEquals(42.0, reading.celsius, 1e-9)
+    }
+
+    @Test
+    fun `zones are classified so an unrelated sensor can be told apart`() {
+        zone("thermal_zone0", "cpu-0-0-usr", "31000")
+        zone("thermal_zone7", "gpuss-0-usr", "30000")
+        zone("thermal_zone20", "pm8550b_tz", "62000")
+        zone("thermal_zone30", "skin-therm", "29000")
+        zone("thermal_zone40", "mdm-core-usr", "45000")
+        zone("thermal_zone50", "something-nobody-documented", "33000")
+
+        val byType = ThermalZoneReader(temporaryFolder.root).read().associateBy { it.type }
+        assertEquals(ThermalRole.CPU, byType.getValue("cpu-0-0-usr").role)
+        assertEquals(ThermalRole.GPU, byType.getValue("gpuss-0-usr").role)
+        assertEquals(ThermalRole.POWER, byType.getValue("pm8550b_tz").role)
+        assertEquals(ThermalRole.SKIN, byType.getValue("skin-therm").role)
+        assertEquals(ThermalRole.PERIPHERAL, byType.getValue("mdm-core-usr").role)
+        assertEquals(ThermalRole.UNKNOWN, byType.getValue("something-nobody-documented").role)
+    }
+
+    @Test
+    fun `only cpu, gpu and skin count towards the reading shown to the user`() {
+        assertTrue(ThermalRole.CPU.relevantToBenchmarking)
+        assertTrue(ThermalRole.GPU.relevantToBenchmarking)
+        assertTrue(ThermalRole.SKIN.relevantToBenchmarking)
+        // These idle warm on a cold device and say nothing about graphics work.
+        assertFalse(ThermalRole.POWER.relevantToBenchmarking)
+        assertFalse(ThermalRole.PERIPHERAL.relevantToBenchmarking)
+        assertFalse("an unrecognised zone is not evidence either", ThermalRole.UNKNOWN.relevantToBenchmarking)
     }
 }

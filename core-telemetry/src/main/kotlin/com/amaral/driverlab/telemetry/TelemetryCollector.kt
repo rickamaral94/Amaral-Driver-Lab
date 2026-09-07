@@ -58,7 +58,7 @@ public class TelemetryCollector(
             charging = chargeStatus == BatteryManager.BATTERY_STATUS_CHARGING,
             plugged = pluggedFlag != 0,
             temperatureCelsius = if (temperatureTenths == Int.MIN_VALUE) {
-                Double.NaN
+                null
             } else {
                 temperatureTenths / 10.0
             },
@@ -83,11 +83,12 @@ public class TelemetryCollector(
         screenBrightness = brightness(),
     )
 
-    private fun refreshRateHz(): Double = try {
-        val display: Display? = context.display
-        display?.refreshRate?.toDouble() ?: Double.NaN
+    private fun refreshRateHz(): Double? = try {
+        // Null rather than NaN. A NaN here reached the report serializer and killed the
+        // runner process outright, because JSON cannot represent it.
+        context.display?.refreshRate?.toDouble()?.takeIf { it.isFinite() && it > 0.0 }
     } catch (_: Exception) {
-        Double.NaN
+        null
     }
 
     private fun brightness(): Int = try {

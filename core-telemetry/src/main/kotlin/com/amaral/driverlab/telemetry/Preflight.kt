@@ -12,6 +12,10 @@ public data class PreflightIssue(
      * Whether the user may proceed anyway. A blocking issue can still be
      * overridden — see [PreflightReport.overridden] — but the override is recorded
      * in the result and travels with it to the leaderboard.
+     *
+     * Only conditions the app can be sure about block. A reading whose meaning is
+     * device-specific warns instead: a check the user learns to override is a check
+     * that has stopped working.
      */
     val blocking: Boolean,
 ) {
@@ -36,6 +40,10 @@ public data class PreflightPolicy(
      */
     val requireUnplugged: Boolean = true,
     val requireThermalStatusNone: Boolean = true,
+    /**
+     * Advisory only. Exceeding it produces a warning naming the sensor, never a block —
+     * see [Preflight.evaluate]. Android's thermal status is the gate for a hot device.
+     */
     val maximumStartCelsius: Double = 45.0,
     val minimumCooldownMs: Long = 5 * 60 * 1000L,
 )
@@ -111,20 +119,26 @@ public object Preflight {
             )
         }
 
-        val peak = sample.peakZoneCelsius
-        if (peak == null) {
+        val hottest = sample.representativeZone
+        if (sample.zones.isEmpty()) {
             issues += PreflightIssue(
                 PreflightIssue.Code.NO_THERMAL_TELEMETRY,
                 "No thermal zone could be read on this device. The run can still go ahead, but the " +
                     "report will not be able to show whether it heated up.",
                 blocking = false,
             )
-        } else if (peak > policy.maximumStartCelsius) {
+        } else if (hottest != null && hottest.celsius > policy.maximumStartCelsius) {
+            // A warning, not a block. Which sysfs zone means what is device-specific and
+            // undocumented, so this reading can be wrong in ways nothing here can detect —
+            // an earlier version blocked on it and stopped freshly booted devices. Android's
+            // own thermal status is the check that actually gates a hot device, above.
             issues += PreflightIssue(
                 PreflightIssue.Code.DEVICE_TOO_HOT,
-                "The hottest sensor reads ${peak.roundToInt()} °C, above the " +
-                    "${policy.maximumStartCelsius.roundToInt()} °C start limit. Let it cool.",
-                blocking = true,
+                "Sensor \"${hottest.type}\" (${hottest.role}) reads ${hottest.celsius.roundToInt()} °C, " +
+                    "above the ${policy.maximumStartCelsius.roundToInt()} °C this protocol prefers to " +
+                    "start from. If the device is actually cool, that sensor does not mean what the " +
+                    "app assumed and you can ignore this.",
+                blocking = false,
             )
         }
 

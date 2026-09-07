@@ -50,6 +50,20 @@ carried forward; it remains in git history and on `main`.
 
 ### Fixed
 
+- **A finished run was lost to a value JSON cannot write.** The display refresh rate
+  came back as `NaN` when the display could not be queried, and encoding the report
+  threw and took the runner process down — after the work was already done. The rule
+  that a missing reading must never become a zero was right; `NaN` was the wrong way
+  to say it, because JSON has no such value. Missing readings are `null` now, and
+  encoding happens inside the guard so a formatting fault can never again cost a
+  completed run.
+- **A cold device was refused because an unrelated sensor was warm.** The preflight
+  took the maximum across every `/sys/class/thermal` zone, including power-management
+  and modem sensors that idle warm, and blocked on it — a freshly booted Odin2 Portal
+  reported 62 °C from a PMIC die and could not run at all. Zones are now classified by
+  role, only CPU, GPU and skin sensors are quoted to the user, and a hot reading warns
+  and names the sensor rather than blocking. Android's own thermal status remains the
+  gate for a genuinely hot device, because it is the only signal calibrated per device.
 - **An imported driver package could never have loaded.** `RunCoordinator` built every
   `LoadRequest` with a null directory and library name, so the package's location never
   reached the loader — and because the loader answers "could not open it" either way,

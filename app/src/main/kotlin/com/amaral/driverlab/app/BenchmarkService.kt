@@ -147,9 +147,23 @@ class BenchmarkService : Service() {
             }
 
             val completion = result.fold(
-                onSuccess = {
+                onSuccess = { report ->
                     DiagnosticLog.i(TAG, "run complete, report built")
-                    BenchCompletion(ok = true, reportJson = ReportJson.encode(it))
+                    // Encoding is inside the guard on purpose. It used to sit outside, so a
+                    // value JSON cannot represent took the whole runner process down after the
+                    // work was already finished — losing a completed run to a formatting fault.
+                    runCatching { ReportJson.encode(report) }.fold(
+                        onSuccess = { BenchCompletion(ok = true, reportJson = it) },
+                        onFailure = {
+                            DiagnosticLog.e(TAG, "the finished report could not be encoded", it)
+                            BenchCompletion(
+                                ok = false,
+                                error = "The run finished but its report could not be written: " +
+                                    "${it.message}. This is a bug in the app, not a result about " +
+                                    "the driver.",
+                            )
+                        },
+                    )
                 },
                 onFailure = {
                     DiagnosticLog.e(TAG, "run threw", it)

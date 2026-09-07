@@ -121,9 +121,22 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val sample = withContext(Dispatchers.IO) { telemetry.sample() }
             val since = lastRunFinishedAt?.let { System.currentTimeMillis() - it }
-            state.update {
-                it.copy(step = Step.Preflight, preflight = Preflight.evaluate(sample, since))
+
+            // Every zone, with the role the app guessed. Which sysfs zone means what varies
+            // by device, so this dump is the only way to tell a genuinely hot device from a
+            // sensor the app misread.
+            DiagnosticLog.i(TAG, "thermal status=${sample.thermalStatus}, ${sample.zones.size} zone(s)")
+            for (zone in sample.zones) {
+                DiagnosticLog.i(TAG, "  ${zone.zone} type=${zone.type} role=${zone.role} ${zone.celsius} C")
             }
+            DiagnosticLog.i(
+                TAG,
+                "representative=${sample.representativeCelsius ?: "none"} peakAnyZone=${sample.peakZoneCelsius ?: "none"}",
+            )
+
+            val report = Preflight.evaluate(sample, since)
+            DiagnosticLog.i(TAG, "preflight: ${report.summary()}")
+            state.update { it.copy(step = Step.Preflight, preflight = report) }
         }
     }
 

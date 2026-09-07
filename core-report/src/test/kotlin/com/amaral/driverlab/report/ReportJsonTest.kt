@@ -2,6 +2,7 @@ package com.amaral.driverlab.report
 
 import com.amaral.driverlab.stats.AbConfig
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -71,5 +72,53 @@ class ReportJsonTest {
     fun `pretty output is the same data, just readable`() {
         val original = report()
         assertEquals(original, ReportJson.decode(ReportJson.encodePretty(original)))
+    }
+
+    /**
+     * The crash this guards against happened on a real device, after a full run had
+     * finished: the display refresh rate came back as NaN, JSON has no way to write that,
+     * and the runner process died taking a completed run with it. A missing reading is
+     * null now, and this holds it that way.
+     */
+    @Test
+    fun `a report with unknown device readings still encodes`() {
+        val unknownReadings = report().copy(
+            device = ReportFixtures.device.copy(
+                displayRefreshRateHz = null,
+                screenBrightness = -1,
+            ),
+        )
+        val encoded = ReportJson.encode(unknownReadings)
+        assertTrue(encoded.contains("\"displayRefreshRateHz\":null"))
+        assertEquals(unknownReadings, ReportJson.decode(encoded))
+    }
+
+    @Test
+    fun `an unknown battery temperature encodes as null`() {
+        val original = report()
+        val stripped = original.copy(
+            executions = original.executions.map { execution ->
+                execution.copy(
+                    telemetryBefore = execution.telemetryBefore.copy(
+                        battery = execution.telemetryBefore.battery.copy(temperatureCelsius = null),
+                    ),
+                )
+            },
+        )
+        val encoded = ReportJson.encode(stripped)
+        assertTrue(encoded.contains("\"temperatureCelsius\":null"))
+        assertEquals(stripped, ReportJson.decode(encoded))
+    }
+
+    /**
+     * Belt and braces on the same failure mode. Any non-finite double anywhere in the
+     * report would be unpublishable, so the encoder is asked to prove it can write the
+     * whole thing rather than trusting each field to have been thought about.
+     */
+    @Test
+    fun `nothing in a report encodes to a value JSON cannot represent`() {
+        val encoded = ReportJson.encode(report())
+        assertFalse(encoded.contains("NaN"))
+        assertFalse(encoded.contains("Infinity"))
     }
 }

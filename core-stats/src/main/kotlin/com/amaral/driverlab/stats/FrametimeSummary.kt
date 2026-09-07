@@ -53,6 +53,12 @@ public data class FrametimeSummary(
          */
         public fun of(frametimesNs: LongArray): FrametimeSummary {
             require(frametimesNs.isNotEmpty()) { "a workload must report at least one frame" }
+            // Guards every ratio downstream: a median of zero turns a speedup into NaN, and a
+            // NaN cannot be published at all. A frame that took no time did not happen.
+            require(frametimesNs.any { it > 0L }) {
+                "a workload reported ${frametimesNs.size} frames that all took zero time; " +
+                    "that is a failed measurement, not a fast one"
+            }
             val values = DoubleArray(frametimesNs.size) { frametimesNs[it].toDouble() }
             val sorted = values.sortedArray()
 

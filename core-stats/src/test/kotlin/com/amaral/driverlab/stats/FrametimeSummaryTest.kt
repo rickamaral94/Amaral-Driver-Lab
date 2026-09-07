@@ -76,4 +76,20 @@ class FrametimeSummaryTest {
     fun `a workload that produced no frames is an error, not a zero`() {
         FrametimeSummary.of(LongArray(0))
     }
+
+    /**
+     * A median of zero makes every ratio downstream NaN, and a NaN cannot be published at
+     * all. Frames that took no time are a failed measurement, not a very fast one.
+     */
+    @Test(expected = IllegalArgumentException::class)
+    fun `a series of zero-length frames is refused`() {
+        FrametimeSummary.of(LongArray(120))
+    }
+
+    @Test
+    fun `a series with some zero frames is still usable`() {
+        // A dropped sample among real ones is data; the whole series being zero is not.
+        val frames = LongArray(120) { if (it % 40 == 0) 0L else 16_000_000L }
+        assertTrue(FrametimeSummary.of(frames).medianNs > 0.0)
+    }
 }
