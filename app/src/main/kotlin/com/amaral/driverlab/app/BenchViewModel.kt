@@ -174,18 +174,27 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
 
                     is BenchUpdate.Complete -> {
                         lastRunFinishedAt = System.currentTimeMillis()
+                        // Read once: the report is hundreds of kilobytes, which is why it
+                        // arrives as a path rather than inline in the first place.
+                        val report = if (update.completion.ok) {
+                            readReport(update.completion.reportPath)
+                        } else {
+                            null
+                        }
                         state.update {
-                            if (update.completion.ok) {
-                                it.copy(
+                            when {
+                                !update.completion.ok ->
+                                    it.copy(step = Step.Result, busy = false, runError = update.completion.error)
+
+                                report != null ->
+                                    it.copy(step = Step.Result, busy = false, report = report, runError = null)
+
+                                else -> it.copy(
                                     step = Step.Result,
                                     busy = false,
-                                    report = runCatching {
-                                        ReportJson.decode(update.completion.reportJson)
-                                    }.getOrNull(),
-                                    runError = null,
+                                    runError = "The run finished but its report could not be read back " +
+                                        "from ${update.completion.reportPath}.",
                                 )
-                            } else {
-                                it.copy(step = Step.Result, busy = false, runError = update.completion.error)
                             }
                         }
                     }
@@ -207,6 +216,14 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
     }
+
+    /**
+     * The runner writes the report to a file and sends its path; the contents are far too
+     * large for a Binder transaction. See [BenchCompletion].
+     */
+    private fun readReport(path: String): BenchmarkReport? = runCatching {
+        ReportJson.decode(java.io.File(path).readText())
+    }.onFailure { DiagnosticLog.e(TAG, "could not read the report at $path", it) }.getOrNull()
 
     fun exportJson(): String? = state.value.report?.let { ReportJson.encodePretty(it) }
 

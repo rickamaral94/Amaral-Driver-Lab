@@ -51,6 +51,7 @@ class BenchmarkClient(private val context: Context) {
                         BenchmarkService.MSG_COMPLETE -> {
                             message.data.getString(BenchmarkService.KEY_COMPLETION)?.let {
                                 completed = true
+                                DiagnosticLog.i(TAG, "completion received")
                                 trySend(
                                     BenchUpdate.Complete(
                                         json.decodeFromString(BenchCompletion.serializer(), it),

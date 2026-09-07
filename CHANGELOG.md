@@ -52,6 +52,21 @@ carried forward; it remains in git history and on `main`.
 
 ### Fixed
 
+- **Every `VkDriverId` from Intel onwards was wrong.** The table was written from memory:
+  Qualcomm's blob was recorded as 9 (which is Arm) and Turnip as 15 (which is CoreAVI).
+  On a real Odin2 Portal that displayed "System driver · Imagination proprietary" for an
+  Adreno, and — far worse — meant `isQualcommProprietary`, the check that refuses a Turnip
+  request answered by the system driver, was comparing against a number no driver reports.
+  The constants are now transcribed from `vulkan_core.h` and a test pins every one of them
+  against the specification.
+- **A finished run never reached the screen.** The completion message carried the whole
+  report inline through a Binder transaction. A real run is around 260 KB — twenty
+  executions, thousands of frametimes, sixty-six thermal zones sampled twice each — against
+  a limit of roughly a megabyte for the entire process, and the failure was swallowed by a
+  bare `runCatching`. The user was left watching "20 of 20" forever on a benchmark that had
+  already finished. The report is written to a file and only its path crosses the boundary,
+  and a failed send is now logged rather than discarded.
+
 - **The rootless hook was being pointed at the wrong directory.** `hookLibDir` was
   passed a scratch path when `libadrenotools` requires `applicationInfo.nativeLibraryDir`
   — the library creates a linker namespace over it and `dlopen`s its hooks from inside.

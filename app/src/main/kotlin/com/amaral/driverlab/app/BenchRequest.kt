@@ -94,15 +94,21 @@ data class BenchProgress(
 /**
  * The end of a run, whichever way it ended.
  *
- * [crashed] is set by the *client* when the runner process dies without sending
- * anything, which is the case this whole arrangement exists for: a driver that
- * segfaults takes `:bench` down, and the app records a crash instead of losing the
- * session.
+ * The report travels as a **path**, never as its contents. A Binder transaction is bounded
+ * at about a megabyte for the whole process, and a real run — twenty executions, thousands
+ * of frametimes, sixty-six thermal zones sampled twice each — comfortably reaches a quarter
+ * of that on its own. Sending the JSON inline made the completion message fail silently and
+ * left the UI sitting on a finished benchmark forever.
+ *
+ * [crashed] is set by the *client* when the runner process dies without sending anything,
+ * which is the case this whole arrangement exists for: a driver that segfaults takes
+ * `:bench` down, and the app records a crash instead of losing the session.
  */
 @Serializable
 data class BenchCompletion(
     val ok: Boolean,
-    val reportJson: String = "",
+    /** File the runner wrote the report to. Both processes can read it; neither ships it. */
+    val reportPath: String = "",
     val error: String = "",
     val crashed: Boolean = false,
 )

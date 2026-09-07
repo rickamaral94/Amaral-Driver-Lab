@@ -156,10 +156,16 @@ class BenchmarkService : Service() {
                     // Encoding is inside the guard on purpose. It used to sit outside, so a
                     // value JSON cannot represent took the whole runner process down after the
                     // work was already finished — losing a completed run to a formatting fault.
-                    runCatching { ReportJson.encode(report) }.fold(
-                        onSuccess = { BenchCompletion(ok = true, reportJson = it) },
+                    runCatching {
+                        val directory = File(cacheDir, "reports").apply { mkdirs() }
+                        val file = File(directory, "${report.session.id}.json")
+                        file.writeText(ReportJson.encode(report))
+                        DiagnosticLog.i(TAG, "report written: ${file.length()} bytes at ${file.path}")
+                        file.path
+                    }.fold(
+                        onSuccess = { BenchCompletion(ok = true, reportPath = it) },
                         onFailure = {
-                            DiagnosticLog.e(TAG, "the finished report could not be encoded", it)
+                            DiagnosticLog.e(TAG, "the finished report could not be written", it)
                             BenchCompletion(
                                 ok = false,
                                 error = "The run finished but its report could not be written: " +
@@ -179,14 +185,23 @@ class BenchmarkService : Service() {
         }
     }
 
-    private fun send(what: Int, key: String, payload: String) {
-        val target = client ?: return
+    /**
+     * @return true when the message reached the client.
+     *
+     * A failure is logged rather than swallowed. The client going away mid-run is normal —
+     * the user left the screen — but a send that fails for any other reason used to be
+     * invisible, and the one that mattered (a completion too large for a Binder transaction)
+     * left the UI waiting on a run that had already finished.
+     */
+    private fun send(what: Int, key: String, payload: String): Boolean {
+        val target = client ?: return false
         val message = Message.obtain(null, what).apply {
             data = Bundle().apply { putString(key, payload) }
         }
-        // The client going away mid-run is normal — the user left the screen. The
-        // run continues; there is simply nowhere to report to.
-        runCatching { target.send(message) }
+        return runCatching { target.send(message); true }.getOrElse { error ->
+            DiagnosticLog.e(TAG, "could not deliver message $what (${payload.length} chars)", error)
+            false
+        }
     }
 
     private fun acquireWakeLock() {

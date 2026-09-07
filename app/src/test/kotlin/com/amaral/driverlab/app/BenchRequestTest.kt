@@ -78,4 +78,19 @@ class BenchRequestTest {
         assertTrue(round.crashed)
         assertTrue(!round.ok)
     }
+
+    /**
+     * The report crosses as a path. A real run is hundreds of kilobytes — twenty executions,
+     * thousands of frametimes, sixty-six thermal zones sampled twice each — and a Binder
+     * transaction is bounded at about a megabyte for the whole process. Sending it inline
+     * failed silently and left the UI sitting on a benchmark that had already finished.
+     */
+    @Test
+    fun `a completion carries a path, never the report itself`() {
+        val completion = BenchCompletion(ok = true, reportPath = "/data/.../reports/session-1.json")
+        val encoded = json.encodeToString(BenchCompletion.serializer(), completion)
+
+        assertTrue("the message must stay small enough for a Binder transaction", encoded.length < 1024)
+        assertEquals(completion, json.decodeFromString(BenchCompletion.serializer(), encoded))
+    }
 }

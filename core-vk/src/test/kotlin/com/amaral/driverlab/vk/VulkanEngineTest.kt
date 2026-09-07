@@ -53,7 +53,7 @@ class VulkanEngineTest {
             {
               "ok": true,
               "identity": {
-                "driverId": 15,
+                "driverId": 18,
                 "driverName": "turnip",
                 "driverInfo": "Mesa 25.1.0",
                 "hasConformanceVersion": true,
@@ -84,7 +84,7 @@ class VulkanEngineTest {
     fun `an absent conformance version is null rather than four zeroes`() {
         val native = json.decodeFromString(
             NativeStatus.serializer(),
-            """{"ok":true,"identity":{"driverId":9,"driverName":"qcom","hasConformanceVersion":false}}""",
+            """{"ok":true,"identity":{"driverId":8,"driverName":"qcom","hasConformanceVersion":false}}""",
         )
         assertNull(native.identity!!.toDomain(DriverSource.SYSTEM, "").conformanceVersion)
     }
