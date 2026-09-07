@@ -47,7 +47,8 @@
     <!-- Glossary. One sentence each, no jargon inside the explanation. -->
     <string name="help_frametime">How long one frame took. Lower is better, and it is what every number here is measured in.</string>
     <string name="help_p1_low">The slowest 1% of frames. A driver can have a good average and still stutter, and this is where that shows.</string>
-    <string name="help_null_test">The app runs one driver against itself. It should find no difference; if it does, the measurements cannot be trusted and nothing is ranked.</string>
+    <string name="result_not_ranked">Results are shown, but not ranked.</string>
+    <string name="help_null_test">Ranking needs a separate calibration run first: the same driver against itself, which should show no difference at all. If it does show one, this device is manufacturing differences and no comparison on it can be trusted. That run has not been done here, so the comparison below is shown but kept out of any ranking. Nothing is wrong with the two drivers you chose.</string>
     <string name="help_noise_floor">The smallest difference this device can actually tell apart. Anything smaller is reported as a tie rather than a win.</string>
     <string name="help_technical_tie">The two drivers performed the same, as far as this device can measure. That is a real answer, not a failure.</string>
     <string name="help_inconclusive">The measurements were too scattered to conclude anything. Let the device cool down and run it again.</string>

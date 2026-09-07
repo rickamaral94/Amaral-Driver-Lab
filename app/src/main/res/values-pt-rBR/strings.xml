@@ -41,7 +41,8 @@
 
     <string name="help_frametime">Quanto tempo levou um quadro. Menor é melhor, e é a unidade de todos os números aqui.</string>
     <string name="help_p1_low">O 1% de quadros mais lentos. Um driver pode ter uma boa média e mesmo assim engasgar, e é aqui que isso aparece.</string>
-    <string name="help_null_test">O app roda um driver contra ele mesmo. Não deveria achar diferença nenhuma; se achar, a medição não é confiável e nada é ranqueado.</string>
+    <string name="result_not_ranked">Os resultados aparecem, mas sem ranking.</string>
+    <string name="help_null_test">O ranking exige antes uma execução de calibração separada: o mesmo driver contra ele mesmo, que não deveria acusar diferença nenhuma. Se acusar, este aparelho está fabricando diferenças e nenhuma comparação feita nele é confiável. Essa execução ainda não foi feita aqui, então a comparação abaixo aparece mas fica fora de qualquer ranking. Não há nada de errado com os dois drivers que você escolheu.</string>
     <string name="help_noise_floor">A menor diferença que este aparelho consegue distinguir de fato. Abaixo disso o resultado é empate, não vitória.</string>
     <string name="help_technical_tie">Os dois drivers tiveram o mesmo desempenho, até onde este aparelho mede. Isso é uma resposta de verdade, não uma falha.</string>
     <string name="help_inconclusive">As medições ficaram espalhadas demais para concluir alguma coisa. Deixe o aparelho esfriar e rode de novo.</string>

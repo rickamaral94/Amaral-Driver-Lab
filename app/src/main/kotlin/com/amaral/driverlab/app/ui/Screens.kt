@@ -331,7 +331,19 @@ private fun VerdictCard(report: BenchmarkReport) {
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Plain language first, technical detail one tap away.
-            Text(report.plainVerdict, style = MaterialTheme.typography.titleMedium)
+            //
+            // `plainVerdict` is written in English on purpose: it travels in the published
+            // report, where every reader of the leaderboard has to be able to read it. The
+            // blocked case is the one the user sees most often and says nothing about their
+            // own run, so the screen states it in their own language instead.
+            Text(
+                if (report.nullTest?.passed == true) {
+                    report.plainVerdict
+                } else {
+                    stringResource(R.string.result_not_ranked)
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
             val headline = report.comparisons.maxByOrNull { abs(it.percentDifference) }
             if (headline != null) {
                 Text(
