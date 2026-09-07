@@ -19,6 +19,7 @@ import com.amaral.driverlab.app.ui.PreflightScreen
 import com.amaral.driverlab.app.ui.ResultScreen
 import com.amaral.driverlab.app.ui.RunningScreen
 import com.amaral.driverlab.app.ui.SetupScreen
+import com.amaral.driverlab.report.ReportFiles
 
 class MainActivity : ComponentActivity() {
 
@@ -27,15 +28,20 @@ class MainActivity : ComponentActivity() {
         setContent {
             AmaralTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AppRoot(onShare = ::share, onShareFile = ::shareFile)
+                    AppRoot(onShareFile = ::shareFile)
                 }
             }
         }
     }
 
     /**
-     * Shares a file the app produced. Used for the diagnostics zip, because the log directory
-     * under `Android/data` is not browsable on Android 11 and later.
+     * Shares a file the app produced, by content URI. Both the report and the diagnostics zip
+     * leave this way — the latter because the log directory under `Android/data` is not
+     * browsable on Android 11 and later.
+     *
+     * The contents never enter the Intent. An extra is a Binder transaction, bounded at about
+     * a megabyte for the whole process, and a real report is larger: the Export button used to
+     * hand 2.2 MB to startActivity and took the app down with it.
      */
     private fun shareFile(file: java.io.File) {
         val uri = androidx.core.content.FileProvider.getUriForFile(
@@ -43,27 +49,20 @@ class MainActivity : ComponentActivity() {
             "${BuildConfig.APPLICATION_ID}.fileprovider",
             file,
         )
+        val isArchive = file.extension.equals("zip", ignoreCase = true)
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/zip"
+            type = if (isArchive) "application/zip" else ReportFiles.MIME_TYPE
             putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_TITLE, file.name)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(intent, getString(R.string.result_share_logs)))
-    }
-
-    /** Export goes through the share sheet, so the user picks where it lands. */
-    private fun share(json: String) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/json"
-            putExtra(Intent.EXTRA_TEXT, json)
-            putExtra(Intent.EXTRA_TITLE, "amaral-driver-lab-result.json")
-        }
-        startActivity(Intent.createChooser(intent, getString(R.string.result_export)))
+        val title = getString(if (isArchive) R.string.result_share_logs else R.string.result_export)
+        startActivity(Intent.createChooser(intent, title))
     }
 }
 
 @Composable
-private fun AppRoot(onShare: (String) -> Unit, onShareFile: (java.io.File) -> Unit) {
+private fun AppRoot(onShareFile: (java.io.File) -> Unit) {
     val viewModel: BenchViewModel = viewModel()
     val state by viewModel.uiState.collectAsState()
 
@@ -104,8 +103,8 @@ private fun AppRoot(onShare: (String) -> Unit, onShareFile: (java.io.File) -> Un
 
         Step.Result -> ResultScreen(
             state = state,
-            onPublish = { viewModel.exportJson()?.let(onShare) },
-            onExport = { viewModel.exportJson()?.let(onShare) },
+            onPublish = { viewModel.exportReportFile()?.let(onShareFile) },
+            onExport = { viewModel.exportReportFile()?.let(onShareFile) },
             onShareLogs = shareLogs,
             onHome = { viewModel.goTo(Step.Home) },
         )

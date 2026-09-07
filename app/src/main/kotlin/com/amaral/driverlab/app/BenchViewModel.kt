@@ -13,6 +13,7 @@ import com.amaral.driverlab.driver.DriverImporter
 import com.amaral.driverlab.driver.DriverPackage
 import com.amaral.driverlab.driver.RequestedDriver
 import com.amaral.driverlab.report.BenchmarkReport
+import com.amaral.driverlab.report.ReportFiles
 import com.amaral.driverlab.report.ReportJson
 import com.amaral.driverlab.telemetry.DiagnosticBundle
 import com.amaral.driverlab.telemetry.DiagnosticLog
@@ -225,7 +226,21 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
         ReportJson.decode(java.io.File(path).readText())
     }.onFailure { DiagnosticLog.e(TAG, "could not read the report at $path", it) }.getOrNull()
 
-    fun exportJson(): String? = state.value.report?.let { ReportJson.encodePretty(it) }
+    /**
+     * Writes the report where the share sheet can read it from.
+     *
+     * Never returns the JSON itself: a real report is megabytes, and an Intent extra is a
+     * Binder transaction. Handing the string to startActivity crashed the app on both the
+     * Export and the Publish buttons.
+     */
+    fun exportReportFile(): java.io.File? = state.value.report?.let { report ->
+        runCatching {
+            ReportFiles.writeForSharing(
+                report,
+                java.io.File(getApplication<Application>().cacheDir, "share"),
+            )
+        }.onFailure { DiagnosticLog.e(TAG, "could not write the report for sharing", it) }.getOrNull()
+    }
 
     /**
      * Packs the log tree for sharing. Needed because since Android 11 most file managers cannot

@@ -52,6 +52,17 @@ carried forward; it remains in git history and on `main`.
 
 ### Fixed
 
+- **The same Binder mistake, left standing in the other half of the app.** The
+  completion message was fixed to carry a path instead of the report, but the
+  **Export** and **Publish** buttons still put the whole JSON into
+  `Intent.EXTRA_TEXT` — and an Intent extra is a Binder transaction too. With the
+  scaled workloads the report reached 2.2 MB and both buttons crashed the UI
+  process with `TransactionTooLargeException` on any real run, at the one moment
+  the user had a result worth keeping. Everything the app shares now leaves as a
+  content URI through the FileProvider: `ReportFiles.writeForSharing` puts the
+  report in the exported cache directory under a name carrying the session id, and
+  only that URI crosses the boundary.
+
 - **The standard profiles were far too small to compare drivers.** A Complete run on an
   Adreno 740 finished in 3.6 minutes against the 20 the spec asks for, and only 18% of
   that was measurement — 39 seconds of GPU work against 180 seconds of cooldown, about
