@@ -38,15 +38,36 @@ public data class WorkloadSpec(
         require(width > 0 && height > 0) { "the render target must have a positive size" }
     }
 
+    /** Total frames this spec will submit, warmup included. Used to estimate duration. */
+    public val totalFrames: Int get() = frameCount + warmupFrames
+
     public companion object {
-        /** Workload 1: sanity, and the cost of getting a frame into the queue at all. */
+        /**
+         * Below this much GPU time, an execution cannot separate two drivers and a tie from it
+         * means "we did not look long enough", not "they perform the same".
+         *
+         * The first version of the standard profiles produced about two seconds per execution
+         * on an Adreno 740 — the whole Complete profile ran in 3.6 minutes, of which 82% was
+         * cooldown. A comparison built on that is measuring fixed submit overhead, not the
+         * driver, and it reported a technical tie between Turnip and the Qualcomm blob.
+         */
+        public const val MINIMUM_USEFUL_GPU_NANOS: Long = 5_000_000_000L
+
+        /**
+         * Workload 1: sanity, and the cost of getting a frame into the queue at all.
+         *
+         * The counts are scaled from a measured Odin2 Portal run at roughly 3.9 ms per frame.
+         * They are a starting point, not a calibration: section 6 requires each workload to
+         * demonstrate it separates two known-different builds before it belongs in the default
+         * profile, and that has not been done yet.
+         */
         public fun baseline(): WorkloadSpec = WorkloadSpec(
             workloadId = WorkloadIds.BASELINE,
             width = 1280,
             height = 720,
-            frameCount = 600,
-            warmupFrames = 60,
-            drawsPerFrame = 64,
+            frameCount = 1800,
+            warmupFrames = 120,
+            drawsPerFrame = 192,
         )
 
         /** Workload 2: binning and GMEM decisions, the classic Turnip regression vector. */
@@ -54,10 +75,10 @@ public data class WorkloadSpec(
             workloadId = WorkloadIds.TILING_GMEM,
             width = 1920,
             height = 1080,
-            frameCount = 300,
-            warmupFrames = 30,
-            drawsPerFrame = 4,
-            trianglesPerDraw = 1024,
+            frameCount = 900,
+            warmupFrames = 60,
+            drawsPerFrame = 8,
+            trianglesPerDraw = 3072,
         )
     }
 }

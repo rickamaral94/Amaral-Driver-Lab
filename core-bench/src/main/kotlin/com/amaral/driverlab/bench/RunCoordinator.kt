@@ -190,6 +190,18 @@ public class RunCoordinator(
                                         "the workload completed but reported no frametimes",
                                     )
                                 } else {
+                                    val summary = FrametimeSummary.of(series)
+                                    DiagnosticLog.i(
+                                        TAG,
+                                        "${execution.workload.workloadId}: ${series.size} frames, " +
+                                            "${summary.totalDurationNs / 1_000_000} ms of GPU time, " +
+                                            "median ${"%.2f".format(summary.medianNs / 1_000_000)} ms" +
+                                            if (summary.totalDurationNs < WorkloadSpec.MINIMUM_USEFUL_GPU_NANOS) {
+                                                " — TOO BRIEF to separate drivers"
+                                            } else {
+                                                ""
+                                            },
+                                    )
                                     records += ExecutionRecord(
                                         slot = slot,
                                         label = accepted.label,
@@ -200,7 +212,7 @@ public class RunCoordinator(
                                         cpuFrametimesNs = result.run.cpuFrametimesNs,
                                         usedGpuTimestamps = result.run.timestampsUsable,
                                         imageSha256 = result.run.imageSha256,
-                                        summary = FrametimeSummary.of(series),
+                                        summary = summary,
                                         telemetryBefore = before,
                                         telemetryAfter = host.sampleTelemetry(),
                                     )

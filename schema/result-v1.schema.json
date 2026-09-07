@@ -905,7 +905,8 @@
               "PREFLIGHT_OVERRIDDEN",
               "DIFFERENT_WORKLOAD_SPEC",
               "DIFFERENT_DEVICE",
-              "NULL_TEST_NOT_PASSED"
+              "NULL_TEST_NOT_PASSED",
+              "WORKLOAD_TOO_BRIEF"
             ]
           }
         }

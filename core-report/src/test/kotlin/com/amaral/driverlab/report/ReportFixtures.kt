@@ -68,14 +68,24 @@ internal object ReportFixtures {
      * @param medianA per-frame median for arm A, in nanoseconds
      * @param medianB the same for arm B; make them differ to produce a winner
      */
+    /**
+     * @param briefFrames when true the frames are short enough that the whole execution falls
+     *   under [WorkloadSpec.MINIMUM_USEFUL_GPU_NANOS], reproducing a run too small to resolve
+     *   anything. Otherwise the frames are long enough for the execution to count.
+     */
     fun outcome(
         medianA: Long = 16_600_000,
         medianB: Long = 16_600_000,
         runsPerArm: Int = 5,
         frameCount: Int = 60,
+        briefFrames: Boolean = false,
         failures: List<ExecutionFailure> = emptyList(),
     ): BenchmarkOutcome {
-        val workload = WorkloadSpec(WorkloadIds.TILING_GMEM, frameCount = frameCount, warmupFrames = 10)
+        val workload = WorkloadSpec(
+            WorkloadIds.TILING_GMEM,
+            frameCount = if (briefFrames) frameCount else maxOf(frameCount, 400),
+            warmupFrames = 10,
+        )
         val plan = BenchmarkPlan(
             a = ArmDefinition(Arm.A, RequestedDriver.Package("a".repeat(64), "Turnip v3"), "Turnip v3"),
             b = ArmDefinition(Arm.B, RequestedDriver.Package("b".repeat(64), "Turnip v4"), "Turnip v4"),
@@ -83,11 +93,14 @@ internal object ReportFixtures {
             runsPerArm = runsPerArm,
         )
 
+        // Enough frames that the execution clears the useful-duration floor, unless the test
+        // asked for a deliberately brief one.
+        val frames = if (briefFrames) frameCount else maxOf(frameCount, 400)
         val records = plan.schedule.map { slot ->
             val base = if (slot.arm == Arm.A) medianA else medianB
             // A little per-run and per-frame spread, deterministic so tests are stable.
             val offset = (slot.runIndexWithinArm - runsPerArm / 2) * (base / 500)
-            val series = LongArray(frameCount) { frame ->
+            val series = LongArray(frames) { frame ->
                 base + offset + ((frame % 7) - 3) * (base / 800)
             }
             record(slot, if (slot.arm == Arm.A) "Turnip v3" else "Turnip v4", workload, series)

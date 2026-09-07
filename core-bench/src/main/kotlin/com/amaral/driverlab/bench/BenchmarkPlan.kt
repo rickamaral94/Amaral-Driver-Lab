@@ -88,8 +88,8 @@ public object BenchmarkProfiles {
 
     /** Roughly three minutes: enough to see a large regression, not enough to rank. */
     public fun quick(): List<WorkloadSpec> = listOf(
-        WorkloadSpec.baseline().copy(frameCount = 200, warmupFrames = 30),
-        WorkloadSpec.tilingGmem().copy(frameCount = 120, warmupFrames = 20),
+        WorkloadSpec.baseline().copy(frameCount = 400, warmupFrames = 60),
+        WorkloadSpec.tilingGmem().copy(frameCount = 200, warmupFrames = 40),
     )
 
     /** The full protocol. Roughly twenty minutes, and the only one that can rank. */

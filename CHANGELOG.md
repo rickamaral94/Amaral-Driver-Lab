@@ -52,6 +52,18 @@ carried forward; it remains in git history and on `main`.
 
 ### Fixed
 
+- **The standard profiles were far too small to compare drivers.** A Complete run on an
+  Adreno 740 finished in 3.6 minutes against the 20 the spec asks for, and only 18% of
+  that was measurement — 39 seconds of GPU work against 180 seconds of cooldown, about
+  two seconds per execution. At that size a comparison measures fixed submit overhead
+  rather than the driver, and it duly reported a technical tie between Turnip and the
+  Qualcomm blob. The counts are scaled from the measured figures, and an execution that
+  still falls under five seconds of GPU time now carries a `WORKLOAD_TOO_BRIEF` warning
+  and is described as "too short to tell them apart" instead of "the same speed" —
+  saying the drivers match when the app did not look long enough is the more misleading
+  of the two answers. The per-execution GPU time is written to the log, so the next run
+  reports the real figure rather than leaving it to be inferred from timestamps.
+
 - **Every `VkDriverId` from Intel onwards was wrong.** The table was written from memory:
   Qualcomm's blob was recorded as 9 (which is Arm) and Turnip as 15 (which is CoreAVI).
   On a real Odin2 Portal that displayed "System driver · Imagination proprietary" for an

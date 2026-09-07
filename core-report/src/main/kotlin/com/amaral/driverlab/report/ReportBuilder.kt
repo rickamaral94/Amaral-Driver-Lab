@@ -77,6 +77,12 @@ public class ReportBuilder(
             val b = outcome.runMediansFor(Arm.B, workloadId)
             if (a.isEmpty() || b.isEmpty()) return@mapNotNull null
 
+            // An execution that barely ran cannot tell two drivers apart, so a tie from it is
+            // a statement about the protocol rather than about the drivers.
+            val tooBrief = outcome.records
+                .filter { it.workload.workloadId == workloadId }
+                .any { it.summary.totalDurationNs < WorkloadSpec.MINIMUM_USEFUL_GPU_NANOS }
+
             val result = gate.stamp(
                 AbComparison.compare(
                     labelA = outcome.plan.a.label,
@@ -87,7 +93,11 @@ public class ReportBuilder(
                     config = comparisonConfig,
                 ),
             )
-            result.toEntry(workloadId, warnings + gateWarnings(gate))
+            result.toEntry(
+                workloadId,
+                warnings + gateWarnings(gate) +
+                    if (tooBrief) listOf(ComparabilityWarning.WORKLOAD_TOO_BRIEF) else emptyList(),
+            )
         }
 
         return BenchmarkReport(
@@ -227,8 +237,19 @@ public object PlainVerdict {
             Verdict.B_FASTER -> "${headline.labelB} is ${"%.1f".format(abs(headline.percentDifference))}% " +
                 "faster than ${headline.labelA} on this device, and the difference is real. $compatibility"
 
-            Verdict.TECHNICAL_TIE -> "${headline.labelA} and ${headline.labelB} are the same speed on " +
-                "this device, within the $floor% this device can resolve. $compatibility"
+            Verdict.TECHNICAL_TIE ->
+                if (headline.warnings.contains(ComparabilityWarning.WORKLOAD_TOO_BRIEF)) {
+                    // Saying "the same speed" here would be the most misleading thing the app
+                    // could do: it did not look long enough to know.
+                    "This run was too short to tell ${headline.labelA} and ${headline.labelB} " +
+                        "apart. Each workload needs at least " +
+                        "${WorkloadSpec.MINIMUM_USEFUL_GPU_NANOS / 1_000_000_000} seconds of GPU " +
+                        "time to separate two drivers, and this one had less. Run the Complete " +
+                        "profile. $compatibility"
+                } else {
+                    "${headline.labelA} and ${headline.labelB} are the same speed on this device, " +
+                        "within the $floor% this device can resolve. $compatibility"
+                }
 
             Verdict.INCONCLUSIVE -> "This run cannot tell ${headline.labelA} and ${headline.labelB} " +
                 "apart — the measurements were too noisy to conclude anything. Let the device cool " +

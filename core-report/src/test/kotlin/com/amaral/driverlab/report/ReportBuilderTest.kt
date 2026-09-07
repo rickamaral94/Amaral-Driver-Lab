@@ -29,8 +29,10 @@ class ReportBuilderTest {
     fun `the raw series survives into the report`() {
         val report = build()
         val execution = report.executions.first()
-        assertEquals(60, execution.frametimesNs.size)
-        assertEquals(60, execution.cpuFrametimesNs.size)
+        // Checked against what the workload declared rather than a fixed number: the point is
+        // that the whole series is published, not that it happens to be a particular length.
+        assertEquals(execution.workload.frameCount, execution.frametimesNs.size)
+        assertEquals(execution.workload.frameCount, execution.cpuFrametimesNs.size)
         assertEquals(
             "the summary must describe the series that is published, not a different one",
             execution.frametimesNs.size, execution.summary.frameCount,
@@ -140,5 +142,42 @@ class ReportBuilderTest {
     @Test
     fun `the schema version is stamped on every report`() {
         assertEquals(ReportSchema.VERSION, build().schemaVersion)
+    }
+
+    /**
+     * The finding that a real Odin2 run produced: Turnip and the Qualcomm blob called a
+     * technical tie by a workload that had only run for about two seconds. Saying "the same
+     * speed" there is the most misleading thing the app could do, because it did not look
+     * long enough to know.
+     */
+    @Test
+    fun `a tie from a workload that barely ran is not reported as a tie`() {
+        val brief = ReportFixtures.outcome(frameCount = 40, briefFrames = true)
+        val report = builder.build(
+            outcome = brief,
+            device = ReportFixtures.device,
+            preflight = ReportFixtures.cleanPreflight(),
+            session = ReportFixtures.session(),
+            nullTestResult = ReportFixtures.passingNullTest(),
+            config = config,
+        )
+        val comparison = report.comparisons.single()
+        assertEquals(Verdict.TECHNICAL_TIE.name, comparison.verdict)
+        assertTrue(
+            comparison.warnings.contains(com.amaral.driverlab.telemetry.ComparabilityWarning.WORKLOAD_TOO_BRIEF),
+        )
+        assertTrue(report.plainVerdict.contains("too short to tell"))
+        assertTrue("the user must not read this as a result", !report.plainVerdict.contains("same speed"))
+    }
+
+    @Test
+    fun `a tie from a workload that ran long enough is reported as a tie`() {
+        val report = build()
+        assertEquals(Verdict.TECHNICAL_TIE.name, report.comparisons.single().verdict)
+        assertTrue(report.plainVerdict.contains("same speed"))
+        assertTrue(
+            !report.comparisons.single().warnings
+                .contains(com.amaral.driverlab.telemetry.ComparabilityWarning.WORKLOAD_TOO_BRIEF),
+        )
     }
 }

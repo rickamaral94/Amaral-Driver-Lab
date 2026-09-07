@@ -41,6 +41,13 @@ public enum class ComparabilityWarning {
     DIFFERENT_WORKLOAD_SPEC,
     DIFFERENT_DEVICE,
     NULL_TEST_NOT_PASSED,
+
+    /**
+     * At least one execution ran for too little GPU time to separate two drivers. A tie from
+     * such a run says the app did not look long enough, not that the drivers perform the same,
+     * and presenting it as a finding would be the more misleading of the two.
+     */
+    WORKLOAD_TOO_BRIEF,
 }
 
 public object Comparability {
