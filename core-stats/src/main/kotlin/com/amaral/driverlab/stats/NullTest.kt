@@ -118,8 +118,28 @@ public object NullTest {
     /** Section 13, phase 1: ten consecutive A/A comparisons must all be technical ties. */
     public const val REQUIRED_CONSECUTIVE_PASSES: Int = 10
 
-    /** How many A/A comparisons are spent measuring the floor before the null test proper. */
-    public const val CALIBRATION_COMPARISONS: Int = 5
+    /**
+     * How many A/A comparisons are spent measuring the floor before the null test proper.
+     *
+     * Ten rather than five, because [CALIBRATION_QUANTILE] over five samples is simply the
+     * maximum. On a device whose run medians snap to discrete DVFS bins, that made the floor
+     * depend on whether any one of five comparisons happened to straddle two bins: one that
+     * did produced a 27.7% floor, and five that did not would have produced the 2% default.
+     * A number that swings that far on luck is not an estimate. Measured on an Odin2 —
+     * docs/STATISTICS.md, finding 5.
+     */
+    public const val CALIBRATION_COMPARISONS: Int = 10
+
+    /**
+     * A/A comparisons run and thrown away before calibration begins.
+     *
+     * The GPU spends the first minutes of a session in a different frequency step: on an
+     * Adreno 740, seven of the eight slowest runs in a 150-run session were in the first four
+     * minutes. Measuring that ramp-up and calling it the device's resolution is the same
+     * mistake as timing a workload's first frame, which is why every workload already has
+     * warmup frames. This is the same idea one level up.
+     */
+    public const val WARMUP_COMPARISONS: Int = 1
 
     /**
      * Margin over the calibrated dispersion. A device whose A/A comparisons landed within 3.5%
@@ -127,8 +147,14 @@ public object NullTest {
      */
     public const val CALIBRATION_SAFETY_FACTOR: Double = 1.5
 
-    /** Upper quantile of the calibration dispersion used as the base of the floor. */
-    private const val CALIBRATION_QUANTILE = 0.95
+    // The floor is the *largest* dispersion calibration actually saw, not a high quantile of
+    // it. A quantile is unstable in both directions here and the instability is not
+    // symmetric: over five comparisons the 0.95 quantile is simply the maximum, and over ten
+    // it interpolates a single bin-straddle away to nearly nothing — an Odin2 that invented
+    // an 11.8% difference out of nothing one time in ten came out claiming it resolved 9.7%,
+    // which is a claim its own calibration data contradicts. A difference the device was seen
+    // to manufacture is a difference it can manufacture; averaging that observation down is
+    // how a harness ends up ranking its own noise. See docs/STATISTICS.md, finding 5.
 
     /**
      * Past this, the calibrated floor is too coarse to compare drivers with and the null test
@@ -160,8 +186,7 @@ public object NullTest {
                 config = config,
             )
         }
-        val distances = comparisons.map { it.intervalDistanceFromParity }.toDoubleArray()
-        val measured = Quantiles.of(distances, CALIBRATION_QUANTILE) * safetyFactor
+        val measured = comparisons.maxOf { it.intervalDistanceFromParity } * safetyFactor
         return NoiseFloorCalibration(
             comparisons = comparisons,
             floor = maxOf(config.minimumPracticalDifference, measured),

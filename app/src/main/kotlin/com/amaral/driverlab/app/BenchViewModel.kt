@@ -240,6 +240,7 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
             workloads = workloads.map(WorkloadRef::of),
             runsPerArm = BenchmarkPlan.DEFAULT_RUNS_PER_ARM,
             nullTest = NullTestSpec(
+                warmupComparisons = com.amaral.driverlab.stats.NullTest.WARMUP_COMPARISONS,
                 calibrationComparisons = com.amaral.driverlab.stats.NullTest.CALIBRATION_COMPARISONS,
                 testComparisons = com.amaral.driverlab.stats.NullTest.REQUIRED_CONSECUTIVE_PASSES,
             ),

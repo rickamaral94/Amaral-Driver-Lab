@@ -38,8 +38,13 @@ data class BenchRequest(
 data class NullTestSpec(
     val calibrationComparisons: Int,
     val testComparisons: Int,
+    /**
+     * Comparisons run and discarded before calibration starts, so the GPU's cold ramp-up
+     * does not get measured as the device's resolution.
+     */
+    val warmupComparisons: Int = 0,
 ) {
-    val totalComparisons: Int get() = calibrationComparisons + testComparisons
+    val totalComparisons: Int get() = warmupComparisons + calibrationComparisons + testComparisons
 }
 
 @Serializable

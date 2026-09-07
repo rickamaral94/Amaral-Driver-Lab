@@ -241,7 +241,11 @@ class BenchmarkService : Service() {
                 val totalExecutions = perPlanExecutions * spec.totalComparisons
 
                 for (comparison in 0 until spec.totalComparisons) {
-                    val phase = if (comparison < spec.calibrationComparisons) "calibration" else "A/A"
+                    val phase = when {
+                        comparison < spec.warmupComparisons -> "warm-up"
+                        comparison < spec.warmupComparisons + spec.calibrationComparisons -> "calibration"
+                        else -> "A/A"
+                    }
                     val plan = BenchmarkPlan.nullTest(
                         driver = driver,
                         label = request.armA.label,
@@ -287,7 +291,12 @@ class BenchmarkService : Service() {
                     // A comparison that did not complete is dropped rather than padded. The
                     // null test then reports itself incomplete, which is the truth: fewer
                     // than ten consecutive ties is not a pass.
-                    if (outcome.completed) {
+                    if (comparison < spec.warmupComparisons) {
+                        // Run in full and thrown away. The GPU spends the first minutes of a
+                        // session in a different frequency step, and calling that the device's
+                        // resolution is the same mistake as timing a workload's first frame.
+                        DiagnosticLog.i(TAG, "warm-up comparison ${comparison + 1} discarded")
+                    } else if (outcome.completed) {
                         perComparison += outcome
                     } else {
                         DiagnosticLog.e(

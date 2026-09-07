@@ -109,6 +109,47 @@ Qualcomm driver's stable 7.57 by 15.6%, and its fast bin by 23.6% — comfortabl
 10.6% the device manufactures on its own. A difference smaller than that is not measurable here,
 which is exactly what the calibrated floor is for.
 
+## Finding 5: five calibration comparisons cannot measure a bin-hopping device
+
+The first null test run on real hardware — 150 A/A runs of the system driver against itself
+on the Odin2, 70 minutes — failed, and the way it failed is more interesting than the failure.
+
+The run medians landed on **four** discrete values, not the two finding 4 saw:
+
+```
+6.12 (×3)   6.77 (×32)   7.57 (×107)   8.76 (×8)        extremes 43% apart
+```
+
+Seven of the eight `8.76` runs are in the first four minutes: that bin is the GPU's cold
+ramp-up, not thermal throttling, and it is an artifact of starting to measure immediately.
+
+Of the five calibration comparisons, four came back at *exactly* 1.0000 — both arms in the
+`7.57` bin — and one straddled, arm A at `6.77` against arm B at `7.57`, for a ratio of
+1.118 and a bootstrap interval reaching 0.185 from parity. With `CALIBRATION_QUANTILE` at
+0.95 over five samples, that one comparison **is** the quantile, and the 1.5 safety factor
+turned it into a 27.7% floor. Every one of the ten test comparisons then tied inside it, and
+`MAXIMUM_USABLE_NOISE_FLOOR` failed the device for exactly the reason finding 2 predicted in
+simulation: it tied because the harness had gone blind, not because the device was steady.
+
+Two things follow.
+
+**The device fails robustly, under every variant of the arithmetic.** The worst calibration
+comparison's point estimate alone is 11.8%, past the 10% limit before any margin is applied.
+And two of the ten *test* comparisons came back at 0.894 — the same ~11% manufactured out of
+nothing — so a device that had calibrated a narrow floor would have failed the other way, on
+the harness separating a driver from itself. There is no floor this device passes with.
+
+**The calibration is under-powered, which is a defect of ours.** A 0.95 quantile over five
+samples is the maximum, so on a bin-hopping device the floor is decided by whether any one
+of five comparisons happened to straddle. Had none straddled, the floor would have been the
+2% default and the test would have failed on the test comparisons instead — the same verdict
+reached by luck rather than by measurement. A number that swings between 2% and 27.7% on the
+toss of a coin is not an estimate.
+
+So calibration now spends ten comparisons rather than five, and the run begins with a warm-up
+comparison whose results are discarded, because measuring the GPU's ramp-up and calling it
+the device's resolution is the same mistake as timing a workload's first frame.
+
 ## What passing the null test means
 
 `NullTestResult.passed` requires all four of:

@@ -126,7 +126,14 @@ class NullTestTest {
         )
         assertFalse(alternating.result.passed)
         assertTrue(alternating.result.hasOrderingBias)
-        assertEquals(10, alternating.result.firstArmWins)
+        // Overwhelmingly one-sided rather than exactly unanimous. Which comparisons the test
+        // half lands on shifts when the calibration budget changes, and pinning the count to
+        // the last digit made this test fail on a change that did not touch what it checks:
+        // the sign test's job is to catch a lopsided split, not a specific one.
+        assertTrue(
+            "first arm won ${alternating.result.firstArmWins} of ${alternating.result.directedComparisons}",
+            alternating.result.firstArmWins >= alternating.result.directedComparisons - 1,
+        )
     }
 
     /** Counterbalancing the pairs AB, BA, AB, BA is what makes the same drifting device pass. */

@@ -20,6 +20,19 @@ carried forward; it remains in git history and on `main`.
 - Published as [`schema/result-v1.schema.json`](schema/result-v1.schema.json), and
   validated in CI against payloads the app's own serializer produced.
 
+### Changed
+
+- **The noise floor is the worst A/A dispersion calibration saw, not a high quantile of it.**
+  A quantile is unstable here and not symmetrically so: over five comparisons the 0.95
+  quantile *is* the maximum, and raising the budget to ten made it interpolate a single
+  bin-straddle away to almost nothing — an Odin2 that manufactured an 11.8% difference out of
+  nothing one time in ten came out claiming it resolved 9.7%, a claim its own calibration
+  data contradicts. A difference the device was seen to invent is one it can invent.
+- **Calibration spends ten comparisons instead of five**, and the run opens with a warm-up
+  comparison that is discarded. Seven of the eight slowest runs in a 150-run session were in
+  its first four minutes: that is the GPU's cold ramp-up, and measuring it as the device's
+  resolution is the same mistake as timing a workload's first frame.
+
 ### Added
 
 - **Anchor-normalised scores**, replacing the absolute-score model as the basis for ranking.
