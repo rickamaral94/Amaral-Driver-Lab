@@ -22,6 +22,13 @@ carried forward; it remains in git history and on `main`.
 
 ### Fixed
 
+- **The message that abandons a null test now names the comparison that decided it**, with
+  both arm medians. It gave a floor and nothing else, so understanding why a fifty-minute run
+  stopped meant rebuilding the counterbalanced schedule by hand against the log to work out
+  which executions had been which arm. That answer mattered: on the Odin2 the deciding
+  comparison had one arm at 8.76 ms and the other at 7.57 ms because the device was heating
+  through a frequency step while it ran.
+
 - **The per-execution log line now carries the temperature.** The app had the number and was
   already showing it on the progress screen, and it stopped there — so working out why a
   device's medians moved meant inferring thermal state from which frequency step they snapped

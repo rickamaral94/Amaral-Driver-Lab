@@ -267,6 +267,43 @@ frames, GPU time and the median but not the temperature — a number the app had
 was already showing on the progress screen. It is on the log line now. An hour of reading a
 file backwards is what a missing field costs.
 
+## Finding 9: the warm-up hands the first comparison the steepest part of the ramp
+
+A cross-validated run on the same Odin2, abandoned after 2 of 11 comparisons in nine and a half
+minutes. The floor it stopped on was **45.2%**, the widest yet, and the log says why once the
+schedule is reconstructed against it:
+
+```
+warm-up      (1-10) : 6.12 6.77 7.57 8.76 8.76 8.76 7.57 8.76 8.76 8.76
+comparison 1 (11-20): 6.12 7.57 8.76 8.76 8.76 8.76 8.76 7.57 7.57 7.57
+                      arm 1 median 8.76 ms · arm 2 median 7.57 ms · ratio 0.864
+```
+
+GPU time per execution climbs from 6426 ms to 8803 ms across the run, +37%. The warm-up walks
+the device from the fastest frequency step it has to the slowest, and comparison 1 then runs
+across the boundary with one arm mostly in each. That 45.2% is not this device's measurement
+noise; it is the thermal ramp, sampled by a comparison that happened to sit on it.
+
+Two things I built interact badly here. The warm-up puts the device mid-ramp, and early exit
+makes the comparison right after it decisive. Neither is wrong on its own — the floor really
+is monotonic, so a run whose first comparison reads 45.2% really cannot pass — but together
+they mean **a fifty-minute test is settled by the single comparison most likely to be
+contaminated**.
+
+What this does *not* license is ripping the warm-up out. It has now produced first-comparison
+floors of 45.2% and 17.7%, against 23.6% for a run that had no warm-up at all: three points,
+no signal. Its stated justification was wrong (finding 8) and the mechanism by which it could
+hurt is now visible, and that is still not evidence that removing it helps. The question is
+open and marked open.
+
+The Odin2's verdict is unaffected either way. It has now failed four times, on floors from
+17.7% to 45.2%, and every one of those is past the limit by a wide margin.
+
+There is a smaller lesson, and it is the second time the same one: the line that abandoned the
+run named a floor but not the comparison behind it, so understanding the decision meant
+rebuilding the counterbalanced schedule by hand to work out which executions had been which
+arm. The settle message now spells out the deciding comparison's arm medians.
+
 ## What passing the null test means
 
 `NullTestResult.passed` requires all four of:
