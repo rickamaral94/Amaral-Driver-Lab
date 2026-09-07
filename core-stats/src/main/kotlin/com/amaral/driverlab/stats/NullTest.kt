@@ -156,7 +156,15 @@ public object NullTest {
     public const val CALIBRATION_SAFETY_FACTOR: Double = 1.5
 
     // The floor is the *largest* dispersion calibration actually saw, not a high quantile of
-    // it. A quantile is unstable in both directions here and the instability is not
+    // it. Two properties matter, and only the second turned out to be the real reason.
+    //
+    // MONOTONIC. A maximum never falls as comparisons are added, so a partial calibration
+    // whose floor already exceeds MAXIMUM_USABLE_NOISE_FLOOR can never come back under it.
+    // That is what lets a run abandon itself mid-calibration instead of after the full
+    // budget — on an Odin2 the first comparison already settled a seventy-minute test. A
+    // quantile can fall as evidence accumulates, so swapping one in here would silently make
+    // early exit able to abandon a run over a threshold its final answer never crossed.
+    // `NullTestTest` pins this. A quantile is unstable in both directions here and the instability is not
     // symmetric: over five comparisons the 0.95 quantile is simply the maximum, and over ten
     // it interpolates a single bin-straddle away to nearly nothing — an Odin2 that invented
     // an 11.8% difference out of nothing one time in ten came out claiming it resolved 9.7%,

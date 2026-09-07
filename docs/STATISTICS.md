@@ -146,9 +146,51 @@ of five comparisons happened to straddle. Had none straddled, the floor would ha
 reached by luck rather than by measurement. A number that swings between 2% and 27.7% on the
 toss of a coin is not an estimate.
 
+> The switch from a quantile to the maximum was argued from a *synthetic* case: nine
+> comparisons tying exactly and one straddling. Finding 6 replayed the real 150 runs and
+> found that case does not occur here — straddling is the norm on this device, eleven of
+> fifteen comparisons, so `max`, `q0.95` and `q0.90` all land on the same 0.287. The rule is
+> still the right one, for a reason that only became visible later: it is the monotonicity
+> `max` provides, not the stability, that earns its place.
+
 So calibration now spends ten comparisons rather than five, and the run begins with a warm-up
 comparison whose results are discarded, because measuring the GPU's ramp-up and calling it
 the device's resolution is the same mistake as timing a workload's first frame.
+
+## Finding 6: the expensive part cannot be resampled away, but it can be abandoned early
+
+Seventy minutes of device time is a lot to ask before a benchmark can rank anything, so the
+150 A/A runs from finding 5 were replayed offline to see whether a cheaper estimator gets the
+same answer. The data and the harness are in `tools/analysis/`, so every claim below can be
+re-run: `python3 tools/analysis/calibration_cost.py`.
+
+**The obvious saving does not work.** Forming overlapping windows over a shorter prefix of the
+run sequence gives many more pseudo-comparisons for the same device time, and the floor they
+produce is wrong. Windows taken at stride 1 pair runs the counterbalanced protocol would never
+have paired, and inflate the floor from 0.287 to 0.441 — a 54% over-estimate, manufactured
+purely by scrambling the phase of the interleave. Stride 2 keeps each window in phase and is
+much better behaved, but still reads 0.315 at twenty runs and only converges on 0.287 at
+sixty. Against a hundred runs of real calibration that is a 40% saving on one phase, bought at
+the cost of an estimator whose bias depends on how much of it you can afford. Not worth it.
+
+The reason is worth stating, because it is the same reason a plain bootstrap would fail here:
+the dispersion this test measures *is* the temporal structure. Drift and bin-hopping over the
+session are the signal, not noise around it, so any resampling that treats the runs as
+exchangeable measures something else.
+
+**The saving that does work costs nothing.** The floor is the maximum dispersion seen, and a
+maximum only ever grows as comparisons are added. So a partial calibration whose floor already
+exceeds `MAXIMUM_USABLE_NOISE_FLOOR` can never come back under it, and the run can stop the
+moment that happens rather than after the full budget. On this device the very first
+calibration comparison reads 0.157, which is 0.236 with the safety factor and already past the
+limit: the seventy-minute run had its answer after about ten.
+
+That coupling is load-bearing and easy to break by accident. **Early exit during calibration is
+sound only because the floor rule is monotonic in the comparisons it has seen.** Swapping the
+maximum for a quantile — which finding 5's synthetic reasoning nearly did — would make a
+partial floor able to fall as evidence accumulates, and a run could then abandon itself over a
+threshold its final answer would not have crossed. There is a test pinning the monotonicity for
+exactly this reason.
 
 ## What passing the null test means
 

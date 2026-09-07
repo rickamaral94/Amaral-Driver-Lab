@@ -20,6 +20,12 @@ carried forward; it remains in git history and on `main`.
 - Published as [`schema/result-v1.schema.json`](schema/result-v1.schema.json), and
   validated in CI against payloads the app's own serializer produced.
 
+### Added
+
+- `tools/analysis/` — the 150 A/A run medians the Odin2 produced, and the harness that
+  replays them. Seventy minutes of device time is expensive enough that the data is kept and
+  every claim about cheaper calibration is checked against it rather than argued.
+
 ### Changed
 
 - **The null test stops as soon as its outcome is fixed.** The Odin2's first run spent fifty

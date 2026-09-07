@@ -274,4 +274,31 @@ class NullTestTest {
             Verdict.TECHNICAL_TIE, result.verdict,
         )
     }
+    /**
+     * The property early exit rests on.
+     *
+     * A run is allowed to stop mid-calibration once its floor passes the usable limit, which
+     * is only sound if the floor cannot later fall back under it. That holds for a maximum
+     * and not for a quantile, so this is pinned rather than left to the comment that says so.
+     */
+    @Test
+    fun `the calibrated floor never falls as comparisons are added`() {
+        // One wide comparison early, then a run of tight ones. Under a quantile the wide one
+        // gets averaged away as the sample grows; under a maximum it cannot.
+        val wide = DoubleArray(5) { 6_770_000.0 } to DoubleArray(5) { 7_570_000.0 }
+        val tight = DoubleArray(5) { 7_570_000.0 } to DoubleArray(5) { 7_570_000.0 }
+        val config = AbConfig(bootstrapIterations = 800)
+
+        var previous = 0.0
+        for (count in 1..12) {
+            val arms = listOf(wide) + List(count - 1) { tight }
+            val floor = NullTest.calibrate(arms, config).floor
+            assertTrue(
+                "floor fell from $previous to $floor at $count comparison(s)",
+                floor >= previous - 1e-12,
+            )
+            previous = floor
+        }
+    }
+
 }
