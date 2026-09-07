@@ -84,25 +84,22 @@ public data class NullTestResult(
     public val observedNoiseFloor: Double =
         comparisons.maxOfOrNull { it.intervalDistanceFromParity } ?: 0.0
 
+    /**
+     * Why the test came out the way it did.
+     *
+     * The two decisive failures are checked before incompleteness, because a run that stopped
+     * as soon as its outcome was fixed is *short on purpose*. Reporting it as "incomplete"
+     * would name the symptom instead of the reason and invite the user to run it again to
+     * find out something already known.
+     */
     public fun explain(): String = when {
-        comparisons.size < requiredConsecutivePasses ->
-            "Null test incomplete: ${comparisons.size} of $requiredConsecutivePasses A/A comparisons done."
         floorTooCoarse ->
             "Null test failed: this device only resolves differences of about " +
                 "${"%.1f".format(calibration.floor * 100)}%, past the " +
                 "${"%.0f".format(NullTest.MAXIMUM_USABLE_NOISE_FLOOR * 100)}% limit. Every A/A comparison " +
                 "tied because the harness cannot see anything, not because the device is steady. " +
                 "Cool the device down, close other apps, or raise the number of runs per arm."
-        hasOrderingBias ->
-            "Null test failed: the first arm won $firstArmWins of $directedComparisons comparisons " +
-                "(sign test p=${"%.4f".format(orderingBiasP)}). A driver compared with itself should " +
-                "split evenly, so the protocol has an ordering effect — usually drift between arms " +
-                "that interleaving has not cancelled."
-        failedIndices.isEmpty() ->
-            "Null test passed: $requiredConsecutivePasses consecutive A/A comparisons all returned a " +
-                "technical tie against a ${"%.1f".format(appliedNoiseFloor * 100)}% noise floor. " +
-                "Widest self-difference seen: ${"%.1f".format(observedNoiseFloor * 100)}%."
-        else -> {
+        failedIndices.isNotEmpty() -> {
             val worst = failedIndices.joinToString(", ") { index ->
                 val c = comparisons[index]
                 "#${index + 1} ${c.verdict} (${c.reason})"
@@ -110,6 +107,17 @@ public data class NullTestResult(
             "Null test failed on: $worst. The harness is separating a driver from itself, " +
                 "so no ranking is trustworthy."
         }
+        comparisons.size < requiredConsecutivePasses ->
+            "Null test incomplete: ${comparisons.size} of $requiredConsecutivePasses A/A comparisons done."
+        hasOrderingBias ->
+            "Null test failed: the first arm won $firstArmWins of $directedComparisons comparisons " +
+                "(sign test p=${"%.4f".format(orderingBiasP)}). A driver compared with itself should " +
+                "split evenly, so the protocol has an ordering effect — usually drift between arms " +
+                "that interleaving has not cancelled."
+        else ->
+            "Null test passed: $requiredConsecutivePasses consecutive A/A comparisons all returned a " +
+                "technical tie against a ${"%.1f".format(appliedNoiseFloor * 100)}% noise floor. " +
+                "Widest self-difference seen: ${"%.1f".format(observedNoiseFloor * 100)}%."
     }
 }
 

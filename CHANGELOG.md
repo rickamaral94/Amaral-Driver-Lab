@@ -22,6 +22,19 @@ carried forward; it remains in git history and on `main`.
 
 ### Changed
 
+- **The null test stops as soon as its outcome is fixed.** The Odin2's first run spent fifty
+  of its seventy minutes confirming a verdict already decided: calibration had measured a
+  27.7% floor, past the limit, and no sequence of further comparisons could rescue that. Two
+  conditions settle a run — a calibrated floor past `MAXIMUM_USABLE_NOISE_FLOOR`, and any
+  single test comparison that is not a technical tie — and both are deterministic rather
+  than statistical, so neither peeks at a trend. **Only failure ever settles**: a test
+  allowed to end early on favourable evidence passes far more often than its stated
+  criterion, which is how a stopping rule manufactures results. On a device that fails this
+  roughly halves the run; on one that passes it changes nothing.
+- `NullTestResult.explain()` reports the decisive failures before incompleteness. A run that
+  stopped as soon as its answer was fixed is short on purpose, and calling it "incomplete"
+  would name the symptom instead of the reason and invite a pointless re-run.
+
 - **The noise floor is the worst A/A dispersion calibration saw, not a high quantile of it.**
   A quantile is unstable here and not symmetrically so: over five comparisons the 0.95
   quantile *is* the maximum, and raising the budget to ten made it interpolate a single

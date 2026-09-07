@@ -18,6 +18,7 @@ import com.amaral.driverlab.bench.ArmDefinition
 import com.amaral.driverlab.bench.BenchmarkPlan
 import com.amaral.driverlab.bench.BenchmarkOutcome
 import com.amaral.driverlab.report.ArmPair
+import com.amaral.driverlab.report.NullTestDecision
 import com.amaral.driverlab.report.NullTestRecord
 import com.amaral.driverlab.report.NullTestStore
 import com.amaral.driverlab.report.ReportBuilder
@@ -232,6 +233,21 @@ class BenchmarkService : Service() {
             val telemetry = TelemetryCollector(applicationContext)
             val completion = runCatching {
                 val perComparison = mutableListOf<BenchmarkOutcome>()
+                // Shared by the early-exit check and the stored record, so what the run
+                // stopped on and what it saved can never describe different measurements.
+                fun armsSoFar(): List<WorkloadArms> = workloads.map { workload ->
+                    val arms = perComparison.map { outcome ->
+                        ArmPair(
+                            first = outcome.runMediansFor(Arm.A, workload.workloadId).toList(),
+                            second = outcome.runMediansFor(Arm.B, workload.workloadId).toList(),
+                        )
+                    }
+                    WorkloadArms(
+                        workloadId = workload.workloadId,
+                        calibration = arms.take(spec.calibrationComparisons),
+                        test = arms.drop(spec.calibrationComparisons),
+                    )
+                }
                 val perPlanExecutions = BenchmarkPlan.nullTest(
                     driver = driver,
                     label = request.armA.label,
@@ -304,6 +320,18 @@ class BenchmarkService : Service() {
                             "null test comparison ${comparison + 1} ended in ${outcome.finalState}, dropped",
                         )
                     }
+
+                    // Only ever stops on a failure that is already fixed. Ending early on a
+                    // good-looking run would pass devices the stated criterion would not.
+                    val settled = NullTestDecision.settledFailure(armsSoFar())
+                    if (settled != null) {
+                        DiagnosticLog.i(
+                            TAG,
+                            "null test settled after ${comparison + 1} of " +
+                                "${spec.totalComparisons} comparisons: $settled",
+                        )
+                        break
+                    }
                 }
 
                 val snapshot = withContext(Dispatchers.IO) { telemetry.snapshot() }
@@ -314,19 +342,7 @@ class BenchmarkService : Service() {
                     appVersion = versionName(),
                     completedAtEpochMs = System.currentTimeMillis(),
                     runsPerArm = request.runsPerArm,
-                    perWorkload = workloads.map { workload ->
-                        val arms = perComparison.map { outcome ->
-                            ArmPair(
-                                first = outcome.runMediansFor(Arm.A, workload.workloadId).toList(),
-                                second = outcome.runMediansFor(Arm.B, workload.workloadId).toList(),
-                            )
-                        }
-                        WorkloadArms(
-                            workloadId = workload.workloadId,
-                            calibration = arms.take(spec.calibrationComparisons),
-                            test = arms.drop(spec.calibrationComparisons),
-                        )
-                    },
+                    perWorkload = armsSoFar(),
                 )
                 NullTestStore(File(filesDir, STATE_DIRECTORY)).write(record)
                 DiagnosticLog.i(
