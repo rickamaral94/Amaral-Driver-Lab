@@ -146,8 +146,6 @@ internal object ReportFixtures {
             val b = DoubleArray(5) { 16_600_000.0 + ((it + comparison + 1) % 3 - 1) * 4_000.0 }
             a to b
         }
-        val config = AbConfig(bootstrapIterations = 800)
-        val calibration = NullTest.calibrate(arms, config)
-        return NullTest.evaluate("a".repeat(64), arms, calibration, config = config)
+        return NullTest.crossValidated("a".repeat(64), arms, config = AbConfig(bootstrapIterations = 800))
     }
 }

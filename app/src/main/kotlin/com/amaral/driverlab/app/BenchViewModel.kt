@@ -230,7 +230,12 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
      * honest: ten consecutive ties is the claim, so ten is what has to be measured, on the
      * same workloads the comparisons will use or the floor it measures does not apply to them.
      */
-    fun startNullTest(driver: RequestedDriver) {
+    /**
+     * @param cooldownExperimentMs when set, runs the cooldown experiment instead of a
+     *   calibration: it varies the protocol mid-run on purpose, so it writes its findings
+     *   beside the logs and never touches the null test record.
+     */
+    fun startNullTest(driver: RequestedDriver, cooldownExperimentMs: Long? = null) {
         val current = state.value
         val workloads = if (current.quickProfile) BenchmarkProfiles.quick() else BenchmarkProfiles.complete()
         val ref = refFor(driver, current)
@@ -241,12 +246,15 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
             runsPerArm = BenchmarkPlan.DEFAULT_RUNS_PER_ARM,
             nullTest = NullTestSpec(
                 warmupComparisons = com.amaral.driverlab.stats.NullTest.WARMUP_COMPARISONS,
-                calibrationComparisons = com.amaral.driverlab.stats.NullTest.CALIBRATION_COMPARISONS,
-                testComparisons = com.amaral.driverlab.stats.NullTest.REQUIRED_CONSECUTIVE_PASSES,
+                comparisons = com.amaral.driverlab.stats.NullTest.REQUIRED_CONSECUTIVE_PASSES,
+                cooldownExperimentMs = cooldownExperimentMs,
             ),
         )
 
-        DiagnosticLog.i(TAG, "starting null test on ${ref.label}")
+        DiagnosticLog.i(
+            TAG,
+            "starting ${if (cooldownExperimentMs != null) "cooldown experiment" else "null test"} on ${ref.label}",
+        )
         state.update {
             it.copy(step = Step.Running, progress = null, busy = true, runError = null)
         }

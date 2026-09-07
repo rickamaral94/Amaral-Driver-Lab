@@ -73,4 +73,8 @@
     <string name="null_test_failed">Calibration failed</string>
     <string name="null_test_floor">This device resolves differences of about %1$s or larger on %2$s.</string>
     <string name="back">Back</string>
+    <string name="running_execution_at_most">Execution %1$d of at most %2$d</string>
+    <string name="running_may_stop_early">This stops as soon as the result is decided, which is usually long before the last execution.</string>
+    <string name="null_test_cooldown_experiment">Run the cooldown experiment instead</string>
+    <string name="null_test_cooldown_experiment_note">Measures whether the 20 s wait between arms — about 70% of this run\u2019s wall time — is doing anything. It halves that wait on half the comparisons and compares the results. It produces no calibration: share the diagnostics afterwards.</string>
 </resources>

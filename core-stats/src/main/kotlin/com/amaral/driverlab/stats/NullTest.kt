@@ -56,7 +56,16 @@ public data class NullTestResult(
 
     public val directedComparisons: Int = comparisons.count { it.speedupOfA != 1.0 }
 
-    public val orderingBiasP: Double = SignTest.twoSidedP(firstArmWins, directedComparisons)
+    /**
+     * How surprising the lean is, by Wilcoxon signed-rank on the log ratios.
+     *
+     * Signed-rank rather than a sign test on the same comparisons: the cross-validated pool
+     * is half the length of the old split, and a sign test on ten values reads only direction
+     * and misses most of a real ordering effect. [SignedRankTest] carries the measured
+     * difference in power.
+     */
+    public val orderingBiasP: Double =
+        SignedRankTest.twoSidedP(comparisons.map { kotlin.math.ln(it.speedupOfA) })
 
     public val hasOrderingBias: Boolean =
         completedPasses >= requiredConsecutivePasses && orderingBiasP < NullTest.ORDERING_BIAS_ALPHA
@@ -110,10 +119,11 @@ public data class NullTestResult(
         comparisons.size < requiredConsecutivePasses ->
             "Null test incomplete: ${comparisons.size} of $requiredConsecutivePasses A/A comparisons done."
         hasOrderingBias ->
-            "Null test failed: the first arm won $firstArmWins of $directedComparisons comparisons " +
-                "(sign test p=${"%.4f".format(orderingBiasP)}). A driver compared with itself should " +
-                "split evenly, so the protocol has an ordering effect — usually drift between arms " +
-                "that interleaving has not cancelled."
+            "Null test failed: the first arm came out ahead in $firstArmWins of " +
+                "$directedComparisons comparisons, by enough that the lean is unlikely to be chance " +
+                "(signed-rank p=${"%.4f".format(orderingBiasP)}). A driver compared with itself " +
+                "should not favour a side, so the protocol has an ordering effect — usually drift " +
+                "between arms that interleaving has not cancelled."
         else ->
             "Null test passed: $requiredConsecutivePasses consecutive A/A comparisons all returned a " +
                 "technical tie against a ${"%.1f".format(appliedNoiseFloor * 100)}% noise floor. " +
@@ -126,17 +136,6 @@ public object NullTest {
     /** Section 13, phase 1: ten consecutive A/A comparisons must all be technical ties. */
     public const val REQUIRED_CONSECUTIVE_PASSES: Int = 10
 
-    /**
-     * How many A/A comparisons are spent measuring the floor before the null test proper.
-     *
-     * Ten rather than five, because [CALIBRATION_QUANTILE] over five samples is simply the
-     * maximum. On a device whose run medians snap to discrete DVFS bins, that made the floor
-     * depend on whether any one of five comparisons happened to straddle two bins: one that
-     * did produced a 27.7% floor, and five that did not would have produced the 2% default.
-     * A number that swings that far on luck is not an estimate. Measured on an Odin2 —
-     * docs/STATISTICS.md, finding 5.
-     */
-    public const val CALIBRATION_COMPARISONS: Int = 10
 
     /**
      * A/A comparisons run and thrown away before calibration begins.
@@ -211,6 +210,80 @@ public object NullTest {
     }
 
     /**
+     * The null test over a single pool of A/A comparisons, each judged against a floor
+     * calibrated on the *others*.
+     *
+     * Measuring the floor and judging against it on the same runs would make the test pass by
+     * construction — findings 1 and 2 — but that does not require two separate pools. Holding
+     * one comparison out at a time is enough for none to judge itself, and it halves what the
+     * device has to run: ten comparisons instead of ten to calibrate plus ten to test.
+     *
+     * It is also stricter than two pools, which is the part worth noticing. Under a split, the
+     * widest calibration comparison inflates the floor that every test comparison is then
+     * judged against, so it shelters them. Leaving each comparison out of its own floor means
+     * the widest one is judged against a limit that excludes its own contribution: it cannot
+     * hide behind itself.
+     *
+     * @param arms the whole pool, in the order it was acquired — the sign test reads direction
+     *   from that order, so it must not be shuffled.
+     */
+    public fun crossValidated(
+        driverSha256: String,
+        arms: List<Pair<DoubleArray, DoubleArray>>,
+        required: Int = REQUIRED_CONSECUTIVE_PASSES,
+        config: AbConfig = AbConfig(),
+    ): NullTestResult {
+        // Leaving one out of a pool of one leaves nothing to calibrate on. A pool that short
+        // is incomplete anyway, so it is reported against the default claim rather than
+        // against a floor it cannot support.
+        if (arms.size < 2) {
+            return NullTestResult(
+                comparisons = emptyList(),
+                requiredConsecutivePasses = required,
+                driverSha256 = driverSha256,
+                calibration = NoiseFloorCalibration.assumed(config),
+            )
+        }
+
+        val comparisons = arms.mapIndexed { index, (first, second) ->
+            val others = arms.filterIndexed { other, _ -> other != index }
+            val fold = calibrate(others, config)
+            val judged = config.copy(
+                minimumPracticalDifference =
+                    maxOf(config.minimumPracticalDifference, fold.floor),
+            )
+            AbComparison.compare(
+                labelA = "A/A #${index + 1} arm 1",
+                labelB = "A/A #${index + 1} arm 2",
+                a = first,
+                b = second,
+                lowerIsBetter = true,
+                config = judged,
+            )
+        }
+
+        // Reported against the whole pool, because that is the resolution the device
+        // demonstrated overall — the per-fold floors are how each comparison was judged, not
+        // what the device is entitled to claim afterwards.
+        val overall = calibrate(arms, config)
+        return NullTestResult(
+            comparisons = comparisons,
+            requiredConsecutivePasses = required,
+            driverSha256 = driverSha256,
+            calibration = overall.copy(
+                floor = maxOf(config.minimumPracticalDifference, overall.floor),
+            ),
+        )
+    }
+
+    /**
+     * Judges a pool against a floor supplied from outside.
+     *
+     * The primitive [crossValidated] is built on, and the way to test the gate's rules
+     * against a floor chosen rather than measured. **Production goes through
+     * [crossValidated]**: handing this function a floor calibrated on the same runs it then
+     * judges is exactly the circularity findings 1 and 2 are about.
+     *
      * @param arms pairs of run-summary arrays, each pair being one A/A comparison of a driver
      *   against itself. Both halves must come from the same `.so`, and must be runs that
      *   calibration did not already see.

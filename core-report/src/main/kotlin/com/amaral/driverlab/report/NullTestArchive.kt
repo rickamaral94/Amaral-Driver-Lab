@@ -14,17 +14,20 @@ public data class ArmPair(val first: List<Double>, val second: List<Double>) {
 }
 
 /**
- * The A/A series for one workload, split the way the null test consumes them.
+ * The A/A comparisons for one workload, in the order they were acquired.
  *
- * The split is stored rather than decided at read time because it is not an
- * implementation detail: calibration must not be judged on the runs that measured it,
- * so which comparisons went where is part of what the record attests.
+ * One pool, not a calibration half and a test half. Each comparison is judged against a
+ * floor calibrated on the others, so none judges itself and the device runs ten comparisons
+ * instead of twenty — see [com.amaral.driverlab.stats.NullTest.crossValidated].
+ *
+ * The order is part of the data. The sign test reads the direction of each comparison from
+ * it, so a reader that sorts or shuffles this list destroys the only evidence of an ordering
+ * effect.
  */
 @Serializable
 public data class WorkloadArms(
     val workloadId: String,
-    val calibration: List<ArmPair>,
-    val test: List<ArmPair>,
+    val comparisons: List<ArmPair>,
 )
 
 /**
@@ -56,14 +59,9 @@ public data class NullTestRecord(
     /** Re-derives the verdict for every workload the test covered. */
     public fun evaluate(config: AbConfig = AbConfig()): Map<String, NullTestResult> =
         perWorkload.associate { workload ->
-            val calibration = NullTest.calibrate(
-                arms = workload.calibration.map { it.toArrays() },
-                config = config,
-            )
-            workload.workloadId to NullTest.evaluate(
+            workload.workloadId to NullTest.crossValidated(
                 driverSha256 = driverSha256,
-                arms = workload.test.map { it.toArrays() },
-                calibration = calibration,
+                arms = workload.comparisons.map { it.toArrays() },
                 config = config,
             )
         }
@@ -80,7 +78,14 @@ public data class NullTestRecord(
     }
 
     public companion object {
-        public const val CURRENT_VERSION: Int = 1
+        /**
+         * 2 since the protocol became one cross-validated pool. A version 1 record split its
+         * comparisons into a calibration half and a test half and cannot be reinterpreted as
+         * a pool: the halves were judged under different rules, so reading them together
+         * would attribute a verdict to measurements that never supported it. Old records are
+         * ignored rather than migrated.
+         */
+        public const val CURRENT_VERSION: Int = 2
     }
 }
 

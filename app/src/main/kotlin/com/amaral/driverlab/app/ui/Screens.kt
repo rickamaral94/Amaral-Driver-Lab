@@ -233,8 +233,8 @@ fun RunningScreen(state: UiState, onAbort: () -> Unit) {
             CircularProgressIndicator()
             Text("Loading the driver…")
         } else {
-            // Determinate from the first frame. The work is fixed in advance, so
-            // there is never a reason to show a bar that does not know where it is.
+            // Determinate from the first frame. The work is planned in advance, so there is
+            // never a reason to show a bar that does not know where it is.
             LinearProgressIndicator(
                 progress = { progress.fraction.toFloat() },
                 modifier = Modifier.fillMaxWidth().semantics {
@@ -243,12 +243,22 @@ fun RunningScreen(state: UiState, onAbort: () -> Unit) {
             )
             Text(
                 stringResource(
-                    R.string.running_execution,
+                    if (progress.totalIsUpperBound) {
+                        R.string.running_execution_at_most
+                    } else {
+                        R.string.running_execution
+                    },
                     progress.executionsDone,
                     progress.executionsTotal,
                 ),
                 style = MaterialTheme.typography.titleMedium,
             )
+            // A null test abandons itself the moment its answer is fixed, so the budget is a
+            // ceiling rather than a forecast. Showing it as a plain total was telling the user
+            // to expect a hundred minutes of a run that ends in ten.
+            if (progress.totalIsUpperBound) {
+                Note(stringResource(R.string.running_may_stop_early))
+            }
             Text(progress.label, style = MaterialTheme.typography.bodyMedium)
             if (progress.workloadId.isNotBlank()) {
                 Text(progress.workloadId, style = MaterialTheme.typography.bodySmall)
@@ -352,10 +362,13 @@ fun ResultScreen(
 
 // ---- Small pieces ---------------------------------------------------------
 
+/** Half the standard wait, which is the comparison worth making first. */
+private const val COOLDOWN_EXPERIMENT_MS = 10_000L
+
 @Composable
 fun NullTestScreen(
     state: UiState,
-    onStart: (RequestedDriver) -> Unit,
+    onStart: (RequestedDriver, Long?) -> Unit,
     onBack: () -> Unit,
 ) {
     // Defaults to the system driver because it needs no import, so a device can be
@@ -387,12 +400,24 @@ fun NullTestScreen(
         }
 
         Button(
-            onClick = { onStart(selected) },
+            onClick = { onStart(selected, null) },
             enabled = !state.busy,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(stringResource(R.string.null_test_start))
         }
+
+        // Separated from the calibration button on purpose: this run deliberately varies the
+        // protocol, so it answers a question about the harness and produces no calibration.
+        Note(stringResource(R.string.null_test_cooldown_experiment_note))
+        OutlinedButton(
+            onClick = { onStart(selected, COOLDOWN_EXPERIMENT_MS) },
+            enabled = !state.busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(R.string.null_test_cooldown_experiment))
+        }
+
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.back))
         }

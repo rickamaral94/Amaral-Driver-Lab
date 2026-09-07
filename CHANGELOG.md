@@ -20,7 +20,34 @@ carried forward; it remains in git history and on `main`.
 - Published as [`schema/result-v1.schema.json`](schema/result-v1.schema.json), and
   validated in CI against payloads the app's own serializer produced.
 
+### Changed
+
+- **The null test is one cross-validated pool of ten comparisons, not ten to calibrate plus
+  ten to judge.** What keeps it non-circular is that no comparison is judged against a floor
+  that saw it, and holding one out at a time achieves that with half the runs: **210
+  executions down to 110**. It is also stricter — under two pools the widest calibration
+  comparison inflated the floor sheltering every test comparison, and now the widest is
+  judged against a limit excluding its own contribution.
+- **The ordering-bias check moved from a sign test to Wilcoxon signed-rank.** Halving the
+  pool cost the sign test most of its power: against a deliberately biased protocol it fired
+  17 times in 40, because it reads direction and discards magnitude. Signed-rank uses both and
+  catches the same protocol 28 times in 40, flagging the correct one just as rarely — 1 in 40
+  either way. Reference values come from `scipy.stats.wilcoxon`.
+- `NullTestRecord` is version 2. A version 1 record split its comparisons into halves judged
+  under different rules and cannot be reinterpreted as a pool, so old records are ignored
+  rather than migrated.
+- The running screen shows a null test's budget as a ceiling — "of at most N" — and says the
+  run stops as soon as the result is decided. Presenting the full plan as the number to expect
+  told the user to settle in for a hundred minutes of a run that ends in ten.
+
 ### Added
+
+- **A cooldown experiment.** The 20 s wait between arms is about 70% of a calibration's wall
+  time and has never been measured. The experiment alternates it with a shorter wait in ABBA
+  order inside a single thermal session, so neither setting is confounded with how far in it
+  ran, and writes what it measured beside the logs — never to the null test store, because a
+  run that varies the protocol on purpose is not a floor anything should be judged against.
+  Read with `tools/analysis/cooldown_experiment.py`.
 
 - `tools/analysis/` — the 150 A/A run medians the Odin2 produced, and the harness that
   replays them. Seventy minutes of device time is expensive enough that the data is kept and

@@ -41,20 +41,25 @@ class NullTestTest {
             Order.ALTERNATING -> sim.interleavedAaPair(runsPerArm, baseNs, runNoise, driftPerRun)
             Order.SEQUENTIAL -> sim.sequentialAaPair(runsPerArm, baseNs, runNoise, driftPerRun)
         }
-        val calibration = NullTest.calibrate(
-            (0 until NullTest.CALIBRATION_COMPARISONS).map { pair(it) }, config,
-        )
-        val result = NullTest.evaluate(
+        val arms = (0 until comparisons).map { pair(it) }
+        val result = NullTest.crossValidated(
             driverSha256 = "sha256:test",
-            arms = (0 until comparisons).map { pair(NullTest.CALIBRATION_COMPARISONS + it) },
-            calibration = calibration,
+            arms = arms,
             config = config,
         )
-        return Device(calibration, result)
+        return Device(NullTest.calibrate(arms, config), result)
     }
 
+    /**
+     * A clean device should mostly be allowed to rank. Measured over 200 trials the rate is
+     * 93.5%, down from about 95% under the old twenty-comparison split — the price of halving
+     * what the device has to run, paid as an occasional false block rather than a false pass.
+     * A blocked device can re-run; a falsely passed one pollutes a public leaderboard, so the
+     * asymmetry is the right way round. The threshold is set well below the measured rate
+     * because forty trials of a 93.5% process land between 34 and 40.
+     */
     @Test
-    fun `a clean harness passes ten consecutive A A comparisons`() {
+    fun `a clean harness usually passes ten consecutive A A comparisons`() {
         var passes = 0
         val trials = 40
         repeat(trials) { trial ->
@@ -62,7 +67,7 @@ class NullTestTest {
         }
         assertTrue(
             "only $passes of $trials null tests passed; the harness would block ranking too often",
-            passes >= trials - 2,
+            passes >= 34,
         )
     }
 
@@ -114,25 +119,47 @@ class NullTestTest {
     }
 
     /**
-     * Plain A,B,A,B alternation is not enough, which is worth stating because it is the obvious
-     * thing to build. The first arm takes the earlier slot of every pair, so under drift it wins
-     * all ten comparisons by a hair — small enough for the calibrated floor to swallow, systematic
-     * enough for the sign test to see.
+     * Plain A,B,A,B alternation is not enough, which is worth stating because it is the
+     * obvious thing to build. The first arm takes the earlier slot of every pair, so under
+     * drift it leans one way every time — by a hair, small enough for the calibrated floor to
+     * swallow and systematic enough for the ordering check to see.
+     *
+     * Asserted as a *rate* rather than on one seed. The check has finite power — measured at
+     * 70% against this much drift, against 2.5% on the counterbalanced protocol — so any
+     * single seed is a coin toss and pinning the test to one made it fail on changes that did
+     * not touch what it checks. The claim finding 3 actually makes is the gap between those
+     * two rates, so that is what is tested.
      */
     @Test
-    fun `plain alternation still leaves a one-sided ordering effect`() {
-        val alternating = runDevice(
-            seed = 31L, runNoise = 0.004, driftPerRun = 0.004, order = Order.ALTERNATING,
-        )
-        assertFalse(alternating.result.passed)
-        assertTrue(alternating.result.hasOrderingBias)
-        // Overwhelmingly one-sided rather than exactly unanimous. Which comparisons the test
-        // half lands on shifts when the calibration budget changes, and pinning the count to
-        // the last digit made this test fail on a change that did not touch what it checks:
-        // the sign test's job is to catch a lopsided split, not a specific one.
+    fun `plain alternation leaves an ordering effect that counterbalancing does not`() {
+        var alternatingCaught = 0
+        var counterbalancedCaught = 0
+        val trials = 40
+        repeat(trials) { trial ->
+            if (runDevice(
+                    seed = 31L + trial, runNoise = 0.004, driftPerRun = 0.004,
+                    order = Order.ALTERNATING,
+                ).result.hasOrderingBias
+            ) {
+                alternatingCaught++
+            }
+            if (runDevice(
+                    seed = 31L + trial, runNoise = 0.004, driftPerRun = 0.004,
+                    order = Order.COUNTERBALANCED,
+                ).result.hasOrderingBias
+            ) {
+                counterbalancedCaught++
+            }
+        }
+
         assertTrue(
-            "first arm won ${alternating.result.firstArmWins} of ${alternating.result.directedComparisons}",
-            alternating.result.firstArmWins >= alternating.result.directedComparisons - 1,
+            "alternation flagged only $alternatingCaught of $trials; the ordering check is blind",
+            alternatingCaught >= trials / 2,
+        )
+        assertTrue(
+            "counterbalanced order flagged $counterbalancedCaught of $trials, which is too many " +
+                "false alarms for a protocol that is not biased",
+            counterbalancedCaught <= trials / 5,
         )
     }
 

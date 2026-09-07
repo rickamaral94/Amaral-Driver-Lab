@@ -18,13 +18,18 @@ class NullTestDecisionTest {
         ArmPair(first = List(5) { 6_770_000.0 }, second = List(5) { 7_570_000.0 })
     }
 
-    private fun workload(calibration: List<ArmPair>, test: List<ArmPair> = emptyList()) =
-        listOf(WorkloadArms("baseline/v1", calibration, test))
+    /** A lean big enough to look like a real difference, small enough to keep the floor usable. */
+    private fun leaning(count: Int) = List(count) {
+        ArmPair(first = List(5) { 7_570_000.0 }, second = List(5) { 7_797_100.0 })
+    }
+
+    private fun workload(comparisons: List<ArmPair>) =
+        listOf(WorkloadArms("baseline/v1", comparisons))
 
     @Test
-    fun `a floor past the limit settles the run before any test comparison`() {
+    fun `a floor past the limit settles the run`() {
         val reason = NullTestDecision.settledFailure(
-            workload(calibration = straddling(NullTest.CALIBRATION_COMPARISONS)),
+            workload(straddling(NullTest.REQUIRED_CONSECUTIVE_PASSES)),
         )
 
         assertNotNull("a 12% floor cannot pass a 10% limit", reason)
@@ -32,27 +37,23 @@ class NullTestDecisionTest {
     }
 
     @Test
-    fun `a steady calibration leaves the answer open`() {
+    fun `a steady pool leaves the answer open`() {
         assertNull(
             NullTestDecision.settledFailure(
-                workload(calibration = tied(NullTest.CALIBRATION_COMPARISONS)),
+                                workload(tied(NullTest.REQUIRED_CONSECUTIVE_PASSES)),
             ),
         )
     }
 
     @Test
-    fun `one comparison that is not a tie settles the run`() {
-        // A device that calibrates a usable floor and then separates itself anyway. The claim
-        // is that all ten tie, so the first non-tie has already emptied it.
-        val reason = NullTestDecision.settledFailure(
-            workload(
-                calibration = tied(NullTest.CALIBRATION_COMPARISONS),
-                test = tied(2) + straddling(1),
-            ),
-        )
-
-        assertNotNull(reason)
-        assertTrue(reason!!, reason.contains("#3"))
+    fun `a comparison that looks like a non-tie so far does not settle the run`() {
+        // This used to be a second exit: stop as soon as one comparison came back as anything
+        // other than a tie. Cross-validation removed its ground. Each comparison is now judged
+        // against a floor calibrated on the others, and that floor only widens as the pool
+        // grows — so a comparison that separates against three comparisons may well tie
+        // against ten. Acting on the partial view would abandon runs over a verdict the
+        // finished test never reached.
+        assertNull(NullTestDecision.settledFailure(workload(tied(2) + leaning(1))))
     }
 
     @Test
@@ -61,10 +62,7 @@ class NullTestDecisionTest {
         // stopping on good news is how a stopping rule invents a pass rate.
         assertNull(
             NullTestDecision.settledFailure(
-                workload(
-                    calibration = tied(NullTest.CALIBRATION_COMPARISONS),
-                    test = tied(NullTest.REQUIRED_CONSECUTIVE_PASSES - 1),
-                ),
+                workload(tied(NullTest.REQUIRED_CONSECUTIVE_PASSES - 1)),
             ),
         )
     }
@@ -73,17 +71,14 @@ class NullTestDecisionTest {
     fun `a complete passing run is still not settled, because it did not fail`() {
         assertNull(
             NullTestDecision.settledFailure(
-                workload(
-                    calibration = tied(NullTest.CALIBRATION_COMPARISONS),
-                    test = tied(NullTest.REQUIRED_CONSECUTIVE_PASSES),
-                ),
+                workload(tied(NullTest.REQUIRED_CONSECUTIVE_PASSES)),
             ),
         )
     }
 
     @Test
-    fun `a run with no calibration yet decides nothing`() {
-        assertNull(NullTestDecision.settledFailure(workload(calibration = emptyList())))
+    fun `a run with nothing measured yet decides nothing`() {
+        assertNull(NullTestDecision.settledFailure(workload(emptyList())))
     }
 
     @Test
@@ -91,8 +86,8 @@ class NullTestDecisionTest {
         // The profile verdict needs every workload to pass, so one lost workload is enough.
         val reason = NullTestDecision.settledFailure(
             listOf(
-                WorkloadArms("baseline/v1", tied(NullTest.CALIBRATION_COMPARISONS), tied(3)),
-                WorkloadArms("tiling_gmem/v1", straddling(NullTest.CALIBRATION_COMPARISONS), emptyList()),
+                WorkloadArms("baseline/v1", tied(NullTest.REQUIRED_CONSECUTIVE_PASSES)),
+                WorkloadArms("tiling_gmem/v1", straddling(NullTest.REQUIRED_CONSECUTIVE_PASSES)),
             ),
         )
 
@@ -111,10 +106,7 @@ class NullTestDecisionTest {
             appVersion = "1.0.0-test",
             completedAtEpochMs = 0,
             runsPerArm = 5,
-            perWorkload = workload(
-                calibration = straddling(NullTest.CALIBRATION_COMPARISONS),
-                test = emptyList(),
-            ),
+            perWorkload = workload(straddling(NullTest.REQUIRED_CONSECUTIVE_PASSES)),
         )
 
         val verdict = record.resultFor(listOf("baseline/v1"))!!

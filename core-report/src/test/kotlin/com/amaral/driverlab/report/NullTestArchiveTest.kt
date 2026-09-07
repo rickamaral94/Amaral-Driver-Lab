@@ -36,11 +36,7 @@ class NullTestArchiveTest {
 
     private fun record(
         perWorkload: List<WorkloadArms> = listOf(
-            WorkloadArms(
-                workloadId = "baseline/v1",
-                calibration = steadyArms(NullTest.CALIBRATION_COMPARISONS),
-                test = steadyArms(NullTest.REQUIRED_CONSECUTIVE_PASSES, offset = 7),
-            ),
+            WorkloadArms("baseline/v1", steadyArms(NullTest.REQUIRED_CONSECUTIVE_PASSES)),
         ),
     ) = NullTestRecord(
         deviceFingerprint = fingerprint,
@@ -71,16 +67,8 @@ class NullTestArchiveTest {
     fun `one failing workload fails the profile even when another passes`() {
         val verdict = record(
             listOf(
-                WorkloadArms(
-                    "baseline/v1",
-                    steadyArms(NullTest.CALIBRATION_COMPARISONS),
-                    steadyArms(NullTest.REQUIRED_CONSECUTIVE_PASSES, offset = 7),
-                ),
-                WorkloadArms(
-                    "tiling_gmem/v1",
-                    steadyArms(NullTest.CALIBRATION_COMPARISONS),
-                    binnedArms(NullTest.REQUIRED_CONSECUTIVE_PASSES),
-                ),
+                WorkloadArms("baseline/v1", steadyArms(NullTest.REQUIRED_CONSECUTIVE_PASSES)),
+                WorkloadArms("tiling_gmem/v1", binnedArms(NullTest.REQUIRED_CONSECUTIVE_PASSES)),
             ),
         ).resultFor(listOf("baseline/v1", "tiling_gmem/v1"))
 
@@ -92,15 +80,11 @@ class NullTestArchiveTest {
 
     @Test
     fun `a device that always favours the same arm is caught as ordering bias`() {
-        // Every comparison puts arm 1 in the fast bin. Each one ties on its own, and the
-        // sign test is what notices that ten out of ten went the same way.
+        // Every comparison puts arm 1 in the fast bin. Each ties on its own against a floor
+        // wide enough to hold it; the ordering check is what notices they all lean the same way.
         val verdict = record(
             listOf(
-                WorkloadArms(
-                    "baseline/v1",
-                    binnedArms(NullTest.CALIBRATION_COMPARISONS),
-                    binnedArms(NullTest.REQUIRED_CONSECUTIVE_PASSES),
-                ),
+                WorkloadArms("baseline/v1", binnedArms(NullTest.REQUIRED_CONSECUTIVE_PASSES)),
             ),
         ).resultFor(listOf("baseline/v1"))!!
 
@@ -112,11 +96,7 @@ class NullTestArchiveTest {
         val store = NullTestStore(folder.newFolder("state"))
         val failing = record(
             listOf(
-                WorkloadArms(
-                    "baseline/v1",
-                    binnedArms(NullTest.CALIBRATION_COMPARISONS),
-                    binnedArms(NullTest.REQUIRED_CONSECUTIVE_PASSES),
-                ),
+                WorkloadArms("baseline/v1", binnedArms(NullTest.REQUIRED_CONSECUTIVE_PASSES)),
             ),
         )
         store.write(failing)

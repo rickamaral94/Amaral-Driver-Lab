@@ -29,23 +29,57 @@ data class BenchRequest(
 )
 
 /**
- * How many A/A comparisons the runner should perform, and how they split.
+ * How many A/A comparisons the runner should perform.
  *
- * Calibration measures the device's resolution and the test judges against it, on
- * different runs. Sharing runs between the two would make the test pass by construction.
+ * One pool, not a calibration half and a test half. Each comparison is judged against a
+ * floor calibrated on the others, so none judges itself and the device runs half as much.
  */
 @Serializable
 data class NullTestSpec(
-    val calibrationComparisons: Int,
-    val testComparisons: Int,
+    val comparisons: Int,
     /**
-     * Comparisons run and discarded before calibration starts, so the GPU's cold ramp-up
-     * does not get measured as the device's resolution.
+     * Comparisons run and discarded before the pool starts, so the GPU's cold ramp-up does
+     * not get measured as the device's resolution.
      */
     val warmupComparisons: Int = 0,
+    /**
+     * When set, this is not a calibration but an experiment on the arm cooldown itself.
+     *
+     * The 20 s wait between arms is about seventy percent of a calibration's wall time and
+     * has never been measured — it is a number that was chosen, not one that was justified.
+     * Comparisons alternate between the standard cooldown and this one in ABBA order, so
+     * neither setting is confounded with how far into the session it ran, and the run keeps
+     * going to the end rather than stopping early: it is gathering dispersion, not deciding
+     * a verdict. Nothing it measures is written to the null test store.
+     */
+    val cooldownExperimentMs: Long? = null,
 ) {
-    val totalComparisons: Int get() = warmupComparisons + calibrationComparisons + testComparisons
+    val totalComparisons: Int get() = warmupComparisons + comparisons
+
+    val isExperiment: Boolean get() = cooldownExperimentMs != null
 }
+
+/** One comparison of a cooldown experiment: the setting used, and what dispersion it produced. */
+@Serializable
+data class CooldownSample(
+    val comparisonIndex: Int,
+    val cooldownMs: Long,
+    val workloadId: String,
+    val armFirstMedianNs: List<Double>,
+    val armSecondMedianNs: List<Double>,
+)
+
+@Serializable
+data class CooldownExperiment(
+    val deviceFingerprint: String,
+    val driverLabel: String,
+    val appVersion: String,
+    val completedAtEpochMs: Long,
+    val standardCooldownMs: Long,
+    val shortCooldownMs: Long,
+    val runsPerArm: Int,
+    val samples: List<CooldownSample>,
+)
 
 @Serializable
 data class DriverRef(
@@ -110,6 +144,13 @@ data class BenchProgress(
     val label: String,
     val workloadId: String,
     val peakCelsius: Double? = null,
+    /**
+     * True when [executionsTotal] is a ceiling rather than a plan. A null test stops the
+     * moment its outcome is fixed, which on a device that fails is usually after the first
+     * couple of comparisons — presenting the full budget as the number to expect told the
+     * user to settle in for a hundred minutes of a run that was going to end in ten.
+     */
+    val totalIsUpperBound: Boolean = false,
 ) {
     /** Always known: the work is fixed before the run starts, so the bar never guesses. */
     val fraction: Double

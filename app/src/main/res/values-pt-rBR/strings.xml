@@ -67,4 +67,8 @@
     <string name="null_test_failed">A calibração não passou</string>
     <string name="null_test_floor">Este aparelho resolve diferenças de cerca de %1$s ou maiores em %2$s.</string>
     <string name="back">Voltar</string>
+    <string name="running_execution_at_most">Execução %1$d de no máximo %2$d</string>
+    <string name="running_may_stop_early">Isto encerra assim que o resultado estiver decidido, o que costuma ser bem antes da última execução.</string>
+    <string name="null_test_cooldown_experiment">Rodar o experimento do cooldown</string>
+    <string name="null_test_cooldown_experiment_note">Mede se a espera de 20 s entre braços — cerca de 70%% do tempo desta execução — está fazendo alguma coisa. Ela é reduzida à metade em metade das comparações e os resultados são comparados. Não produz calibração: compartilhe o diagnóstico depois.</string>
 </resources>

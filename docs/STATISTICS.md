@@ -192,6 +192,38 @@ partial floor able to fall as evidence accumulates, and a run could then abandon
 threshold its final answer would not have crossed. There is a test pinning the monotonicity for
 exactly this reason.
 
+## Finding 7: halving the protocol costs power, and the sign test was where it showed
+
+Ten comparisons to calibrate plus ten to judge is two hundred executions, and the split is not
+what makes the test non-circular — *not judging a comparison against a floor that saw it* is.
+Holding one out at a time achieves that with a single pool of ten, so the protocol became one
+cross-validated set: each comparison judged against a floor calibrated on the other nine.
+
+That is also stricter than the split, which is the part worth noticing. Under two pools the
+widest calibration comparison inflates the floor every test comparison is then judged against,
+sheltering them. Leaving each out of its own floor means the widest is judged against a limit
+that excludes its own contribution: it cannot hide behind itself.
+
+**Halving the pool cost real power, and simulating it is what found that.** Against a
+deliberately biased protocol — plain A,B,A,B alternation under drift — the sign test on ten
+comparisons fired 17 times in 40. It reads only the *direction* of each comparison and throws
+the size away, which a twenty-comparison pool could afford and a ten-comparison one cannot.
+Wilcoxon signed-rank on the log ratios uses both, and on the same simulations catches the same
+biased protocol 28 times in 40 while flagging the correct, counterbalanced protocol just as
+rarely — 1 in 40 either way. Same false alarms, more of the effect seen, no extra device time.
+
+A third candidate looked better than both and was **completely wrong**. Testing at the level of
+each *pair of slots* rather than each comparison gives fifty observations instead of ten, and
+it flagged the correct protocol 39 times in 40 while never once flagging the biased one. It
+measures drift — the earlier slot of every pair is faster under drift, which is true and is
+exactly what counterbalancing is designed to cancel at the arm level. It answers a different
+question, confidently, in the wrong direction. It is only not in the codebase because the
+alternatives were measured against a known-biased protocol before one was chosen.
+
+The other price is a slightly higher false block: a clean device passes 93.5% of the time
+against roughly 95% before. A blocked device can re-run; a falsely passed one pollutes a public
+leaderboard, so that asymmetry is the right way round.
+
 ## What passing the null test means
 
 `NullTestResult.passed` requires all four of:

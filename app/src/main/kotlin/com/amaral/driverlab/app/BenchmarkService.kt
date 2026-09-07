@@ -233,6 +233,7 @@ class BenchmarkService : Service() {
             val telemetry = TelemetryCollector(applicationContext)
             val completion = runCatching {
                 val perComparison = mutableListOf<BenchmarkOutcome>()
+                val cooldownUsed = mutableListOf<Long>()
                 // Shared by the early-exit check and the stored record, so what the run
                 // stopped on and what it saved can never describe different measurements.
                 fun armsSoFar(): List<WorkloadArms> = workloads.map { workload ->
@@ -242,11 +243,7 @@ class BenchmarkService : Service() {
                             second = outcome.runMediansFor(Arm.B, workload.workloadId).toList(),
                         )
                     }
-                    WorkloadArms(
-                        workloadId = workload.workloadId,
-                        calibration = arms.take(spec.calibrationComparisons),
-                        test = arms.drop(spec.calibrationComparisons),
-                    )
+                    WorkloadArms(workloadId = workload.workloadId, comparisons = arms)
                 }
                 val perPlanExecutions = BenchmarkPlan.nullTest(
                     driver = driver,
@@ -257,18 +254,21 @@ class BenchmarkService : Service() {
                 val totalExecutions = perPlanExecutions * spec.totalComparisons
 
                 for (comparison in 0 until spec.totalComparisons) {
-                    val phase = when {
-                        comparison < spec.warmupComparisons -> "warm-up"
-                        comparison < spec.warmupComparisons + spec.calibrationComparisons -> "calibration"
-                        else -> "A/A"
-                    }
+                    val phase = if (comparison < spec.warmupComparisons) "warm-up" else "A/A"
+                    // ABBA rather than alternating, so neither cooldown setting is confounded
+                    // with how far into the session it ran — the same reasoning that
+                    // counterbalances the arms.
+                    val cooldown = spec.cooldownExperimentMs?.let { short ->
+                        if (((comparison + 1) / 2) % 2 == 0) BenchmarkPlan.DEFAULT_ARM_COOLDOWN_MS else short
+                    } ?: BenchmarkPlan.DEFAULT_ARM_COOLDOWN_MS
                     val plan = BenchmarkPlan.nullTest(
                         driver = driver,
                         label = request.armA.label,
                         workloads = workloads,
                         runsPerArm = request.runsPerArm,
                         comparisonIndex = comparison,
-                    )
+                    ).copy(cooldownBetweenArmsMs = cooldown)
+                    cooldownUsed += cooldown
                     DiagnosticLog.i(
                         TAG,
                         "null test $phase ${comparison + 1} of ${spec.totalComparisons}",
@@ -298,6 +298,7 @@ class BenchmarkService : Service() {
                                         label = label,
                                         workloadId = progress.currentWorkloadId,
                                         peakCelsius = progress.latestTelemetry?.peakZoneCelsius,
+                                        totalIsUpperBound = true,
                                     ),
                                 ),
                             )
@@ -323,7 +324,10 @@ class BenchmarkService : Service() {
 
                     // Only ever stops on a failure that is already fixed. Ending early on a
                     // good-looking run would pass devices the stated criterion would not.
-                    val settled = NullTestDecision.settledFailure(armsSoFar())
+                    // An experiment never stops: it is gathering dispersion, not a verdict,
+                    // and a short run would leave one cooldown setting under-sampled.
+                    val settled =
+                        if (spec.isExperiment) null else NullTestDecision.settledFailure(armsSoFar())
                     if (settled != null) {
                         DiagnosticLog.i(
                             TAG,
@@ -344,6 +348,10 @@ class BenchmarkService : Service() {
                     runsPerArm = request.runsPerArm,
                     perWorkload = armsSoFar(),
                 )
+                if (spec.isExperiment) {
+                    writeCooldownExperiment(request, spec, snapshot, armsSoFar(), cooldownUsed)
+                    return@runCatching BenchCompletion(ok = true, nullTest = true)
+                }
                 NullTestStore(File(filesDir, STATE_DIRECTORY)).write(record)
                 DiagnosticLog.i(
                     TAG,
@@ -362,6 +370,69 @@ class BenchmarkService : Service() {
             send(MSG_COMPLETE, KEY_COMPLETION, json.encodeToString(BenchCompletion.serializer(), completion))
             stopSelf()
         }
+    }
+
+    /**
+     * Writes what the cooldown experiment measured, next to the logs so it rides along in the
+     * diagnostics zip the user already shares.
+     *
+     * Deliberately not the null test store. An experiment deliberately varies the protocol
+     * mid-run, so its dispersion describes two different conditions at once and is not a
+     * floor anything should be judged against.
+     */
+    private fun writeCooldownExperiment(
+        request: BenchRequest,
+        spec: NullTestSpec,
+        snapshot: com.amaral.driverlab.telemetry.DeviceSnapshot,
+        arms: List<WorkloadArms>,
+        cooldowns: List<Long>,
+    ) {
+        val warmup = spec.warmupComparisons
+        val samples = arms.flatMap { workload ->
+            workload.comparisons.mapIndexedNotNull { index, pair ->
+                // `arms` excludes the discarded warm-up comparisons, so the cooldown for
+                // comparison i is the one recorded at i + warmup.
+                cooldowns.getOrNull(index + warmup)?.let { cooldown ->
+                    CooldownSample(
+                        comparisonIndex = index,
+                        cooldownMs = cooldown,
+                        workloadId = workload.workloadId,
+                        armFirstMedianNs = pair.first,
+                        armSecondMedianNs = pair.second,
+                    )
+                }
+            }
+        }
+
+        val experiment = CooldownExperiment(
+            deviceFingerprint = snapshot.buildFingerprint,
+            driverLabel = request.armA.label,
+            appVersion = versionName(),
+            completedAtEpochMs = System.currentTimeMillis(),
+            standardCooldownMs = BenchmarkPlan.DEFAULT_ARM_COOLDOWN_MS,
+            shortCooldownMs = spec.cooldownExperimentMs ?: 0L,
+            runsPerArm = request.runsPerArm,
+            samples = samples,
+        )
+
+        val directory = DiagnosticLog.logsDirectory()?.let { File(it, "experiments") }
+        if (directory == null) {
+            DiagnosticLog.e(TAG, "no log directory, so the cooldown experiment has nowhere to go")
+            return
+        }
+        directory.mkdirs()
+        val file = File(directory, "cooldown-${experiment.completedAtEpochMs}.json")
+        runCatching {
+            file.writeText(json.encodeToString(CooldownExperiment.serializer(), experiment))
+        }.onSuccess {
+            DiagnosticLog.i(
+                TAG,
+                "cooldown experiment written: ${samples.size} sample(s) at " +
+                    samples.groupingBy { it.cooldownMs }.eachCount()
+                        .entries.joinToString { "${it.key / 1000}s x${it.value}" } +
+                    " -> ${file.path}",
+            )
+        }.onFailure { DiagnosticLog.e(TAG, "could not write the cooldown experiment", it) }
     }
 
     /**
