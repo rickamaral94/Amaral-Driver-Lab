@@ -205,7 +205,7 @@ public object VulkanEngine : VulkanDriverLoader {
             request.source == DriverSource.SYSTEM,
             request.libraryDirectory?.absolutePath,
             request.libraryName,
-            request.temporaryDirectory.absolutePath,
+            request.nativeLibraryDirectory.absolutePath,
             request.enableValidationLayer,
             status,
         )

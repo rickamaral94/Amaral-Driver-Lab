@@ -69,23 +69,37 @@ IcdLoadResult openSystemLoader() {
 
 IcdLoadResult openPackagedDriver(const std::string& libraryDirectory,
                                  const std::string& libraryName,
-                                 const std::string& temporaryDirectory) {
+                                 const std::string& nativeLibraryDirectory) {
 #if AMARAL_WITH_ADRENOTOOLS
-    // adrenotools_open_libvulkan returns a handle to the Android loader configured to
-    // pick up the given ICD through a private linker namespace, which is what makes
-    // this work without root. The custom driver directory must end in a separator.
+    // adrenotools_open_libvulkan returns a handle to the Android loader configured to pick
+    // up the given ICD through a private linker namespace, which is what makes this work
+    // without root.
+    //
+    // hookLibDir must be the app's nativeLibraryDir and nothing else: the library creates a
+    // linker namespace over that path and dlopens libhook_impl.so and libmain_hook.so from
+    // inside it. Its own header warns that a wrong path still returns a valid pointer and
+    // then quietly falls back to the system driver — which is the one failure mode this
+    // whole project is built around, so it is checked before the call rather than trusted.
     const std::string driverDirectory = withTrailingSlash(libraryDirectory);
-    const std::string hookDirectory = withTrailingSlash(temporaryDirectory);
+    const std::string hookDirectory = withTrailingSlash(nativeLibraryDirectory);
+
+    if (nativeLibraryDirectory.empty()) {
+        return failure(LoadStage::HookUnavailable,
+                       "the app did not supply its native library directory, so the rootless "
+                       "hook could not be installed. Nothing was loaded.");
+    }
 
     void* library = adrenotools_open_libvulkan(
             RTLD_NOW | RTLD_LOCAL,
             ADRENOTOOLS_DRIVER_CUSTOM,
-            nullptr,                    // no custom tmp dir override
-            hookDirectory.c_str(),      // where the hook libraries live
-            driverDirectory.c_str(),    // where the ICD lives
-            libraryName.c_str(),
-            nullptr,                    // no file redirect directory
-            nullptr);                   // no gpu mapping override
+            // tmpLibDir: only consulted below API 29, and minSdk here is 30, so the library
+            // uses memfd and needs no writable scratch of its own.
+            nullptr,
+            hookDirectory.c_str(),      // hookLibDir  — where the APK's hooks were extracted
+            driverDirectory.c_str(),    // customDriverDir — where the ICD lives
+            libraryName.c_str(),        // customDriverName
+            nullptr,                    // fileRedirectDir: feature not enabled
+            nullptr);                   // userMappingHandle: feature not enabled
 
     if (library == nullptr) {
         const char* error = dlerror();
@@ -107,7 +121,7 @@ IcdLoadResult openPackagedDriver(const std::string& libraryDirectory,
     return result;
 #else
     (void)libraryDirectory;
-    (void)temporaryDirectory;
+    (void)nativeLibraryDirectory;
     // Deliberately a hard failure rather than a fallback to the system loader.
     // Falling back here is precisely how a benchmark ends up timing the Qualcomm
     // blob under a Turnip label.

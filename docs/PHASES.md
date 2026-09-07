@@ -13,11 +13,21 @@ implemented, criterion needs hardware. **not started**.
 *Criterion: load v3 and the system blob on the Odin2 and show distinct, correct
 identities; an attempt to run Turnip that lands on the blob is blocked with an error.*
 
-**Built, unproven.** `IdentityGuard` implements the block and is unit-tested against
-a simulated fall-back to the Qualcomm blob, a driver from an unexpected family, a
-device with no `VkPhysicalDeviceDriverProperties`, and a run with no identity at
-all. The loading half needs an Odin2 and a `libadrenotools` build; see
-[DRIVER_LOADING.md](DRIVER_LOADING.md) for the six specific assumptions.
+**Built, unproven on hardware.** `IdentityGuard` implements the block and is
+unit-tested against a simulated fall-back to the Qualcomm blob, a driver from an
+unexpected family, a device with no `VkPhysicalDeviceDriverProperties`, and a run
+with no identity at all.
+
+`libadrenotools` is now vendored and compiles, and its four hook libraries are
+packaged into the APK. Vendoring it also settled two of the assumptions this file
+used to carry and exposed a bug: `hookLibDir` was being passed a scratch directory
+when it must be `nativeLibraryDir`, which per the library's own header returns a
+valid pointer and then silently falls back to the system driver — the exact failure
+P1 exists to prevent. Fixed, and the app now refuses an empty value before calling.
+
+What remains is a single run on an Odin2: whether the hook takes at API 33, and
+whether the loaded ICD answers `vkEnumeratePhysicalDevices`. See
+[DRIVER_LOADING.md](DRIVER_LOADING.md).
 
 ## Phase 1 — harness and null test
 

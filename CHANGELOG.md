@@ -40,6 +40,8 @@ carried forward; it remains in git history and on `main`.
 - `:app` — Compose UI in three taps, with the run isolated in the `:bench` process.
 - Repository side — issue form, ingestion workflow, plausibility checks, and a
   static leaderboard on GitHub Pages.
+- `libadrenotools` vendored as a submodule pinned to `8fae8ce`, with its four hook
+  libraries built for arm64 and packaged into the APK.
 - On-device diagnostics — a rotating log under
   `Android/data/<package>/files/logs`, written per process and flushed line by line,
   plus an uncaught-exception handler that records the stack trace and the last lines
@@ -49,6 +51,15 @@ carried forward; it remains in git history and on `main`.
   in, because a log meant to be shared must never be holding one.
 
 ### Fixed
+
+- **The rootless hook was being pointed at the wrong directory.** `hookLibDir` was
+  passed a scratch path when `libadrenotools` requires `applicationInfo.nativeLibraryDir`
+  — the library creates a linker namespace over it and `dlopen`s its hooks from inside.
+  Its own header warns that a wrong path returns a valid pointer and then quietly falls
+  back to the system driver, which is the exact failure P1 exists to prevent. Found by
+  reading the header after vendoring the library rather than by trusting the earlier
+  guess. The directory now travels the whole chain and an empty value is refused before
+  the call.
 
 - **A finished run was lost to a value JSON cannot write.** The display refresh rate
   came back as `NaN` when the display could not be queried, and encoding the report

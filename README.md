@@ -141,10 +141,11 @@ Honest list, per section 15 of the spec. None of this has run on a GPU.
 
 - **Nothing has been executed on hardware.** All 217 tests are unit tests. The
   Vulkan code compiles for arm64 and the APK builds; no frame has been rendered.
-- **`libadrenotools` integration is unrun.** Six specific assumptions about it are
-  listed in [docs/DRIVER_LOADING.md](docs/DRIVER_LOADING.md), including the
-  argument semantics of `adrenotools_open_libvulkan` and whether the linker
-  namespace hook works at minSdk 30.
+- **`libadrenotools` compiles and packages, but has never loaded a driver.** The
+  hook libraries reach the APK and the argument order matches the vendored header;
+  whether the hook takes on Android 13 and whether the loaded ICD answers is what a
+  single run on an Odin2 would settle. Six assumptions remain in
+  [docs/DRIVER_LOADING.md](docs/DRIVER_LOADING.md).
 - **The null test's acceptance criterion is met in simulation only.** Ten
   consecutive A/A ties pass against simulated devices; whether a real Odin2 Portal
   holds still enough is exactly what the null test is for, and it has not run.

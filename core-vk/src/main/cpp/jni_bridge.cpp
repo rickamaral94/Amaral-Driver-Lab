@@ -79,16 +79,16 @@ Java_com_amaral_driverlab_vk_NativeVulkan_nativeOpen(JNIEnv* env,
                                                      jboolean systemDriver,
                                                      jstring libraryDirectory,
                                                      jstring libraryName,
-                                                     jstring temporaryDirectory,
+                                                     jstring nativeLibraryDirectory,
                                                      jboolean enableValidation,
                                                      jobjectArray outStatus) {
     const std::string directory = toStdString(env, libraryDirectory);
     const std::string name = toStdString(env, libraryName);
-    const std::string temporary = toStdString(env, temporaryDirectory);
+    const std::string nativeLibraries = toStdString(env, nativeLibraryDirectory);
 
     amaral::IcdLoadResult load = systemDriver == JNI_TRUE
             ? amaral::openSystemLoader()
-            : amaral::openPackagedDriver(directory, name, temporary);
+            : amaral::openPackagedDriver(directory, name, nativeLibraries);
 
     if (!load.ok) {
         env->SetObjectArrayElement(

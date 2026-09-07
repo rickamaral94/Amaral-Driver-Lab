@@ -38,13 +38,16 @@ IcdLoadResult openSystemLoader();
 /**
  * Opens an imported driver package without root.
  *
- * @param libraryDirectory directory the package was unpacked into
+ * @param libraryDirectory directory the package was unpacked into. Must be on internal
+ *   storage: dlopen refuses a library any other app could have tampered with.
  * @param libraryName file name of the ICD inside it
- * @param temporaryDirectory writable scratch the hook may use
+ * @param nativeLibraryDirectory the app's own nativeLibraryDir, where the hook libraries
+ *   shipped in the APK were extracted. The hook is dlopened out of a linker namespace
+ *   created over this path, so anything else silently disables it.
  */
 IcdLoadResult openPackagedDriver(const std::string& libraryDirectory,
                                  const std::string& libraryName,
-                                 const std::string& temporaryDirectory);
+                                 const std::string& nativeLibraryDirectory);
 
 void closeIcd(IcdHandle& handle);
 

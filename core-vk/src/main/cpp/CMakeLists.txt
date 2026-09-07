@@ -63,9 +63,10 @@ add_custom_target(shaders DEPENDS ${SHADER_HEADERS})
 # the system driver remains testable and no code path silently pretends to have
 # loaded a package.
 # ---------------------------------------------------------------------------
-set(ADRENOTOOLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/libadrenotools")
+# This file lives at core-vk/src/main/cpp, so the repository root is four levels up.
+set(ADRENOTOOLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/libadrenotools")
 if(EXISTS "${ADRENOTOOLS_DIR}/CMakeLists.txt")
-    message(STATUS "libadrenotools found; rootless ICD loading enabled")
+    message(STATUS "libadrenotools found at ${ADRENOTOOLS_DIR}; rootless ICD loading enabled")
     add_subdirectory("${ADRENOTOOLS_DIR}" adrenotools_build)
     set(ADRENOTOOLS_AVAILABLE ON)
 else()

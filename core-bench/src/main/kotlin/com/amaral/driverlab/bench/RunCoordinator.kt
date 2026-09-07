@@ -60,9 +60,14 @@ public class RunCoordinator(
     private val guard: IdentityGuard = IdentityGuard(),
 ) {
 
+    /**
+     * @param nativeLibraryDirectory the app's own `applicationInfo.nativeLibraryDir`. The
+     *   rootless hook is dlopened from there; see [LoadRequest.nativeLibraryDirectory].
+     */
     public suspend fun execute(
         plan: BenchmarkPlan,
         temporaryDirectory: java.io.File,
+        nativeLibraryDirectory: java.io.File,
         onProgress: (RunProgress) -> Unit = {},
     ): BenchmarkOutcome {
         val machine = RunnerStateMachine()
@@ -99,6 +104,7 @@ public class RunCoordinator(
                     source = DriverSource.SYSTEM,
                     libraryDirectory = null,
                     libraryName = null,
+                    nativeLibraryDirectory = nativeLibraryDirectory,
                     temporaryDirectory = temporaryDirectory,
                 )
 
@@ -108,6 +114,7 @@ public class RunCoordinator(
                     libraryDirectory = java.io.File(driver.installDirectory),
                     libraryName = driver.libraryName,
                     libraryChecksum = driver.libraryChecksum,
+                    nativeLibraryDirectory = nativeLibraryDirectory,
                     temporaryDirectory = temporaryDirectory,
                 )
             }

@@ -26,7 +26,18 @@ public data class LoadRequest(
      * bytes that ran. Empty for [DriverSource.SYSTEM], which has no file to hash.
      */
     val libraryChecksum: String? = null,
-    /** Writable scratch directory the loader may use for its own temporary files. */
+    /**
+     * The app's own `applicationInfo.nativeLibraryDir`.
+     *
+     * Not a scratch directory: the rootless hook creates a linker namespace over this path
+     * and dlopens its hook libraries out of it, so it has to be where the APK's native
+     * libraries were actually extracted. Getting it wrong does not fail loudly — the hook
+     * silently gives up and the system driver answers instead, which is the exact failure
+     * this project exists to prevent.
+     */
+    val nativeLibraryDirectory: File,
+
+    /** Writable scratch directory. Unused above API 29, where the loader uses memfd. */
     val temporaryDirectory: File,
     /** Enables VK_LAYER_KHRONOS_validation. Diagnostic only — never set for a ranking run. */
     val enableValidationLayer: Boolean = false,

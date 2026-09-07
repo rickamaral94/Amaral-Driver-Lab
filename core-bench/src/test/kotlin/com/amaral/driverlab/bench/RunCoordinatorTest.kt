@@ -107,7 +107,7 @@ class RunCoordinatorTest {
         val benchPlan = plan(runsPerArm = 3)
         val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
 
-        val outcome = RunCoordinator(host).execute(benchPlan, temporaryFolder.newFolder())
+        val outcome = RunCoordinator(host).execute(benchPlan, temporaryFolder.newFolder(), temporaryFolder.newFolder())
 
         assertEquals(RunnerState.DONE, outcome.finalState)
         assertTrue(outcome.completed)
@@ -120,7 +120,7 @@ class RunCoordinatorTest {
     @Test
     fun `every driver session is closed, including on the happy path`() = runTest {
         val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
-        RunCoordinator(host).execute(plan(), temporaryFolder.newFolder())
+        RunCoordinator(host).execute(plan(), temporaryFolder.newFolder(), temporaryFolder.newFolder())
         assertTrue(host.sessions.isNotEmpty())
         assertTrue("a leaked session keeps a driver loaded into the next arm", host.sessions.all { it.closed })
     }
@@ -128,7 +128,7 @@ class RunCoordinatorTest {
     @Test
     fun `arms are counterbalanced, not simply alternated`() = runTest {
         val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
-        val outcome = RunCoordinator(host).execute(plan(runsPerArm = 4), temporaryFolder.newFolder())
+        val outcome = RunCoordinator(host).execute(plan(runsPerArm = 4), temporaryFolder.newFolder(), temporaryFolder.newFolder())
         assertEquals(
             listOf(Arm.A, Arm.B, Arm.B, Arm.A, Arm.A, Arm.B, Arm.B, Arm.A),
             outcome.records.map { it.slot.arm },
@@ -139,7 +139,7 @@ class RunCoordinatorTest {
     fun `a cooldown separates every arm but the last`() = runTest {
         val benchPlan = plan(runsPerArm = 3)
         val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
-        RunCoordinator(host).execute(benchPlan, temporaryFolder.newFolder())
+        RunCoordinator(host).execute(benchPlan, temporaryFolder.newFolder(), temporaryFolder.newFolder())
         assertEquals(benchPlan.schedule.size - 1, host.cooldowns)
     }
 
@@ -151,7 +151,7 @@ class RunCoordinatorTest {
                 FakeSession(identity(VkDriverId.QUALCOMM_PROPRIETARY)) { completed(it, 16_000_000) },
             )
         }
-        val outcome = RunCoordinator(host).execute(plan(), temporaryFolder.newFolder())
+        val outcome = RunCoordinator(host).execute(plan(), temporaryFolder.newFolder(), temporaryFolder.newFolder())
 
         assertEquals(RunnerState.FAILED, outcome.finalState)
         assertFalse(outcome.completed)
@@ -162,7 +162,7 @@ class RunCoordinatorTest {
     @Test
     fun `a driver that will not load ends the run with the loader's reason`() = runTest {
         val host = FakeHost { DriverSessionResult.Failed("HOOK_UNAVAILABLE", "no libadrenotools") }
-        val outcome = RunCoordinator(host).execute(plan(), temporaryFolder.newFolder())
+        val outcome = RunCoordinator(host).execute(plan(), temporaryFolder.newFolder(), temporaryFolder.newFolder())
 
         assertEquals(RunnerState.FAILED, outcome.finalState)
         assertEquals("HOOK_UNAVAILABLE", outcome.failures.single().stage)
@@ -187,7 +187,7 @@ class RunCoordinatorTest {
             )
         }
         val benchPlan = plan(runsPerArm = 3)
-        val outcome = RunCoordinator(host).execute(benchPlan, temporaryFolder.newFolder())
+        val outcome = RunCoordinator(host).execute(benchPlan, temporaryFolder.newFolder(), temporaryFolder.newFolder())
 
         assertEquals(RunnerState.DONE, outcome.finalState)
         assertEquals(benchPlan.totalExecutions - 1, outcome.records.size)
@@ -206,7 +206,7 @@ class RunCoordinatorTest {
                 },
             )
         }
-        val outcome = RunCoordinator(host).execute(plan(), temporaryFolder.newFolder())
+        val outcome = RunCoordinator(host).execute(plan(), temporaryFolder.newFolder(), temporaryFolder.newFolder())
         assertTrue(outcome.records.isEmpty())
         assertTrue(outcome.failures.all { it.stage == "NO_FRAMES" })
     }
@@ -214,7 +214,7 @@ class RunCoordinatorTest {
     @Test
     fun `the raw series survives into the record, not just the summary`() = runTest {
         val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
-        val outcome = RunCoordinator(host).execute(plan(), temporaryFolder.newFolder())
+        val outcome = RunCoordinator(host).execute(plan(), temporaryFolder.newFolder(), temporaryFolder.newFolder())
         val record = outcome.records.first()
         assertEquals(20, record.frametimesNs.size)
         assertEquals(20, record.summary.frameCount)
@@ -232,7 +232,7 @@ class RunCoordinatorTest {
                 },
             )
         }
-        val outcome = RunCoordinator(host).execute(plan(runsPerArm = 3), temporaryFolder.newFolder())
+        val outcome = RunCoordinator(host).execute(plan(runsPerArm = 3), temporaryFolder.newFolder(), temporaryFolder.newFolder())
         assertTrue(
             "a driver that renders differently each run must not look consistent",
             outcome.imageHashesFor(Arm.A, WorkloadIds.BASELINE).size > 1,
@@ -243,7 +243,7 @@ class RunCoordinatorTest {
     fun `the transition history records the whole run`() = runTest {
         val outcome = RunCoordinator(
             FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) },
-        ).execute(plan(runsPerArm = 2), temporaryFolder.newFolder())
+        ).execute(plan(runsPerArm = 2), temporaryFolder.newFolder(), temporaryFolder.newFolder())
 
         assertEquals(RunnerState.IDLE, outcome.transitions.first().from)
         assertEquals(RunnerState.DONE, outcome.transitions.last().to)
@@ -258,7 +258,7 @@ class RunCoordinatorTest {
     @Test
     fun `an imported package carries its location into the load request`() = runTest {
         val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
-        RunCoordinator(host).execute(plan(), temporaryFolder.newFolder())
+        RunCoordinator(host).execute(plan(), temporaryFolder.newFolder(), temporaryFolder.newFolder())
 
         val request = host.requests.first()
         assertEquals(DriverSource.IMPORTED_PACKAGE, request.source)
@@ -273,7 +273,7 @@ class RunCoordinatorTest {
             a = ArmDefinition(Arm.A, RequestedDriver.System, "System driver"),
         )
         val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
-        RunCoordinator(host).execute(systemPlan, temporaryFolder.newFolder())
+        RunCoordinator(host).execute(systemPlan, temporaryFolder.newFolder(), temporaryFolder.newFolder())
 
         val request = host.requests.first { it.source == DriverSource.SYSTEM }
         assertNull(request.libraryDirectory)
@@ -290,10 +290,25 @@ class RunCoordinatorTest {
             ),
         )
         val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
-        val outcome = RunCoordinator(host).execute(incomplete, temporaryFolder.newFolder())
+        val outcome = RunCoordinator(host).execute(incomplete, temporaryFolder.newFolder(), temporaryFolder.newFolder())
 
         assertEquals(RunnerState.FAILED, outcome.finalState)
         assertEquals("PACKAGE_LOCATION_MISSING", outcome.failures.single().stage)
         assertTrue("the loader must not be asked to open nothing", host.requests.isEmpty())
+    }
+
+    /**
+     * The rootless hook is dlopened out of a linker namespace created over this directory,
+     * and libadrenotools' own header warns that a wrong path still returns a valid pointer
+     * and then quietly falls back to the system driver — the exact failure P1 exists for.
+     */
+    @Test
+    fun `the native library directory reaches the loader`() = runTest {
+        val nativeLibraries = temporaryFolder.newFolder("nativeLibs")
+        val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
+        RunCoordinator(host).execute(plan(), temporaryFolder.newFolder(), nativeLibraries)
+
+        assertTrue(host.requests.isNotEmpty())
+        assertTrue(host.requests.all { it.nativeLibraryDirectory == nativeLibraries })
     }
 }

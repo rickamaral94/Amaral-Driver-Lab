@@ -112,6 +112,10 @@ class BenchmarkService : Service() {
                 ).execute(
                     plan = plan,
                     temporaryDirectory = File(cacheDir, "bench").apply { mkdirs() },
+                    // Where the APK's native libraries were extracted. The rootless hook is
+                    // dlopened out of a linker namespace over this path, so it cannot be
+                    // substituted with a scratch directory.
+                    nativeLibraryDirectory = File(applicationInfo.nativeLibraryDir),
                     onProgress = { progress ->
                         send(
                             MSG_PROGRESS,

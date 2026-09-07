@@ -36,7 +36,7 @@ internal object NativeVulkan {
         systemDriver: Boolean,
         libraryDirectory: String?,
         libraryName: String?,
-        temporaryDirectory: String,
+        nativeLibraryDirectory: String,
         enableValidation: Boolean,
         outStatus: Array<String?>,
     ): Long
