@@ -74,6 +74,41 @@ Two changes fix it:
 `plain alternation still leaves a one-sided ordering effect` and `counterbalanced order survives
 the same drift` are the two tests that pin this down.
 
+## Finding 4: the noise is not noise, it is two DVFS bins
+
+Findings 1 to 3 came from simulation. This one came off an AYN Odin2 Portal (Adreno 740), and it
+is the reason the rest of this document matters.
+
+Ten runs of `baseline/v1`, same Turnip build on both arms, same thermal session, in order:
+
+```
+5.78  5.78  6.39  5.78  5.78  6.39  5.78  6.39  6.39  6.39  ms
+```
+
+Two values. Not a spread around a centre — two. The GPU settles into one of two DVFS steps and
+the median frametime snaps to whichever it picked, and the picks drift from the fast bin to the
+slow one as the session heats up. The two bins are 10.6% apart.
+
+Three consequences:
+
+- **A/A on this device produces a ~10% apparent difference from nothing at all.** Under the
+  counterbalanced schedule the early slots skew to the fast bin, so one arm's median lands at
+  5.78 and the other's at 6.39, and the harness reports a driver beating itself by 10.6%. This is
+  the null test's job and it is not a hypothetical: this device, today, is close to failing it.
+  That is the correct outcome, not a defect to tune away.
+- **An absolute score would be worthless.** The same driver, same device, same session, same
+  workload scores 10.6% apart depending on a clock bin. Across devices, with different SoC bins,
+  thermal designs and governors, a raw score ranks the phone and its cooling, not the driver.
+  A paired comparison survives because both arms sit inside the same drift.
+- **Averaging more frames does not help.** The variation is between runs, not within them —
+  every frame in a run sits in the same bin. Only more *runs*, spread across the session, sample
+  the bins fairly. This is the same reason a run, not a frame, is the unit of comparison.
+
+The A/B measurement on the same log survives it: Turnip's slowest bin (6.39) still beats the
+Qualcomm driver's stable 7.57 by 15.6%, and its fast bin by 23.6% — comfortably outside the
+10.6% the device manufactures on its own. A difference smaller than that is not measurable here,
+which is exactly what the calibrated floor is for.
+
 ## What passing the null test means
 
 `NullTestResult.passed` requires all four of:

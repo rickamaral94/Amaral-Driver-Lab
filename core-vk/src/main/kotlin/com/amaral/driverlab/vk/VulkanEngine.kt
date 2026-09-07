@@ -70,14 +70,22 @@ public data class WorkloadSpec(
             drawsPerFrame = 192,
         )
 
-        /** Workload 2: binning and GMEM decisions, the classic Turnip regression vector. */
+        /**
+         * Workload 2: binning and GMEM decisions, the classic Turnip regression vector.
+         *
+         * The counts come from what the device reported, not from an estimate. At 900 frames
+         * of 8 draws this produced 1.45 s of GPU time against baseline's 10.9 s, so it kept
+         * failing [MINIMUM_USEFUL_GPU_NANOS] while baseline passed — the first scaling pass
+         * raised the frame count and left the per-frame cost where it was. Binning work is
+         * what this workload exists to measure, so the draws are what grows.
+         */
         public fun tilingGmem(): WorkloadSpec = WorkloadSpec(
             workloadId = WorkloadIds.TILING_GMEM,
             width = 1920,
             height = 1080,
-            frameCount = 900,
-            warmupFrames = 60,
-            drawsPerFrame = 8,
+            frameCount = 1200,
+            warmupFrames = 80,
+            drawsPerFrame = 56,
             trianglesPerDraw = 3072,
         )
     }
