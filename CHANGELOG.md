@@ -20,6 +20,13 @@ carried forward; it remains in git history and on `main`.
 - Published as [`schema/result-v1.schema.json`](schema/result-v1.schema.json), and
   validated in CI against payloads the app's own serializer produced.
 
+### Fixed
+
+- **The per-execution log line now carries the temperature.** The app had the number and was
+  already showing it on the progress screen, and it stopped there — so working out why a
+  device's medians moved meant inferring thermal state from which frequency step they snapped
+  to. That inference is how finding 5's "cold ramp-up" reading got the direction backwards.
+
 ### Changed
 
 - **The null test is one cross-validated pool of ten comparisons, not ten to calibrate plus

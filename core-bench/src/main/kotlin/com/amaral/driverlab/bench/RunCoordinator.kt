@@ -191,11 +191,21 @@ public class RunCoordinator(
                                     )
                                 } else {
                                     val summary = FrametimeSummary.of(series)
+                                    val after = host.sampleTelemetry()
+                                    // The temperature belongs on this line. It reaches the
+                                    // progress screen and stopped there, so a log had to be
+                                    // read backwards — inferring thermal state from which
+                                    // frequency step the medians snapped to — to find out that
+                                    // a cold device is the fast one and this device never
+                                    // settles within a run. That should not have needed
+                                    // inferring from a file that had the number in hand.
                                     DiagnosticLog.i(
                                         TAG,
                                         "${execution.workload.workloadId}: ${series.size} frames, " +
                                             "${summary.totalDurationNs / 1_000_000} ms of GPU time, " +
-                                            "median ${"%.2f".format(summary.medianNs / 1_000_000)} ms" +
+                                            "median ${"%.2f".format(summary.medianNs / 1_000_000)} ms, " +
+                                            (after.representativeCelsius?.let { "%.1f C".format(it) }
+                                                ?: "temperature unavailable") +
                                             if (summary.totalDurationNs < WorkloadSpec.MINIMUM_USEFUL_GPU_NANOS) {
                                                 " — TOO BRIEF to separate drivers"
                                             } else {
@@ -214,7 +224,7 @@ public class RunCoordinator(
                                         imageSha256 = result.run.imageSha256,
                                         summary = summary,
                                         telemetryBefore = before,
-                                        telemetryAfter = host.sampleTelemetry(),
+                                        telemetryAfter = after,
                                     )
                                 }
                             }

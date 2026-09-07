@@ -120,8 +120,10 @@ The run medians landed on **four** discrete values, not the two finding 4 saw:
 6.12 (×3)   6.77 (×32)   7.57 (×107)   8.76 (×8)        extremes 43% apart
 ```
 
-Seven of the eight `8.76` runs are in the first four minutes: that bin is the GPU's cold
-ramp-up, not thermal throttling, and it is an artifact of starting to measure immediately.
+Seven of the eight `8.76` runs are in the first four minutes, which read at the time like a
+cold ramp-up. **That was backwards, and finding 8 has the evidence.** The device had been
+running for the previous fifty-seven minutes; it started that session hot, and `8.76` is the
+throttled step, not a cold one.
 
 Of the five calibration comparisons, four came back at *exactly* 1.0000 — both arms in the
 `7.57` bin — and one straddled, arm A at `6.77` against arm B at `7.57`, for a ratio of
@@ -153,9 +155,10 @@ toss of a coin is not an estimate.
 > still the right one, for a reason that only became visible later: it is the monotonicity
 > `max` provides, not the stability, that earns its place.
 
-So calibration now spends ten comparisons rather than five, and the run begins with a warm-up
-comparison whose results are discarded, because measuring the GPU's ramp-up and calling it
-the device's resolution is the same mistake as timing a workload's first frame.
+So calibration spends more comparisons than five, and the run begins with a comparison whose
+results are discarded. **The reason given for that discard was wrong** — see finding 8 — and
+whether it earns its place for a different reason is an open question rather than a settled
+one.
 
 ## Finding 6: the expensive part cannot be resampled away, but it can be abandoned early
 
@@ -223,6 +226,46 @@ alternatives were measured against a known-biased protocol before one was chosen
 The other price is a slightly higher false block: a clean device passes 93.5% of the time
 against roughly 95% before. A blocked device can re-run; a falsely passed one pollutes a public
 leaderboard, so that asymmetry is the right way round.
+
+## Finding 8: a cold device is the fast one, and this one never settles
+
+Three more null tests on the same Odin2, back to back, and the shape only becomes visible when
+the runs are read against how long the device had been idle beforehand:
+
+```
+run     idle before   n    first 10   last 10    drift
+10:30             —  122     6.88 ms   7.20 ms    +4.7%
+11:27         0 min  150     8.40 ms   7.41 ms   -11.8%
+13:22        44 min   68     6.96 ms   8.28 ms   +19.0%
+13:55         1 min   12     8.20 ms   7.79 ms    -5.0%
+14:00         1 min   20     7.35 ms   7.25 ms    -1.3%
+```
+
+The 13:22 run had the device to itself for forty-four minutes first. It starts in the fastest
+bin the hardware ever produced and climbs steadily for thirty-two minutes without levelling
+off. Every run that began within a minute of the previous one starts slow instead.
+
+So **cold is fast and hot is slow**, which is ordinary thermal throttling and the opposite of
+what finding 5 concluded. The 11:27 run looked like a cold ramp-up because its first four
+minutes were slow; it was not cold at all — it began the moment a fifty-seven minute run
+ended. What that reading cost is a design decision: the warm-up comparison was added to
+discard a ramp-up that does not exist. It may still be worth keeping, because starting cold
+means the first comparisons of a pool are fast and the last are slow, which is the drift
+counterbalancing is fighting. But ten executions is nowhere near enough to reach a steady
+state on a device that is still climbing at thirty-two minutes, so what it currently buys is
+unclear and it is flagged rather than defended.
+
+The larger finding is that **this device does not reach thermal equilibrium inside a null
+test at all**. A 19% drift across one run dwarfs the 10.6% between the DVFS bins, and it means
+each comparison's dispersion depends on where in the session it happened to sit. Counter-
+balancing handles drift inside a comparison; nothing handles a session-long ramp except
+running shorter or waiting longer, and both are the user's time.
+
+There is also a smaller lesson about instrumentation. All of the above had to be inferred
+from *which frequency step the medians snapped to*, because the per-execution log line carried
+frames, GPU time and the median but not the temperature — a number the app had in hand and
+was already showing on the progress screen. It is on the log line now. An hour of reading a
+file backwards is what a missing field costs.
 
 ## What passing the null test means
 
