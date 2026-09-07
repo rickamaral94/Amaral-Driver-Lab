@@ -16,9 +16,14 @@ import androidx.core.app.NotificationCompat
 import com.amaral.driverlab.bench.Arm
 import com.amaral.driverlab.bench.ArmDefinition
 import com.amaral.driverlab.bench.BenchmarkPlan
+import com.amaral.driverlab.bench.BenchmarkOutcome
+import com.amaral.driverlab.report.ArmPair
+import com.amaral.driverlab.report.NullTestRecord
+import com.amaral.driverlab.report.NullTestStore
 import com.amaral.driverlab.report.ReportBuilder
 import com.amaral.driverlab.report.ReportJson
 import com.amaral.driverlab.report.SessionInfo
+import com.amaral.driverlab.report.WorkloadArms
 import com.amaral.driverlab.telemetry.PreflightReport
 import com.amaral.driverlab.telemetry.DiagnosticLog
 import com.amaral.driverlab.telemetry.TelemetryCollector
@@ -92,16 +97,17 @@ class BenchmarkService : Service() {
         DiagnosticLog.i(
             TAG,
             "run requested: ${request.armA.label} vs ${request.armB.label}, " +
-                "preflightOverridden=$preflightOverridden",
+                "preflightOverridden=$preflightOverridden" +
+                (request.nullTest?.let { ", null test of ${it.totalComparisons} A/A comparisons" } ?: ""),
         )
         acquireWakeLock()
+        request.nullTest?.let { return startNullTest(request, it) }
         val plan = BenchmarkPlan(
             a = ArmDefinition(Arm.A, request.armA.toRequestedDriver(), request.armA.label),
             b = ArmDefinition(Arm.B, request.armB.toRequestedDriver(), request.armB.label),
             workloads = request.workloads.map { it.toSpec() },
             runsPerArm = request.runsPerArm,
             comparisonIndex = request.comparisonIndex,
-            isNullTest = request.isNullTest,
         )
 
         scope.launch {
@@ -136,9 +142,29 @@ class BenchmarkService : Service() {
                     },
                 )
 
+                val snapshot = withContext(Dispatchers.IO) { telemetry.snapshot() }
+                // What this device proved about itself, re-derived from the stored A/A series
+                // rather than trusted from a stored verdict. Null when it has never run the
+                // test, or ran it on a profile that does not cover these workloads — both of
+                // which leave the ranking gate closed.
+                val verdict = NullTestStore(File(filesDir, STATE_DIRECTORY))
+                    .read(snapshot.buildFingerprint)
+                    ?.resultFor(plan.workloads.map { it.workloadId })
+                DiagnosticLog.i(
+                    TAG,
+                    "null test for this profile: " +
+                        when {
+                            verdict == null -> "none on record"
+                            verdict.passed -> "passed, floors " + verdict.perWorkload.entries.joinToString {
+                                "${it.key} ${"%.1f".format(it.value.appliedNoiseFloor * 100)}%"
+                            }
+                            else -> "failed, ranking stays blocked"
+                        },
+                )
+
                 ReportBuilder(appVersion = versionName()).build(
                     outcome = outcome,
-                    device = withContext(Dispatchers.IO) { telemetry.snapshot() },
+                    device = snapshot,
                     preflight = PreflightReport(issues = emptyList(), overridden = preflightOverridden),
                     session = SessionInfo(
                         id = UUID.randomUUID().toString(),
@@ -146,7 +172,9 @@ class BenchmarkService : Service() {
                         startedAtEpochMs = System.currentTimeMillis(),
                         runnerFinalState = outcome.finalState.name,
                     ),
-                    nullTestResult = null,
+                    nullTestResult = verdict?.weakest(),
+                    noiseFloors = verdict?.perWorkload.orEmpty()
+                        .mapValues { it.value.appliedNoiseFloor },
                 )
             }
 
@@ -180,6 +208,132 @@ class BenchmarkService : Service() {
                     BenchCompletion(ok = false, error = it.message ?: it::class.java.name)
                 },
             )
+            send(MSG_COMPLETE, KEY_COMPLETION, json.encodeToString(BenchCompletion.serializer(), completion))
+            stopSelf()
+        }
+    }
+
+    /**
+     * Runs the A/A sequence and stores what it measured.
+     *
+     * Each comparison is its own plan with its own `comparisonIndex`, because that is what
+     * flips the leading arm between comparisons — running fifteen copies of an identical
+     * plan would reintroduce the ordering effect the counterbalancing exists to remove.
+     *
+     * Nothing here decides whether the device passed. The run medians go to the store and
+     * the verdict is derived from them on every read, so a stored file can never grant a
+     * ranking the measurements do not support.
+     */
+    private fun startNullTest(request: BenchRequest, spec: NullTestSpec) {
+        val driver = request.armA.toRequestedDriver()
+        val workloads = request.workloads.map { it.toSpec() }
+
+        scope.launch {
+            val telemetry = TelemetryCollector(applicationContext)
+            val completion = runCatching {
+                val perComparison = mutableListOf<BenchmarkOutcome>()
+                val perPlanExecutions = BenchmarkPlan.nullTest(
+                    driver = driver,
+                    label = request.armA.label,
+                    workloads = workloads,
+                    runsPerArm = request.runsPerArm,
+                ).totalExecutions
+                val totalExecutions = perPlanExecutions * spec.totalComparisons
+
+                for (comparison in 0 until spec.totalComparisons) {
+                    val phase = if (comparison < spec.calibrationComparisons) "calibration" else "A/A"
+                    val plan = BenchmarkPlan.nullTest(
+                        driver = driver,
+                        label = request.armA.label,
+                        workloads = workloads,
+                        runsPerArm = request.runsPerArm,
+                        comparisonIndex = comparison,
+                    )
+                    DiagnosticLog.i(
+                        TAG,
+                        "null test $phase ${comparison + 1} of ${spec.totalComparisons}",
+                    )
+                    val done = comparison * perPlanExecutions
+                    val outcome = com.amaral.driverlab.bench.RunCoordinator(
+                        AndroidBenchHost(applicationContext, telemetry),
+                    ).execute(
+                        plan = plan,
+                        temporaryDirectory = File(cacheDir, "bench").apply { mkdirs() },
+                        nativeLibraryDirectory = File(applicationInfo.nativeLibraryDir),
+                        onProgress = { progress ->
+                            val label = getString(
+                                R.string.null_test_progress,
+                                comparison + 1,
+                                spec.totalComparisons,
+                            )
+                            send(
+                                MSG_PROGRESS,
+                                KEY_PROGRESS,
+                                json.encodeToString(
+                                    BenchProgress.serializer(),
+                                    BenchProgress(
+                                        state = progress.state.name,
+                                        executionsDone = done + progress.executionsDone,
+                                        executionsTotal = totalExecutions,
+                                        label = label,
+                                        workloadId = progress.currentWorkloadId,
+                                        peakCelsius = progress.latestTelemetry?.peakZoneCelsius,
+                                    ),
+                                ),
+                            )
+                            updateNotification(label, done + progress.executionsDone, totalExecutions)
+                        },
+                    )
+                    // A comparison that did not complete is dropped rather than padded. The
+                    // null test then reports itself incomplete, which is the truth: fewer
+                    // than ten consecutive ties is not a pass.
+                    if (outcome.completed) {
+                        perComparison += outcome
+                    } else {
+                        DiagnosticLog.e(
+                            TAG,
+                            "null test comparison ${comparison + 1} ended in ${outcome.finalState}, dropped",
+                        )
+                    }
+                }
+
+                val snapshot = withContext(Dispatchers.IO) { telemetry.snapshot() }
+                val record = NullTestRecord(
+                    deviceFingerprint = snapshot.buildFingerprint,
+                    driverSha256 = request.armA.libraryChecksum,
+                    driverLabel = request.armA.label,
+                    appVersion = versionName(),
+                    completedAtEpochMs = System.currentTimeMillis(),
+                    runsPerArm = request.runsPerArm,
+                    perWorkload = workloads.map { workload ->
+                        val arms = perComparison.map { outcome ->
+                            ArmPair(
+                                first = outcome.runMediansFor(Arm.A, workload.workloadId).toList(),
+                                second = outcome.runMediansFor(Arm.B, workload.workloadId).toList(),
+                            )
+                        }
+                        WorkloadArms(
+                            workloadId = workload.workloadId,
+                            calibration = arms.take(spec.calibrationComparisons),
+                            test = arms.drop(spec.calibrationComparisons),
+                        )
+                    },
+                )
+                NullTestStore(File(filesDir, STATE_DIRECTORY)).write(record)
+                DiagnosticLog.i(
+                    TAG,
+                    "null test stored: ${perComparison.size} of ${spec.totalComparisons} " +
+                        "comparisons completed, " +
+                        record.evaluate().entries.joinToString("; ") { (id, result) ->
+                            "$id ${if (result.passed) "passed" else "failed"}"
+                        },
+                )
+                BenchCompletion(ok = true, nullTest = true)
+            }.getOrElse {
+                DiagnosticLog.e(TAG, "null test threw", it)
+                BenchCompletion(ok = false, nullTest = true, error = it.message ?: it::class.java.name)
+            }
+
             send(MSG_COMPLETE, KEY_COMPLETION, json.encodeToString(BenchCompletion.serializer(), completion))
             stopSelf()
         }
@@ -265,6 +419,13 @@ class BenchmarkService : Service() {
         const val KEY_PROGRESS = "progress"
         const val KEY_COMPLETION = "completion"
         const val KEY_PREFLIGHT_OVERRIDDEN = "preflightOverridden"
+
+        /**
+         * Where state that outlives a run lives, under the app's own files directory.
+         * Both processes read it: `:bench` writes the null test record, the UI reads it
+         * back to decide whether a comparison may be ranked.
+         */
+        const val STATE_DIRECTORY = "state"
 
         private const val NOTIFICATION_ID = 4201
         private const val WAKE_LOCK_TAG = "AmaralDriverLab:benchmark"

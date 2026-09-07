@@ -19,8 +19,28 @@ data class BenchRequest(
     val workloads: List<WorkloadRef>,
     val runsPerArm: Int,
     val comparisonIndex: Int = 0,
-    val isNullTest: Boolean = false,
+    /**
+     * Present when this is an A/A null test rather than a comparison. Both arms then carry
+     * the same driver and the runner performs a whole sequence of comparisons rather than
+     * one, because a single A/A comparison proves nothing: the test is that *ten* of them
+     * in a row come back as ties.
+     */
+    val nullTest: NullTestSpec? = null,
 )
+
+/**
+ * How many A/A comparisons the runner should perform, and how they split.
+ *
+ * Calibration measures the device's resolution and the test judges against it, on
+ * different runs. Sharing runs between the two would make the test pass by construction.
+ */
+@Serializable
+data class NullTestSpec(
+    val calibrationComparisons: Int,
+    val testComparisons: Int,
+) {
+    val totalComparisons: Int get() = calibrationComparisons + testComparisons
+}
 
 @Serializable
 data class DriverRef(
@@ -111,4 +131,10 @@ data class BenchCompletion(
     val reportPath: String = "",
     val error: String = "",
     val crashed: Boolean = false,
+    /**
+     * True when this was a null test. It produces no report: it writes its record to the
+     * shared store, and the UI re-derives the verdict from there rather than being told
+     * one over the wire.
+     */
+    val nullTest: Boolean = false,
 )

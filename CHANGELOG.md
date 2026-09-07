@@ -50,6 +50,39 @@ carried forward; it remains in git history and on `main`.
   so the app also shares the whole tree as a zip. GitHub tokens are redacted on the way
   in, because a log meant to be shared must never be holding one.
 
+### Added
+
+- **The null test can actually be run, so the ranking gate can actually open.** The A/A
+  statistics, the gate and its simulated criterion were all implemented, and nothing in the
+  app could reach them: `BenchmarkPlan.nullTest(...)` had no caller, the service passed
+  `nullTestResult = null` unconditionally, and there was nowhere to keep a result. P3 was
+  blocked by construction — no sequence of user actions unlocked it. There is now a
+  calibration step on the home screen, the runner performs the whole 5 + 10 comparison
+  sequence with the leading arm flipping between them, and the result is stored per device.
+- **Only the raw A/A run medians are stored, never the verdict.** The pass or fail is
+  re-derived on every read by the same code that produced it. A file that said `passed: true`
+  would be the authority on whether ranking is allowed, and a file is a thing that can be
+  edited; a file of measurements can only support the claim the measurements support. It is
+  the rule the ingestion pipeline applies to published reports, pointed at ourselves.
+- **The noise floor is measured and applied per workload.** A device is not equally able to
+  resolve every workload — a cheap one sits inside the frequency noise while an expensive one
+  clears it — so one global floor would over-claim on the noisy workload or under-claim on the
+  clean one. A measured floor may widen what the harness admits it can see, never sharpen it.
+- A calibration that does not cover the workloads of the selected profile reads as *unknown*
+  rather than as a pass. Ranking on a workload the device never ran against itself would be
+  exactly the claim the null test exists to refuse.
+
+### Changed
+
+- **The short profile is one workload instead of two.** Scaling the complete profile left
+  the quick one at frame counts that no longer clear `MINIMUM_USEFUL_GPU_NANOS` — 400 baseline
+  frames is about 2.3 s on an Adreno 740 — so every quick comparison would have come back
+  marked too brief to tell drivers apart. Half the frames of the workload that has actually
+  resolved a difference is a more useful short profile than two workloads that cannot.
+- A failing calibration blocks the *ranking*, not the measurement. Refusing to run at all
+  would leave a drifty device with no way to see its own numbers, and P3 asks for results
+  without a ranking, not for no results.
+
 ### Fixed
 
 - **The same Binder mistake, left standing in the other half of the app.** The

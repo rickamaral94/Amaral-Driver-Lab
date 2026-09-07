@@ -10,7 +10,6 @@
     <string name="home_run">Run benchmark</string>
     <string name="home_recent">Recent results</string>
     <string name="home_empty">No results yet. Import a driver and run the first benchmark.</string>
-    <string name="home_null_test_needed">This device has not passed a null test yet, so results will be shown without a ranking.</string>
 
     <string name="setup_title">What to compare</string>
     <string name="setup_import">Import driver (.zip)</string>
@@ -59,4 +58,19 @@
     <string name="home_share_logs">Share diagnostics</string>
     <string name="logs_none">No diagnostics have been recorded yet.</string>
     <string name="logs_location">Logs are written to Android/data/%1$s/files/logs. Since Android 11 most file managers cannot open that folder, so use this button.</string>
+    <string name="null_test_progress">Null test: comparison %1$d of %2$d</string>
+    <string name="home_null_test_run">Calibrate this device</string>
+    <string name="home_null_test_none">This device has never been calibrated, so results will be shown without a ranking.</string>
+    <string name="home_null_test_ok">Calibrated on %1$s. This device resolves %2$s.</string>
+    <string name="home_null_test_failed">Calibration failed on this device. Results are still measured, but nothing is ranked.</string>
+    <string name="home_null_test_stale_profile">The stored calibration does not cover the workloads in the selected profile, so this profile cannot be ranked.</string>
+    <string name="null_test_title">Calibrate this device</string>
+    <string name="null_test_explainer">The app runs one driver against itself and expects to find no difference. Any difference it does find was manufactured by this device — thermal drift, clock steps, background load — and sets the limit on what a real comparison can claim. Until that limit is known, results are shown but never ranked.</string>
+    <string name="null_test_cost">Fifteen comparisons at five runs per arm, on the workloads of the selected profile. There is no shorter honest version: the claim is ten consecutive ties, so ten is what gets measured. Keep the device unplugged, cool and idle, and expect this to take a while.</string>
+    <string name="null_test_driver">Run it on</string>
+    <string name="null_test_start">Start calibration</string>
+    <string name="null_test_passed">Calibration passed</string>
+    <string name="null_test_failed">Calibration failed</string>
+    <string name="null_test_floor">This device resolves differences of about %1$s or larger on %2$s.</string>
+    <string name="back">Back</string>
 </resources>

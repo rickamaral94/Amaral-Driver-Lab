@@ -36,6 +36,14 @@ public class ReportBuilder(
         preflight: PreflightReport,
         session: SessionInfo,
         nullTestResult: NullTestResult? = null,
+        /**
+         * The resolution the null test demonstrated **for each workload**, keyed by workload
+         * id. A device is not equally able to resolve every workload — a cheap one can sit
+         * inside the frequency noise while an expensive one clears it — so one global floor
+         * would either over-claim on the noisy workload or under-claim on the clean one.
+         * A workload absent from this map falls back to the gate's floor.
+         */
+        noiseFloors: Map<String, Double> = emptyMap(),
         warnings: List<ComparabilityWarning> = emptyList(),
         config: AbConfig = AbConfig(),
     ): BenchmarkReport {
@@ -83,6 +91,15 @@ public class ReportBuilder(
                 .filter { it.workload.workloadId == workloadId }
                 .any { it.summary.totalDurationNs < WorkloadSpec.MINIMUM_USEFUL_GPU_NANOS }
 
+            val workloadConfig = noiseFloors[workloadId]?.let { floor ->
+                // Never *narrower* than the gate's claim: a per-workload measurement may
+                // widen what the harness admits it can see, never sharpen it.
+                comparisonConfig.copy(
+                    minimumPracticalDifference =
+                        maxOf(comparisonConfig.minimumPracticalDifference, floor),
+                )
+            } ?: comparisonConfig
+
             val result = gate.stamp(
                 AbComparison.compare(
                     labelA = outcome.plan.a.label,
@@ -90,7 +107,7 @@ public class ReportBuilder(
                     a = a,
                     b = b,
                     lowerIsBetter = true,
-                    config = comparisonConfig,
+                    config = workloadConfig,
                 ),
             )
             result.toEntry(

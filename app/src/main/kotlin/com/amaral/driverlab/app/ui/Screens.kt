@@ -51,7 +51,12 @@ import kotlin.math.roundToInt
  * screen is one large button and a list of what has already been measured.
  */
 @Composable
-fun HomeScreen(state: UiState, onRun: () -> Unit, onShareLogs: () -> Unit) {
+fun HomeScreen(
+    state: UiState,
+    onRun: () -> Unit,
+    onCalibrate: () -> Unit,
+    onShareLogs: () -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -65,7 +70,31 @@ fun HomeScreen(state: UiState, onRun: () -> Unit, onShareLogs: () -> Unit) {
             Text(stringResource(R.string.home_run), style = MaterialTheme.typography.titleLarge)
         }
 
-        Note(stringResource(R.string.home_null_test_needed))
+        val nullTest = state.nullTest
+        when {
+            nullTest == null || !nullTest.exists -> Warning(stringResource(R.string.home_null_test_none))
+
+            !nullTest.passed -> Warning(stringResource(R.string.home_null_test_failed))
+
+            !nullTest.coversCurrentProfile ->
+                Warning(stringResource(R.string.home_null_test_stale_profile))
+
+            else -> Note(
+                stringResource(
+                    R.string.home_null_test_ok,
+                    java.text.DateFormat.getDateInstance().format(
+                        java.util.Date(nullTest.completedAtEpochMs),
+                    ),
+                    nullTest.noiseFloors.entries.joinToString {
+                        "${it.key} ${"%.1f".format(it.value * 100)}%"
+                    },
+                ),
+            )
+        }
+
+        OutlinedButton(onClick = onCalibrate, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.home_null_test_run))
+        }
 
         Text(stringResource(R.string.home_recent), style = MaterialTheme.typography.titleMedium)
         if (state.report == null) {
@@ -128,7 +157,7 @@ fun SetupScreen(
         Text(stringResource(R.string.setup_profile), style = MaterialTheme.typography.titleSmall)
         DriverOption(
             label = stringResource(R.string.setup_profile_quick),
-            supporting = "Two workloads, fewer frames. Finds a large difference, not a small one.",
+            supporting = "One workload, fewer frames. Finds a large difference, not a small one.",
             selected = state.quickProfile,
             onSelect = { onProfile(true) },
         )
@@ -322,6 +351,106 @@ fun ResultScreen(
 }
 
 // ---- Small pieces ---------------------------------------------------------
+
+@Composable
+fun NullTestScreen(
+    state: UiState,
+    onStart: (RequestedDriver) -> Unit,
+    onBack: () -> Unit,
+) {
+    // Defaults to the system driver because it needs no import, so a device can be
+    // calibrated before the user has any package at all.
+    var selected by remember { mutableStateOf<RequestedDriver>(RequestedDriver.System) }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(stringResource(R.string.null_test_title), style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.null_test_explainer), style = MaterialTheme.typography.bodyMedium)
+        Warning(stringResource(R.string.null_test_cost))
+
+        Text(stringResource(R.string.null_test_driver), style = MaterialTheme.typography.titleMedium)
+        DriverOption(
+            label = stringResource(R.string.setup_system_driver),
+            supporting = stringResource(R.string.setup_system_driver_note),
+            selected = selected is RequestedDriver.System,
+            onSelect = { selected = RequestedDriver.System },
+        )
+        for (pkg in state.packages) {
+            DriverOption(
+                label = pkg.displayName,
+                supporting = "SHA-256 ${pkg.libraryChecksum.take(16)}…",
+                selected = (selected as? RequestedDriver.Package)?.libraryChecksum == pkg.libraryChecksum,
+                onSelect = { selected = RequestedDriver.of(pkg) },
+            )
+        }
+
+        Button(
+            onClick = { onStart(selected) },
+            enabled = !state.busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(R.string.null_test_start))
+        }
+        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.back))
+        }
+    }
+}
+
+@Composable
+fun NullTestResultScreen(state: UiState, onHome: () -> Unit, onShareLogs: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        state.runError?.let {
+            Warning(it)
+            OutlinedButton(onClick = onShareLogs, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.result_share_logs))
+            }
+        }
+
+        val nullTest = state.nullTest
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        ) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(
+                        if (nullTest?.passed == true) R.string.null_test_passed else R.string.null_test_failed,
+                    ),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                if (nullTest != null) {
+                    for ((workloadId, floor) in nullTest.noiseFloors) {
+                        Text(
+                            stringResource(
+                                R.string.null_test_floor,
+                                "%.1f%%".format(floor * 100),
+                                workloadId,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
+
+        // The explanation is the statistics module's own sentence, not a rewrite of it, so
+        // what the screen says and what the report says cannot drift apart.
+        nullTest?.explanation?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+
+        OutlinedButton(onClick = onShareLogs, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.result_share_logs))
+        }
+        Button(onClick = onHome, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.back))
+        }
+    }
+}
 
 @Composable
 private fun VerdictCard(report: BenchmarkReport) {

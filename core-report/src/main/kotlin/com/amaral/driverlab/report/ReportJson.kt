@@ -55,6 +55,13 @@ public object ReportJson {
         }
         return lenient.decodeFromString(BenchmarkReport.serializer(), text)
     }
+
+    public fun encode(record: NullTestRecord): String =
+        pretty.encodeToString(NullTestRecord.serializer(), record)
+
+    /** Reads a stored null test record. Lenient, because this file is only ever ours. */
+    public fun decodeNullTestRecord(text: String): NullTestRecord =
+        lenient.decodeFromString(NullTestRecord.serializer(), text)
 }
 
 public class SchemaVersionException(message: String) : Exception(message)

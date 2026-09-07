@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.amaral.driverlab.app.ui.AmaralTheme
 import com.amaral.driverlab.app.ui.HomeScreen
+import com.amaral.driverlab.app.ui.NullTestResultScreen
+import com.amaral.driverlab.app.ui.NullTestScreen
 import com.amaral.driverlab.app.ui.PreflightScreen
 import com.amaral.driverlab.app.ui.ResultScreen
 import com.amaral.driverlab.app.ui.RunningScreen
@@ -82,6 +84,19 @@ private fun AppRoot(onShareFile: (java.io.File) -> Unit) {
         Step.Home -> HomeScreen(
             state = state,
             onRun = { viewModel.goTo(Step.Setup) },
+            onCalibrate = { viewModel.goTo(Step.NullTest) },
+            onShareLogs = shareLogs,
+        )
+
+        Step.NullTest -> NullTestScreen(
+            state = state,
+            onStart = viewModel::startNullTest,
+            onBack = { viewModel.goTo(Step.Home) },
+        )
+
+        Step.NullTestResult -> NullTestResultScreen(
+            state = state,
+            onHome = { viewModel.goTo(Step.Home) },
             onShareLogs = shareLogs,
         )
 

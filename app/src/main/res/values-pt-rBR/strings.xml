@@ -5,7 +5,6 @@
     <string name="home_run">Executar benchmark</string>
     <string name="home_recent">Últimos resultados</string>
     <string name="home_empty">Nenhum resultado ainda. Importe um driver e rode o primeiro benchmark.</string>
-    <string name="home_null_test_needed">Este aparelho ainda não passou no teste nulo, então os resultados aparecem sem ranking.</string>
 
     <string name="setup_title">O que comparar</string>
     <string name="setup_import">Importar driver (.zip)</string>
@@ -53,4 +52,19 @@
     <string name="home_share_logs">Compartilhar diagnóstico</string>
     <string name="logs_none">Nenhum diagnóstico registrado ainda.</string>
     <string name="logs_location">Os logs ficam em Android/data/%1$s/files/logs. Desde o Android 11 a maioria dos gerenciadores de arquivos não abre essa pasta, então use este botão.</string>
+    <string name="null_test_progress">Teste nulo: comparação %1$d de %2$d</string>
+    <string name="home_null_test_run">Calibrar este aparelho</string>
+    <string name="home_null_test_none">Este aparelho nunca foi calibrado, então os resultados aparecem sem ranking.</string>
+    <string name="home_null_test_ok">Calibrado em %1$s. Este aparelho resolve %2$s.</string>
+    <string name="home_null_test_failed">A calibração deste aparelho não passou. Os resultados continuam sendo medidos, mas nada entra no ranking.</string>
+    <string name="home_null_test_stale_profile">A calibração guardada não cobre os workloads do perfil selecionado, então este perfil não pode ser ranqueado.</string>
+    <string name="null_test_title">Calibrar este aparelho</string>
+    <string name="null_test_explainer">O app roda um driver contra ele mesmo e espera não achar diferença nenhuma. Qualquer diferença que ele achar foi fabricada por este aparelho — deriva térmica, degraus de clock, carga de fundo — e define o limite do que uma comparação de verdade pode afirmar. Enquanto esse limite não for conhecido, os resultados aparecem mas nunca são ranqueados.</string>
+    <string name="null_test_cost">Quinze comparações a cinco runs por braço, nos workloads do perfil selecionado. Não existe versão mais curta que continue honesta: a afirmação é dez empates seguidos, então dez é o que precisa ser medido. Deixe o aparelho desconectado, frio e sem uso, e conte com bastante tempo.</string>
+    <string name="null_test_driver">Rodar com</string>
+    <string name="null_test_start">Iniciar calibração</string>
+    <string name="null_test_passed">A calibração passou</string>
+    <string name="null_test_failed">A calibração não passou</string>
+    <string name="null_test_floor">Este aparelho resolve diferenças de cerca de %1$s ou maiores em %2$s.</string>
+    <string name="back">Voltar</string>
 </resources>

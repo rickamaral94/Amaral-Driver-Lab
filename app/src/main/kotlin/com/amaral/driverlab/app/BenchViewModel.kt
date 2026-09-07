@@ -14,6 +14,7 @@ import com.amaral.driverlab.driver.DriverPackage
 import com.amaral.driverlab.driver.RequestedDriver
 import com.amaral.driverlab.report.BenchmarkReport
 import com.amaral.driverlab.report.ReportFiles
+import com.amaral.driverlab.report.NullTestStore
 import com.amaral.driverlab.report.ReportJson
 import com.amaral.driverlab.telemetry.DiagnosticBundle
 import com.amaral.driverlab.telemetry.DiagnosticLog
@@ -37,7 +38,29 @@ sealed interface Step {
     data object Preflight : Step
     data object Running : Step
     data object Result : Step
+
+    /** The A/A test: what it is, which driver to run it on, how long it takes. */
+    data object NullTest : Step
+
+    /** What the device just proved, or failed to prove, about its own resolution. */
+    data object NullTestResult : Step
 }
+
+/**
+ * The null test as the screen needs it: already derived, already in words.
+ *
+ * The verdict is recomputed from the stored A/A series every time this is built, so the
+ * UI never shows a pass that the measurements behind it no longer support.
+ */
+data class NullTestStatus(
+    val exists: Boolean,
+    val passed: Boolean,
+    val driverLabel: String,
+    val completedAtEpochMs: Long,
+    val explanation: String,
+    val noiseFloors: Map<String, Double>,
+    val coversCurrentProfile: Boolean,
+)
 
 data class UiState(
     val step: Step = Step.Home,
@@ -51,8 +74,16 @@ data class UiState(
     val importError: String? = null,
     val runError: String? = null,
     val busy: Boolean = false,
+    val nullTest: NullTestStatus? = null,
 ) {
     val canStart: Boolean get() = armA != null && armB != null && !busy
+
+    /**
+     * A comparison is always allowed to run. What the null test gates is the *ranking*:
+     * refusing to measure at all would leave a drifty device with no way to see its own
+     * numbers, and P3 asks for results without a ranking, not for no results.
+     */
+    val rankingUnlocked: Boolean get() = nullTest?.passed == true && nullTest.coversCurrentProfile
 }
 
 class BenchViewModel(application: Application) : AndroidViewModel(application) {
@@ -65,7 +96,16 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
 
     private var lastRunFinishedAt: Long? = null
 
-    fun goTo(step: Step) = state.update { it.copy(step = step, importError = null, runError = null) }
+    init {
+        refreshNullTest()
+    }
+
+    fun goTo(step: Step) {
+        state.update { it.copy(step = step, importError = null, runError = null) }
+        // The record can be replaced by the :bench process while this one is alive, and the
+        // verdict is derived at read time rather than stored, so returning home re-reads it.
+        if (step is Step.Home) refreshNullTest()
+    }
 
     /**
      * Copies the archive out of the picker and validates it. The archive is
@@ -116,7 +156,12 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
         if (arm == Arm.A) it.copy(armA = driver) else it.copy(armB = driver)
     }
 
-    fun selectProfile(quick: Boolean) = state.update { it.copy(quickProfile = quick) }
+    fun selectProfile(quick: Boolean) {
+        state.update { it.copy(quickProfile = quick) }
+        // Whether a stored calibration covers this profile depends on which workloads it
+        // contains, so switching profiles can turn a ranked device into an unranked one.
+        refreshNullTest()
+    }
 
     fun runPreflight() {
         viewModelScope.launch {
@@ -138,6 +183,90 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
             val report = Preflight.evaluate(sample, since)
             DiagnosticLog.i(TAG, "preflight: ${report.summary()}")
             state.update { it.copy(step = Step.Preflight, preflight = report) }
+        }
+    }
+
+    /**
+     * Reads back what this device proved about itself.
+     *
+     * Called on every entry to the home screen rather than cached, because the record can
+     * be replaced by the `:bench` process while this one is alive, and because the verdict
+     * is derived from the stored series rather than stored — the read *is* the evaluation.
+     */
+    fun refreshNullTest() {
+        viewModelScope.launch {
+            val workloads = profileWorkloadIds(state.value.quickProfile)
+            val status = withContext(Dispatchers.IO) {
+                val fingerprint = telemetry.snapshot().buildFingerprint
+                val record = NullTestStore(
+                    File(getApplication<Application>().filesDir, BenchmarkService.STATE_DIRECTORY),
+                ).read(fingerprint) ?: return@withContext null
+
+                val forProfile = record.resultFor(workloads)
+                val derived = record.evaluate()
+                NullTestStatus(
+                    exists = true,
+                    passed = forProfile?.passed == true,
+                    driverLabel = record.driverLabel,
+                    completedAtEpochMs = record.completedAtEpochMs,
+                    explanation = forProfile?.explain()
+                        ?: derived.entries.joinToString("\n\n") { "${it.key} — ${it.value.explain()}" },
+                    noiseFloors = derived.mapValues { it.value.appliedNoiseFloor },
+                    coversCurrentProfile = forProfile != null,
+                )
+            }
+            state.update { it.copy(nullTest = status) }
+        }
+    }
+
+    private fun profileWorkloadIds(quick: Boolean): List<String> =
+        (if (quick) BenchmarkProfiles.quick() else BenchmarkProfiles.complete())
+            .map { it.workloadId }
+
+    /**
+     * Runs the A/A test on one driver.
+     *
+     * Long — fifteen comparisons at five runs an arm — and there is no shortcut that stays
+     * honest: ten consecutive ties is the claim, so ten is what has to be measured, on the
+     * same workloads the comparisons will use or the floor it measures does not apply to them.
+     */
+    fun startNullTest(driver: RequestedDriver) {
+        val current = state.value
+        val workloads = if (current.quickProfile) BenchmarkProfiles.quick() else BenchmarkProfiles.complete()
+        val ref = refFor(driver, current)
+        val request = BenchRequest(
+            armA = ref,
+            armB = ref,
+            workloads = workloads.map(WorkloadRef::of),
+            runsPerArm = BenchmarkPlan.DEFAULT_RUNS_PER_ARM,
+            nullTest = NullTestSpec(
+                calibrationComparisons = com.amaral.driverlab.stats.NullTest.CALIBRATION_COMPARISONS,
+                testComparisons = com.amaral.driverlab.stats.NullTest.REQUIRED_CONSECUTIVE_PASSES,
+            ),
+        )
+
+        DiagnosticLog.i(TAG, "starting null test on ${ref.label}")
+        state.update {
+            it.copy(step = Step.Running, progress = null, busy = true, runError = null)
+        }
+
+        viewModelScope.launch {
+            client.run(request, preflightOverridden = false).collect { update ->
+                when (update) {
+                    is BenchUpdate.Progress -> state.update { it.copy(progress = update.progress) }
+                    is BenchUpdate.Complete -> {
+                        lastRunFinishedAt = System.currentTimeMillis()
+                        refreshNullTest()
+                        state.update {
+                            it.copy(
+                                step = Step.NullTestResult,
+                                busy = false,
+                                runError = if (update.completion.ok) null else update.completion.error,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 

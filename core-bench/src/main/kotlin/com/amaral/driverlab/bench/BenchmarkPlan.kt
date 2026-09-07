@@ -86,10 +86,17 @@ public data class PlannedExecution(
 /** The named profiles the UI offers. Section 11 asks for exactly two. */
 public object BenchmarkProfiles {
 
-    /** Roughly three minutes: enough to see a large regression, not enough to rank. */
+    /**
+     * The short profile: enough to see a large regression, not enough to rank.
+     *
+     * One workload, not two. Scaling the complete profile left this one at frame counts
+     * that no longer clear [WorkloadSpec.MINIMUM_USEFUL_GPU_NANOS] — 400 baseline frames is
+     * about 2.3 s on an Adreno 740 — so every quick comparison would have come back marked
+     * too brief to tell drivers apart. Halving the frames of the workload that has actually
+     * resolved a difference is a more useful short profile than two workloads that cannot.
+     */
     public fun quick(): List<WorkloadSpec> = listOf(
-        WorkloadSpec.baseline().copy(frameCount = 400, warmupFrames = 60),
-        WorkloadSpec.tilingGmem().copy(frameCount = 200, warmupFrames = 40),
+        WorkloadSpec.baseline().copy(frameCount = 1000, warmupFrames = 80),
     )
 
     /** The full protocol. Roughly twenty minutes, and the only one that can rank. */
