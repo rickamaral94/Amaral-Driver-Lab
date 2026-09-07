@@ -1,0 +1,21 @@
+{
+  "registryVersion": 1,
+  "comment": [
+    "Drivers every submission is measured against, pinned by the SHA-256 of the .so.",
+    "A score means the same thing on two phones only because the anchor is literally the",
+    "same code on both. A name or a version string is not enough: 'Turnip 25.1' can be two",
+    "different binaries, and the system driver is a different binary on every device, which",
+    "is why it can never be an anchor.",
+    "",
+    "Adding an anchor is close to permanent. Every score in the leaderboard is a ratio",
+    "against one, so replacing an anchor does not adjust the numbers, it invalidates them:",
+    "the old scores measure a different thing. Retiring one means keeping its rows readable",
+    "and starting a new table, or re-measuring every entry against the replacement.",
+    "",
+    "So an anchor should be a build that is: already public and downloadable at a stable",
+    "URL, reproducible from a known source revision, and unremarkable — a mid-range,",
+    "well-behaved build, not the fastest one known, because every future score is expressed",
+    "relative to it and a freak anchor makes every number harder to read."
+  ],
+  "anchors": []
+}

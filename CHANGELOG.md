@@ -22,6 +22,19 @@ carried forward; it remains in git history and on `main`.
 
 ### Added
 
+- **Anchor-normalised scores**, replacing the absolute-score model as the basis for ranking.
+  The score is `1000 × median(anchor) / median(candidate)`, measured paired in the same
+  thermal session: 1000 is the anchor, 1240 is 24% faster than it. It composes into a table
+  the way a raw score does, because the device cancels in the division, and it survives
+  drift the way a paired comparison does, because the anchor was measured beside the
+  candidate rather than looked up. An absolute score cannot do either: finding 4 measured
+  the same driver scoring 10.6% apart on one device depending on a clock bin, so a raw-score
+  leaderboard would rank the phone and its cooling. Described in `docs/RANKING.md`.
+- An anchor is pinned by the SHA-256 of its `.so`, never by a name or a version, and the
+  system driver can never be one — it is a different binary on every device, so a ratio
+  against it is no more comparable across devices than a raw score. Registry at
+  `schema/anchors.json`, currently empty: no anchor has been chosen yet.
+
 - `:core-stats` — frametime summaries with tail percentiles taken on frametime, a
   seeded percentile bootstrap, Mann-Whitney U (exact where there are no ties,
   tie-corrected normal approximation otherwise), Cliff's delta, the A/B verdict
