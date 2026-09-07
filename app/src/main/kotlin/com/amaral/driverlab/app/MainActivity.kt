@@ -27,10 +27,28 @@ class MainActivity : ComponentActivity() {
         setContent {
             AmaralTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AppRoot(onShare = ::share)
+                    AppRoot(onShare = ::share, onShareFile = ::shareFile)
                 }
             }
         }
+    }
+
+    /**
+     * Shares a file the app produced. Used for the diagnostics zip, because the log directory
+     * under `Android/data` is not browsable on Android 11 and later.
+     */
+    private fun shareFile(file: java.io.File) {
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            this,
+            "${BuildConfig.APPLICATION_ID}.fileprovider",
+            file,
+        )
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.result_share_logs)))
     }
 
     /** Export goes through the share sheet, so the user picks where it lands. */
@@ -45,7 +63,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AppRoot(onShare: (String) -> Unit) {
+private fun AppRoot(onShare: (String) -> Unit, onShareFile: (java.io.File) -> Unit) {
     val viewModel: BenchViewModel = viewModel()
     val state by viewModel.uiState.collectAsState()
 
@@ -56,8 +74,17 @@ private fun AppRoot(onShare: (String) -> Unit) {
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::importPackage) }
 
+    val shareLogs = {
+        val bundle = viewModel.diagnosticsBundle()
+        if (bundle != null) onShareFile(bundle)
+    }
+
     when (state.step) {
-        Step.Home -> HomeScreen(state) { viewModel.goTo(Step.Setup) }
+        Step.Home -> HomeScreen(
+            state = state,
+            onRun = { viewModel.goTo(Step.Setup) },
+            onShareLogs = shareLogs,
+        )
 
         Step.Setup -> SetupScreen(
             state = state,
@@ -79,6 +106,7 @@ private fun AppRoot(onShare: (String) -> Unit) {
             state = state,
             onPublish = { viewModel.exportJson()?.let(onShare) },
             onExport = { viewModel.exportJson()?.let(onShare) },
+            onShareLogs = shareLogs,
             onHome = { viewModel.goTo(Step.Home) },
         )
     }

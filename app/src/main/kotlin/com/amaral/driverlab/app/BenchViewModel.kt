@@ -14,6 +14,8 @@ import com.amaral.driverlab.driver.DriverPackage
 import com.amaral.driverlab.driver.RequestedDriver
 import com.amaral.driverlab.report.BenchmarkReport
 import com.amaral.driverlab.report.ReportJson
+import com.amaral.driverlab.telemetry.DiagnosticBundle
+import com.amaral.driverlab.telemetry.DiagnosticLog
 import com.amaral.driverlab.telemetry.Preflight
 import com.amaral.driverlab.telemetry.PreflightReport
 import com.amaral.driverlab.telemetry.TelemetryCollector
@@ -82,6 +84,11 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             result.onSuccess { imported ->
+                DiagnosticLog.i(
+                    TAG,
+                    "imported \"${imported.displayName}\" lib=${imported.metadata.libraryName} " +
+                        "sha256=${imported.libraryChecksum} dir=${imported.installDirectory}",
+                )
                 state.update {
                     it.copy(
                         busy = false,
@@ -90,6 +97,7 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }.onFailure { error ->
+                DiagnosticLog.e(TAG, "import failed", error)
                 state.update {
                     it.copy(
                         busy = false,
@@ -135,6 +143,11 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
             runsPerArm = BenchmarkPlan.DEFAULT_RUNS_PER_ARM,
         )
 
+        DiagnosticLog.i(
+            TAG,
+            "starting: A=${request.armA.label} (${if (request.armA.systemDriver) "system" else request.armA.libraryName}) " +
+                "B=${request.armB.label} (${if (request.armB.systemDriver) "system" else request.armB.libraryName})",
+        )
         state.update { it.copy(step = Step.Running, preflight = preflight, progress = null, busy = true) }
 
         viewModelScope.launch {
@@ -184,4 +197,16 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
 
     fun exportJson(): String? = state.value.report?.let { ReportJson.encodePretty(it) }
 
+    /**
+     * Packs the log tree for sharing. Needed because since Android 11 most file managers cannot
+     * browse `Android/data`, so the folder alone would only be reachable over a cable.
+     */
+    fun diagnosticsBundle(): java.io.File? = DiagnosticBundle.create(
+        java.io.File(getApplication<Application>().cacheDir, "share").apply { mkdirs() },
+    )
+
+
+    private companion object {
+        const val TAG = "ui"
+    }
 }

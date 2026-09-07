@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Only the share staging directory is exposed. The driver packages and the token store are
+  deliberately not reachable through the provider.
+-->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>

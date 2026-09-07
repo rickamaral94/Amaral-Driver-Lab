@@ -126,17 +126,31 @@ public sealed interface RequestedDriver {
         val libraryChecksum: String,
         val displayName: String,
         /**
+         * Where the package was unpacked, and which file inside it is the ICD. The loader needs
+         * both, so they travel with the request rather than being looked up again later — an
+         * earlier version left them out of the request entirely, and the package could never
+         * have loaded however well the rest of the chain worked.
+         */
+        val installDirectory: String = "",
+        val libraryName: String = "",
+        /**
          * Whether a Mesa driver is expected. True for anything imported as a Turnip build; the
          * check is on the driver family rather than on Turnip exactly, so a Mesa driver for a
          * different GPU still fails loudly instead of being labelled Turnip.
          */
         val expectMesa: Boolean = true,
-    ) : RequestedDriver
+    ) : RequestedDriver {
+        /** False when this request could not possibly load, whatever the loader does. */
+        public val loadable: Boolean
+            get() = installDirectory.isNotBlank() && libraryName.isNotBlank()
+    }
 
     public companion object {
         public fun of(driverPackage: DriverPackage, expectMesa: Boolean = true): Package = Package(
             libraryChecksum = driverPackage.libraryChecksum,
             displayName = driverPackage.displayName,
+            installDirectory = driverPackage.installDirectory.absolutePath,
+            libraryName = driverPackage.metadata.libraryName,
             expectMesa = expectMesa,
         )
     }

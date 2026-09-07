@@ -40,6 +40,23 @@ carried forward; it remains in git history and on `main`.
 - `:app` — Compose UI in three taps, with the run isolated in the `:bench` process.
 - Repository side — issue form, ingestion workflow, plausibility checks, and a
   static leaderboard on GitHub Pages.
+- On-device diagnostics — a rotating log under
+  `Android/data/<package>/files/logs`, written per process and flushed line by line,
+  plus an uncaught-exception handler that records the stack trace and the last lines
+  before it. Logcat is only available on a cable, and the protocol requires the device
+  to be unplugged. Since Android 11 most file managers cannot browse `Android/data`,
+  so the app also shares the whole tree as a zip. GitHub tokens are redacted on the way
+  in, because a log meant to be shared must never be holding one.
+
+### Fixed
+
+- **An imported driver package could never have loaded.** `RunCoordinator` built every
+  `LoadRequest` with a null directory and library name, so the package's location never
+  reached the loader — and because the loader answers "could not open it" either way,
+  the failure would have read as a driver problem rather than a missing argument. The
+  location now travels with `RequestedDriver.Package`, and a request that carries no
+  location fails as `PACKAGE_LOCATION_MISSING` before the loader is asked, so the two
+  are never confused again.
 
 ### Design decisions that came from measurement
 

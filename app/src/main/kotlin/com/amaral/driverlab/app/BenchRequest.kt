@@ -34,7 +34,12 @@ data class DriverRef(
         if (systemDriver) {
             RequestedDriver.System
         } else {
-            RequestedDriver.Package(libraryChecksum = libraryChecksum, displayName = label)
+            RequestedDriver.Package(
+                libraryChecksum = libraryChecksum,
+                displayName = label,
+                installDirectory = libraryDirectory,
+                libraryName = libraryName,
+            )
         }
 }
 

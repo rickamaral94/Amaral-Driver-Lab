@@ -35,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.amaral.driverlab.app.BuildConfig
 import com.amaral.driverlab.app.R
 import com.amaral.driverlab.app.Step
 import com.amaral.driverlab.app.UiState
@@ -50,7 +51,7 @@ import kotlin.math.roundToInt
  * screen is one large button and a list of what has already been measured.
  */
 @Composable
-fun HomeScreen(state: UiState, onRun: () -> Unit) {
+fun HomeScreen(state: UiState, onRun: () -> Unit, onShareLogs: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -72,6 +73,14 @@ fun HomeScreen(state: UiState, onRun: () -> Unit) {
         } else {
             VerdictCard(state.report)
         }
+
+        Spacer(Modifier.height(8.dp))
+        // Kept on the first screen on purpose: when something goes wrong badly enough that the
+        // run never starts, this is the only screen the user can still reach.
+        OutlinedButton(onClick = onShareLogs, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.home_share_logs))
+        }
+        Note(stringResource(R.string.logs_location, BuildConfig.APPLICATION_ID))
     }
 }
 
@@ -232,7 +241,13 @@ fun RunningScreen(state: UiState, onAbort: () -> Unit) {
 }
 
 @Composable
-fun ResultScreen(state: UiState, onPublish: () -> Unit, onExport: () -> Unit, onHome: () -> Unit) {
+fun ResultScreen(
+    state: UiState,
+    onPublish: () -> Unit,
+    onExport: () -> Unit,
+    onShareLogs: () -> Unit,
+    onHome: () -> Unit,
+) {
     var showDetail by remember { mutableStateOf(false) }
 
     Column(
@@ -241,6 +256,10 @@ fun ResultScreen(state: UiState, onPublish: () -> Unit, onExport: () -> Unit, on
     ) {
         state.runError?.let {
             Warning(it)
+            // A failed run is exactly when the log matters, so the button is above "Back".
+            OutlinedButton(onClick = onShareLogs, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.result_share_logs))
+            }
             OutlinedButton(onClick = onHome, modifier = Modifier.fillMaxWidth()) { Text("Back") }
             return@Column
         }
@@ -294,6 +313,9 @@ fun ResultScreen(state: UiState, onPublish: () -> Unit, onExport: () -> Unit, on
         }
         OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.result_export))
+        }
+        OutlinedButton(onClick = onShareLogs, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.result_share_logs))
         }
         TextButton(onClick = onHome, modifier = Modifier.fillMaxWidth()) { Text("Home") }
     }

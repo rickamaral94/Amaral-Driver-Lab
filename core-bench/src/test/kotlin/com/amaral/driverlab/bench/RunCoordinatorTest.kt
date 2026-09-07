@@ -16,6 +16,7 @@ import com.amaral.driverlab.vk.WorkloadSpec
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -63,8 +64,11 @@ class RunCoordinatorTest {
     ) : BenchHost {
         var cooldowns = 0
         val sessions = mutableListOf<FakeSession>()
-        override fun openDriver(request: LoadRequest): DriverSessionResult =
-            open(request).also { if (it is DriverSessionResult.Opened) sessions += it.session as FakeSession }
+        val requests = mutableListOf<LoadRequest>()
+        override fun openDriver(request: LoadRequest): DriverSessionResult {
+            requests += request
+            return open(request).also { if (it is DriverSessionResult.Opened) sessions += it.session as FakeSession }
+        }
         override fun sampleTelemetry(): TelemetrySample = sample
         override suspend fun cooldown(millis: Long) { cooldowns++ }
     }
@@ -84,9 +88,16 @@ class RunCoordinatorTest {
         ),
     )
 
+    private fun packageDriver(checksum: String, name: String) = RequestedDriver.Package(
+        libraryChecksum = checksum,
+        displayName = name,
+        installDirectory = "/data/user/0/com.amaral.driverlab/files/drivers/$checksum",
+        libraryName = "libvulkan_freedreno.so",
+    )
+
     private fun plan(runsPerArm: Int = 2) = BenchmarkPlan(
-        a = ArmDefinition(Arm.A, RequestedDriver.Package("abc", "Turnip v3"), "Turnip v3"),
-        b = ArmDefinition(Arm.B, RequestedDriver.Package("def", "Turnip v4"), "Turnip v4"),
+        a = ArmDefinition(Arm.A, packageDriver("abc", "Turnip v3"), "Turnip v3"),
+        b = ArmDefinition(Arm.B, packageDriver("def", "Turnip v4"), "Turnip v4"),
         workloads = listOf(WorkloadSpec(WorkloadIds.BASELINE, frameCount = 20, warmupFrames = 2)),
         runsPerArm = runsPerArm,
     )
@@ -236,5 +247,53 @@ class RunCoordinatorTest {
 
         assertEquals(RunnerState.IDLE, outcome.transitions.first().from)
         assertEquals(RunnerState.DONE, outcome.transitions.last().to)
+    }
+
+    /**
+     * Regression. An earlier version built the request with a null directory and name for every
+     * driver, so an imported package could never load however well the rest of the chain worked
+     * — and because the loader answers "could not open it" either way, the failure looked like a
+     * driver problem rather than a missing argument.
+     */
+    @Test
+    fun `an imported package carries its location into the load request`() = runTest {
+        val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
+        RunCoordinator(host).execute(plan(), temporaryFolder.newFolder())
+
+        val request = host.requests.first()
+        assertEquals(DriverSource.IMPORTED_PACKAGE, request.source)
+        assertEquals("libvulkan_freedreno.so", request.libraryName)
+        assertTrue(request.libraryDirectory!!.path.contains("drivers/abc"))
+        assertEquals("abc", request.libraryChecksum)
+    }
+
+    @Test
+    fun `the system driver asks for no directory`() = runTest {
+        val systemPlan = plan().copy(
+            a = ArmDefinition(Arm.A, RequestedDriver.System, "System driver"),
+        )
+        val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
+        RunCoordinator(host).execute(systemPlan, temporaryFolder.newFolder())
+
+        val request = host.requests.first { it.source == DriverSource.SYSTEM }
+        assertNull(request.libraryDirectory)
+        assertNull(request.libraryName)
+    }
+
+    @Test
+    fun `a package with no location fails before the loader is asked`() = runTest {
+        val incomplete = plan().copy(
+            a = ArmDefinition(
+                Arm.A,
+                RequestedDriver.Package(libraryChecksum = "abc", displayName = "Turnip v3"),
+                "Turnip v3",
+            ),
+        )
+        val host = FakeHost { DriverSessionResult.Opened(FakeSession(identity()) { completed(it, 16_000_000) }) }
+        val outcome = RunCoordinator(host).execute(incomplete, temporaryFolder.newFolder())
+
+        assertEquals(RunnerState.FAILED, outcome.finalState)
+        assertEquals("PACKAGE_LOCATION_MISSING", outcome.failures.single().stage)
+        assertTrue("the loader must not be asked to open nothing", host.requests.isEmpty())
     }
 }

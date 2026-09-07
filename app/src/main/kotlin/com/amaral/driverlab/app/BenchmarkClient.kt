@@ -13,6 +13,7 @@ import android.os.Messenger
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import com.amaral.driverlab.telemetry.DiagnosticLog
 import kotlinx.serialization.json.Json
 
 /** What the UI sees while the runner is working, in the app process. */
@@ -65,6 +66,7 @@ class BenchmarkClient(private val context: Context) {
 
         val connection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                DiagnosticLog.i(TAG, "bound to the runner process")
                 val service = Messenger(binder)
                 val message = Message.obtain(null, BenchmarkService.MSG_START).apply {
                     replyTo = incoming
@@ -87,6 +89,7 @@ class BenchmarkClient(private val context: Context) {
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {
+                DiagnosticLog.w(TAG, "runner process disconnected, completed=$completed")
                 if (!completed) {
                     // The runner process died without reporting. That is a crash, and
                     // a crash is a result about the driver, not a lost session.
@@ -107,9 +110,11 @@ class BenchmarkClient(private val context: Context) {
         }
 
         val intent = Intent(context, BenchmarkService::class.java)
+        DiagnosticLog.i(TAG, "starting the runner process")
         context.startForegroundService(intent)
         val bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
         if (!bound) {
+            DiagnosticLog.e(TAG, "bindService refused")
             trySend(BenchUpdate.Complete(BenchCompletion(ok = false, error = "the runner could not be started")))
             close()
         }
@@ -120,3 +125,5 @@ class BenchmarkClient(private val context: Context) {
         }
     }
 }
+
+private const val TAG = "bench-client"

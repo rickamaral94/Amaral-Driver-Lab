@@ -48,4 +48,8 @@
     <string name="help_thermal_session">Resultados só são comparados direto quando foram medidos na mesma sessão, partindo da mesma temperatura.</string>
     <string name="help_unverified">Esta build não está no catálogo do app. Ela roda e vale igual; só não dá para dar a ela um nome conhecido.</string>
     <string name="help_driver_identity">O app pergunta ao Vulkan qual driver de fato respondeu, e se recusa a rodar se não for o que você escolheu.</string>
+    <string name="result_share_logs">Compartilhar diagnóstico</string>
+    <string name="home_share_logs">Compartilhar diagnóstico</string>
+    <string name="logs_none">Nenhum diagnóstico registrado ainda.</string>
+    <string name="logs_location">Os logs ficam em Android/data/%1$s/files/logs. Desde o Android 11 a maioria dos gerenciadores de arquivos não abre essa pasta, então use este botão.</string>
 </resources>

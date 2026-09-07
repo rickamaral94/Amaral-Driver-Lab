@@ -2,8 +2,11 @@ package com.amaral.driverlab.bench
 
 import com.amaral.driverlab.driver.IdentityGuard
 import com.amaral.driverlab.driver.IdentityVerdict
+import com.amaral.driverlab.driver.DriverSource
 import com.amaral.driverlab.driver.LoadRequest
+import com.amaral.driverlab.driver.RequestedDriver
 import com.amaral.driverlab.stats.FrametimeSummary
+import com.amaral.driverlab.telemetry.DiagnosticLog
 import com.amaral.driverlab.telemetry.TelemetrySample
 import com.amaral.driverlab.vk.WorkloadResult
 import com.amaral.driverlab.vk.WorkloadSpec
@@ -67,6 +70,11 @@ public class RunCoordinator(
         val failures = mutableListOf<ExecutionFailure>()
         var abortReason: String? = null
 
+        DiagnosticLog.i(
+            TAG,
+            "plan: ${plan.a.label} vs ${plan.b.label}, ${plan.runsPerArm} runs per arm, " +
+                "${plan.workloads.size} workload(s), ${plan.totalExecutions} executions",
+        )
         machine.apply(RunnerEvent.Start)
         // Preflight is evaluated by the caller, which owns the override decision;
         // reaching here means it cleared.
@@ -85,22 +93,47 @@ public class RunCoordinator(
                 RunProgress(machine.state, done, plan.totalExecutions, label, "", null),
             )
 
-            val request = LoadRequest(
-                source = planned.first().driver.let { driver ->
-                    when (driver) {
-                        is com.amaral.driverlab.driver.RequestedDriver.System ->
-                            com.amaral.driverlab.driver.DriverSource.SYSTEM
-                        is com.amaral.driverlab.driver.RequestedDriver.Package ->
-                            com.amaral.driverlab.driver.DriverSource.IMPORTED_PACKAGE
-                    }
-                },
-                libraryDirectory = null,
-                libraryName = null,
-                temporaryDirectory = temporaryDirectory,
+            val driver = planned.first().driver
+            val request = when (driver) {
+                is RequestedDriver.System -> LoadRequest(
+                    source = DriverSource.SYSTEM,
+                    libraryDirectory = null,
+                    libraryName = null,
+                    temporaryDirectory = temporaryDirectory,
+                )
+
+                is RequestedDriver.Package -> LoadRequest(
+                    source = DriverSource.IMPORTED_PACKAGE,
+                    // Where the package lives has to reach the loader, or it opens nothing.
+                    libraryDirectory = java.io.File(driver.installDirectory),
+                    libraryName = driver.libraryName,
+                    libraryChecksum = driver.libraryChecksum,
+                    temporaryDirectory = temporaryDirectory,
+                )
+            }
+
+            if (driver is RequestedDriver.Package && !driver.loadable) {
+                // Caught here rather than in the loader, because "the ICD could not be found"
+                // and "the app forgot to say where it is" are different bugs and a report that
+                // confuses them sends the reader looking in the wrong place.
+                machine.apply(RunnerEvent.DriverRejected("the package location was not carried into the run"))
+                failures += ExecutionFailure(
+                    slot, label, planned.first().workload, "PACKAGE_LOCATION_MISSING",
+                    "\"${driver.displayName}\" was selected but the run carried no directory or " +
+                        "library name for it, so there was nothing for the loader to open.",
+                )
+                return BenchmarkOutcome(plan, machine.state, records, failures, machine.history, abortReason)
+            }
+
+            DiagnosticLog.i(
+                TAG,
+                "slot ${slot.slot} arm ${slot.arm}: opening ${request.source} " +
+                    "dir=${request.libraryDirectory?.path ?: "-"} lib=${request.libraryName ?: "-"}",
             )
 
             when (val opened = host.openDriver(request)) {
                 is DriverSessionResult.Failed -> {
+                    DiagnosticLog.e(TAG, "driver did not open [${opened.stage}]: ${opened.message}")
                     machine.apply(RunnerEvent.DriverRejected(opened.message))
                     failures += ExecutionFailure(
                         slot, label, planned.first().workload, opened.stage, opened.message,
@@ -114,6 +147,7 @@ public class RunCoordinator(
                     // P1: the identity is checked before a single frame is timed.
                     val verdict = guard.check(planned.first().driver, session.identity)
                     if (verdict is IdentityVerdict.Rejected) {
+                        DiagnosticLog.e(TAG, "identity refused [${verdict.code}]: ${verdict.reason}")
                         machine.apply(RunnerEvent.DriverRejected(verdict.reason))
                         failures += ExecutionFailure(
                             slot, label, planned.first().workload, verdict.code.name, verdict.reason,
@@ -123,15 +157,23 @@ public class RunCoordinator(
                         )
                     }
                     val accepted = verdict as IdentityVerdict.Accepted
+                    DiagnosticLog.i(TAG, "identity accepted: ${session.identity.summary()}")
                     machine.apply(RunnerEvent.DriverAccepted)
                     machine.apply(RunnerEvent.WarmupComplete)
 
                     for (execution in planned) {
                         val before = host.sampleTelemetry()
                         when (val result = session.run(execution.workload)) {
-                            is WorkloadResult.Failed -> failures += ExecutionFailure(
-                                slot, label, execution.workload, result.stage, result.message,
-                            )
+                            is WorkloadResult.Failed -> {
+                                DiagnosticLog.e(
+                                    TAG,
+                                    "workload ${execution.workload.workloadId} failed " +
+                                        "[${result.stage}]: ${result.message}",
+                                )
+                                failures += ExecutionFailure(
+                                    slot, label, execution.workload, result.stage, result.message,
+                                )
+                            }
 
                             is WorkloadResult.Completed -> {
                                 val series = result.run.primaryFrametimesNs
@@ -179,6 +221,14 @@ public class RunCoordinator(
             }
         }
 
+        DiagnosticLog.i(
+            TAG,
+            "finished in state ${machine.state}: ${records.size} record(s), ${failures.size} failure(s)",
+        )
         return BenchmarkOutcome(plan, machine.state, records, failures, machine.history, abortReason)
+    }
+
+    private companion object {
+        const val TAG = "runner"
     }
 }

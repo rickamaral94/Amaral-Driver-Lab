@@ -20,6 +20,7 @@ import com.amaral.driverlab.report.ReportBuilder
 import com.amaral.driverlab.report.ReportJson
 import com.amaral.driverlab.report.SessionInfo
 import com.amaral.driverlab.telemetry.PreflightReport
+import com.amaral.driverlab.telemetry.DiagnosticLog
 import com.amaral.driverlab.telemetry.TelemetryCollector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +66,7 @@ class BenchmarkService : Service() {
     override fun onBind(intent: Intent?): IBinder = incoming.binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        DiagnosticLog.i(TAG, "service starting in the foreground")
         startForeground(NOTIFICATION_ID, notification(getString(R.string.running_title), 0, 0))
         acquireWakeLock()
         return START_NOT_STICKY
@@ -87,6 +89,11 @@ class BenchmarkService : Service() {
     }
 
     private fun start(request: BenchRequest, preflightOverridden: Boolean) {
+        DiagnosticLog.i(
+            TAG,
+            "run requested: ${request.armA.label} vs ${request.armB.label}, " +
+                "preflightOverridden=$preflightOverridden",
+        )
         acquireWakeLock()
         val plan = BenchmarkPlan(
             a = ArmDefinition(Arm.A, request.armA.toRequestedDriver(), request.armA.label),
@@ -140,8 +147,14 @@ class BenchmarkService : Service() {
             }
 
             val completion = result.fold(
-                onSuccess = { BenchCompletion(ok = true, reportJson = ReportJson.encode(it)) },
-                onFailure = { BenchCompletion(ok = false, error = it.message ?: it::class.java.name) },
+                onSuccess = {
+                    DiagnosticLog.i(TAG, "run complete, report built")
+                    BenchCompletion(ok = true, reportJson = ReportJson.encode(it))
+                },
+                onFailure = {
+                    DiagnosticLog.e(TAG, "run threw", it)
+                    BenchCompletion(ok = false, error = it.message ?: it::class.java.name)
+                },
             )
             send(MSG_COMPLETE, KEY_COMPLETION, json.encodeToString(BenchCompletion.serializer(), completion))
             stopSelf()
@@ -208,6 +221,8 @@ class BenchmarkService : Service() {
     }
 
     companion object {
+        private const val TAG = "bench-service"
+
         const val MSG_START = 1
         const val MSG_ABORT = 2
         const val MSG_PROGRESS = 3
