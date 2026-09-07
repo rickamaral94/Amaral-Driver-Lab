@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Amaral Driver Lab</string>
+
+    <string name="home_run">Executar benchmark</string>
+    <string name="home_recent">Últimos resultados</string>
+    <string name="home_empty">Nenhum resultado ainda. Importe um driver e rode o primeiro benchmark.</string>
+    <string name="home_null_test_needed">Este aparelho ainda não passou no teste nulo, então os resultados aparecem sem ranking.</string>
+
+    <string name="setup_title">O que comparar</string>
+    <string name="setup_import">Importar driver (.zip)</string>
+    <string name="setup_system_driver">Driver do sistema</string>
+    <string name="setup_system_driver_note">Só referência. Nunca entra no ranking.</string>
+    <string name="setup_profile">Perfil</string>
+    <string name="setup_profile_quick">Rápido · cerca de 3 minutos</string>
+    <string name="setup_profile_complete">Completo · cerca de 20 minutos</string>
+    <string name="setup_start">Iniciar</string>
+    <string name="setup_unverified">Build não catalogada</string>
+
+    <string name="preflight_title">Antes de começar</string>
+    <string name="preflight_ready">Está tudo certo.</string>
+    <string name="preflight_override">Iniciar mesmo assim</string>
+    <string name="preflight_override_warning">Esta execução fica marcada como de baixa confiança e não entra no ranking.</string>
+    <string name="preflight_recheck">Verificar de novo</string>
+
+    <string name="running_title">Executando</string>
+    <string name="running_abort">Abortar</string>
+    <string name="running_eta">Faltam cerca de %1$s</string>
+    <string name="running_temperature">%1$.0f °C</string>
+    <string name="running_execution">Execução %1$d de %2$d</string>
+
+    <string name="result_details">Detalhe técnico</string>
+    <string name="result_publish">Publicar no GitHub</string>
+    <string name="result_export">Exportar</string>
+    <string name="result_ranking_blocked">O ranking está bloqueado</string>
+
+    <string name="publish_title">O que será enviado</string>
+    <string name="publish_confirm">Enviar</string>
+    <string name="publish_cancel">Cancelar</string>
+    <string name="publish_alias">Apelido (opcional)</string>
+
+    <string name="help_frametime">Quanto tempo levou um quadro. Menor é melhor, e é a unidade de todos os números aqui.</string>
+    <string name="help_p1_low">O 1% de quadros mais lentos. Um driver pode ter uma boa média e mesmo assim engasgar, e é aqui que isso aparece.</string>
+    <string name="help_null_test">O app roda um driver contra ele mesmo. Não deveria achar diferença nenhuma; se achar, a medição não é confiável e nada é ranqueado.</string>
+    <string name="help_noise_floor">A menor diferença que este aparelho consegue distinguir de fato. Abaixo disso o resultado é empate, não vitória.</string>
+    <string name="help_technical_tie">Os dois drivers tiveram o mesmo desempenho, até onde este aparelho mede. Isso é uma resposta de verdade, não uma falha.</string>
+    <string name="help_inconclusive">As medições ficaram espalhadas demais para concluir alguma coisa. Deixe o aparelho esfriar e rode de novo.</string>
+    <string name="help_thermal_session">Resultados só são comparados direto quando foram medidos na mesma sessão, partindo da mesma temperatura.</string>
+    <string name="help_unverified">Esta build não está no catálogo do app. Ela roda e vale igual; só não dá para dar a ela um nome conhecido.</string>
+    <string name="help_driver_identity">O app pergunta ao Vulkan qual driver de fato respondeu, e se recusa a rodar se não for o que você escolheu.</string>
+</resources>
