@@ -36,6 +36,22 @@ carried forward; it remains in git history and on `main`.
 
 ### Fixed
 
+- **The noise floor was not conservative, it was wrong.** It was a percentile bootstrap
+  interval on a ratio of medians, which over-covers badly at these sample sizes: measured at
+  97.3% coverage where 95% was asked for, reading about 40% wider than the estimator's real
+  spread, because resampling a median over fifteen points gives a lumpy, fat-tailed
+  distribution. A **maximum** over eight comparisons was then stacked on top. The reference
+  device calibrated 12.4% and 13.4% on two runs whose arms — the same driver — sat 0.50% and
+  0.76% from parity; a floor asserting it manufactures 13% differences was a false statement,
+  and it refused a ranking to a device that had earned one. The floor is now the spread of the
+  A/A comparisons themselves, which the protocol already pays for and which needs no
+  resampling. It still fails a genuinely unstable device — a 15%-spread device calibrates
+  20.5% — which is what finding 2 requires. Finding 13 in
+  [`docs/STATISTICS.md`](docs/STATISTICS.md).
+- **Early exit lost most of its reach, as the price of that.** It was licensed by the floor
+  being a maximum, and a spread can fall — measured falling from 23.6% to 19.5%. What replaces
+  it is a lower bound on where the finished floor can land, which does only grow, but fires
+  far later: a failing device now usually pays for the whole run.
 - **The screen kept showing the invented floor after it was supposedly fixed.** The previous
   fix went into `NoiseFloorCalibration.describe()`, and the result card never calls it — it
   reads `noiseFloors` and formats the number into a localised string, so the same 2.0% appeared

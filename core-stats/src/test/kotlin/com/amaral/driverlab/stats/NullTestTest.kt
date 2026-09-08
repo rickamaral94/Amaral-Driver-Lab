@@ -78,10 +78,15 @@ class NullTestTest {
     fun `calibration reports a floor the device can actually hold`() {
         val device = runDevice(seed = 7L, runNoise = 0.01)
         assertTrue(device.result.passed, )
-        // A 1% device sampled five runs per arm cannot honestly claim to resolve 2%.
+        // This used to assert the measured floor exceeded the 2% default, on the reasoning
+        // that a 1% device sampled five runs per arm cannot honestly claim to resolve 2%.
+        // Finding 13 made that false: with the floor taken from the spread of the comparisons
+        // rather than from a bootstrap inside one, a 1% device measures about 1.4% and the
+        // default becomes the binding claim. The floor may never be *finer* than the default,
+        // which is what is actually worth pinning.
         assertTrue(
-            "floor ${device.calibration.floor} should exceed the default claim",
-            device.calibration.floor > AbConfig.DEFAULT_MINIMUM_PRACTICAL_DIFFERENCE,
+            "floor ${device.calibration.floor} may not undercut the default claim",
+            device.calibration.floor >= AbConfig.DEFAULT_MINIMUM_PRACTICAL_DIFFERENCE,
         )
         assertTrue(
             "the null test's own dispersion ${device.result.observedNoiseFloor} should fit inside " +
@@ -93,8 +98,10 @@ class NullTestTest {
 
     @Test
     fun `more runs per arm buy a finer floor`() {
-        val coarse = runDevice(seed = 3L, runNoise = 0.01, runsPerArm = 5).calibration.floor
-        val fine = runDevice(seed = 3L, runNoise = 0.01, runsPerArm = 15).calibration.floor
+        // A 1% device is steady enough that the default claim binds at both sizes, so the
+        // effect has to be measured on a device noisy enough for the measurement to matter.
+        val coarse = runDevice(seed = 3L, runNoise = 0.06, runsPerArm = 5).calibration.floor
+        val fine = runDevice(seed = 3L, runNoise = 0.06, runsPerArm = 15).calibration.floor
         assertTrue("5 runs gave $coarse, 15 runs gave $fine", fine < coarse)
     }
 
@@ -305,30 +312,58 @@ class NullTestTest {
         )
     }
     /**
-     * The property early exit rests on.
+     * The property early exit used to rest on, and no longer does.
      *
-     * A run is allowed to stop mid-calibration once its floor passes the usable limit, which
-     * is only sound if the floor cannot later fall back under it. That holds for a maximum
-     * and not for a quantile, so this is pinned rather than left to the comment that says so.
+     * The floor was the largest dispersion seen, which cannot fall, and that is what licensed
+     * abandoning a run mid-calibration. Finding 13 made it the spread of the comparisons,
+     * which *does* fall when a steady comparison is added — measured falling from 23.6% to
+     * 19.5% on exactly the shape below. This pins the new behaviour so nothing quietly
+     * reintroduces a stopping rule that assumes the old one.
      */
     @Test
-    fun `the calibrated floor never falls as comparisons are added`() {
-        // One wide comparison early, then a run of tight ones. Under a quantile the wide one
-        // gets averaged away as the sample grows; under a maximum it cannot.
-        val wide = DoubleArray(5) { 6_770_000.0 } to DoubleArray(5) { 7_570_000.0 }
-        val tight = DoubleArray(5) { 7_570_000.0 } to DoubleArray(5) { 7_570_000.0 }
+    fun `the calibrated floor can fall as comparisons are added`() {
+        // One wide comparison, then a run of tight ones. Under a maximum the wide one sets the
+        // floor forever; under a spread it is diluted, which is the point of using a spread.
+        val wide = DoubleArray(15) { 6_770_000.0 } to DoubleArray(15) { 7_570_000.0 }
+        val tight = DoubleArray(15) { 7_570_000.0 } to DoubleArray(15) { 7_570_000.0 }
         val config = AbConfig(bootstrapIterations = 800)
 
-        var previous = 0.0
-        for (count in 1..12) {
-            val arms = listOf(wide) + List(count - 1) { tight }
-            val floor = NullTest.calibrate(arms, config).floor
-            assertTrue(
-                "floor fell from $previous to $floor at $count comparison(s)",
-                floor >= previous - 1e-12,
-            )
-            previous = floor
+        val floors = (3..10).map { count ->
+            NullTest.calibrate(listOf(wide) + List(count - 1) { tight }, config).floor
         }
+
+        assertTrue(
+            "the floor should dilute as steady comparisons arrive, got $floors",
+            floors.last() < floors.first(),
+        )
+    }
+
+    /**
+     * What early exit rests on instead: a lower bound on where the finished floor can land.
+     *
+     * The spread is 1.96 * sqrt(mean of the squared log ratios), and a sum of squares is at
+     * least its largest term, so once the worst comparison is far enough off parity no
+     * remaining comparison can pull the finished floor back under the limit. That bound only
+     * grows, which is the property a stopping rule needs.
+     */
+    @Test
+    fun `one comparison far enough off parity fixes the outcome whatever follows`() {
+        val config = AbConfig(bootstrapIterations = 800)
+        val required = NullTest.REQUIRED_CONSECUTIVE_PASSES
+        // 40% off parity: far past what the bound tolerates over eight comparisons.
+        val awful = DoubleArray(15) { 6_000_000.0 } to DoubleArray(15) { 8_400_000.0 }
+        val tight = DoubleArray(15) { 7_570_000.0 } to DoubleArray(15) { 7_570_000.0 }
+
+        val finished = NullTest.calibrate(
+            listOf(awful) + List(required - 1) { tight },
+            config,
+        ).floor
+
+        assertTrue(
+            "a comparison this far off parity must keep the finished floor past the limit, " +
+                "got $finished",
+            finished > NullTest.MAXIMUM_USABLE_NOISE_FLOOR,
+        )
     }
 
 }

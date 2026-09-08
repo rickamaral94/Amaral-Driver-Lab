@@ -1,5 +1,9 @@
 package com.amaral.driverlab.stats
 
+import kotlin.math.expm1
+import kotlin.math.ln
+import kotlin.math.sqrt
+
 /**
  * What the device demonstrated about its own resolution, measured on A/A data that is *not*
  * the data the null test is judged on.
@@ -179,6 +183,16 @@ public object NullTest {
      */
     public const val REQUIRED_CONSECUTIVE_PASSES: Int = 8
 
+    /**
+     * Comparisons needed before their own spread is used instead of a bootstrap.
+     *
+     * Three is the smallest count with a usable sample variance. Below it the fallback runs,
+     * and the fallback is known to over-state — so a run that stops this early reports a floor
+     * wider than the device deserves, which is the safe direction for a number nothing has
+     * really measured yet.
+     */
+    private const val MINIMUM_FOR_SPREAD: Int = 3
+
 
     /**
      * A/A comparisons run and thrown away before calibration begins. **Zero, on purpose.**
@@ -253,12 +267,43 @@ public object NullTest {
                 config = config,
             )
         }
-        val measured = comparisons.maxOf { it.intervalDistanceFromParity } * safetyFactor
+        val measured = dispersionOf(comparisons) * safetyFactor
         return NoiseFloorCalibration(
             comparisons = comparisons,
             floor = maxOf(config.minimumPracticalDifference, measured),
             safetyFactor = safetyFactor,
         )
+    }
+
+    /**
+     * How far this device's A/A comparisons stray from parity, before the safety factor.
+     *
+     * **Preferred: the spread of the comparisons themselves.** Several A/A comparisons are
+     * several independent draws of exactly the quantity the floor is about, so their spread
+     * estimates it with no resampling and no model. Taken as a two-sided 95% range on the log
+     * ratios, which is symmetric in the arms — swapping them must not move a floor.
+     *
+     * **Fallback: the widest bootstrap interval**, when there are too few comparisons to have
+     * a spread. It is what a single comparison can say, and it is measurably wrong: at fifteen
+     * runs per arm a percentile bootstrap of a median ratio covers 97.3% where 95% was asked
+     * for, and reads about 40% wider than the estimator's real spread, because resampling a
+     * median over fifteen points gives a lumpy, fat-tailed distribution. The reference device
+     * calibrated 12.4% and 13.4% on two runs whose arms — the same driver — sat 0.50% and
+     * 0.76% from parity. That floor was not cautious, it was false: the device does not
+     * manufacture 13% differences, and saying so blocked a device that had earned a ranking.
+     */
+    private fun dispersionOf(comparisons: List<AbResult>): Double {
+        if (comparisons.size < MINIMUM_FOR_SPREAD) {
+            return comparisons.maxOf { it.intervalDistanceFromParity }
+        }
+        val logRatios = comparisons.map { ln(it.speedupOfA) }
+        val mean = logRatios.average()
+        val variance = logRatios.sumOf { val d = it - mean; d * d } / (logRatios.size - 1)
+        // Centred on parity rather than on the sample mean: a lean away from 1.0 is dispersion
+        // this device produced, not something to subtract out. The ordering check is what
+        // decides whether such a lean is systematic; the floor only has to cover it.
+        val spread = 1.96 * sqrt(variance + mean * mean)
+        return expm1(spread)
     }
 
     /**

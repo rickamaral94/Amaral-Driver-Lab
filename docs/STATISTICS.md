@@ -604,6 +604,87 @@ That is almost certainly the sensor lagging the work rather than heat making the
 fast run does more work per second and the reading taken afterwards is higher. Recorded because
 it will look like a finding to the next person who plots it, and it is not one.
 
+## Finding 13: the floor was not conservative, it was wrong
+
+Two 8x15 calibrations on the reference device, back to back:
+
+```
+14:34   arm A 8.07 ms   arm B 8.11 ms   ->  0.50% apart   floor 12.4%
+15:05   arm A 7.89 ms   arm B 7.83 ms   ->  0.76% apart   floor 13.4%
+```
+
+Same driver on both arms, both times, and both floors past the 10% limit. A floor of 13.4%
+asserts that this device manufactures differences of up to 13.4% out of nothing. Its two A/A
+comparisons landed within 0.76% of parity. Those two statements cannot both be right.
+
+### The bootstrap over-covers at these sample sizes
+
+The floor was a percentile bootstrap interval on the ratio of two medians. Simulating A/A data
+with a known spread and comparing what the bootstrap says against where the estimate actually
+lands over 3000 independent replications:
+
+| runs/arm | true 95% spread | bootstrap says | ratio | coverage |
+|---------:|----------------:|---------------:|------:|---------:|
+|        5 |          10.38% |         14.90% |  1.44 |    97.2% |
+|       15 |           6.06% |          8.47% |  1.40 |    97.3% |
+|       25 |           5.03% |          6.65% |  1.32 |    96.5% |
+
+It asks for 95% and delivers 97.3%, reading about 40% wider than the estimator's real spread.
+Resampling a median over fifteen points gives a lumpy, fat-tailed distribution — the resampled
+median jumps between order statistics — and the percentile interval inherits the fat tails.
+This is a known small-sample failure of the percentile bootstrap for medians, and nothing in
+this project had checked for it.
+
+Two inflations were then stacked: the biased interval, and a **maximum** taken over eight
+comparisons, which reaches far past any single comparison's 95% point.
+
+### The protocol already pays for a better estimator
+
+Eight A/A comparisons are eight independent draws of exactly the quantity the floor is about.
+Their spread estimates it directly — no resampling, no model — and cross-validation still
+applies, since comparison *i* can be judged on the spread of the other seven. Simulated over
+400 pools of eight comparisons at fifteen runs per arm:
+
+| device spread | shipped: max of bootstraps | spread of the comparisons | where the estimates truly landed |
+|--------------:|---------------------------:|--------------------------:|---------------------------------:|
+|          1.0% |                       2.5% |                      1.4% |                             0.8% |
+|          2.0% |                       5.2% |                      2.7% |                             1.6% |
+|          4.0% |                      10.2% |                      5.3% |                             3.1% |
+|          7.0% |                      17.8% |                      9.2% |                             5.2% |
+|         15.0% |                      39.3% |                     20.5% |                            12.0% |
+
+The old rule fails a 4%-spread device at 10.2%. That device's A/A comparisons stray 3.1% from
+parity. It had earned a ranking and was refused one.
+
+The new rule still fails the 15% device at 20.5%, which is finding 2's requirement: a device
+too unstable to resolve anything must not be allowed to tie its way to a pass. It remains
+about 1.8x the truth, from the 1.5 safety factor and the max over folds — conservative, but no
+longer false.
+
+**Shipped**: the floor is the two-sided 95% range of the comparisons' log ratios, taken about
+parity rather than about their own mean, so a lean the device produced is covered rather than
+subtracted out. Below three comparisons there is no spread to take and the bootstrap remains as
+the fallback, over-wide in the safe direction for a number nothing has really measured.
+
+### The cost: early exit loses its licence
+
+A run could be abandoned mid-calibration because the floor was a maximum and could not fall.
+A spread can: measured falling from 23.6% to 19.5% as steady comparisons arrived. Stopping on
+it would abandon runs over a verdict the finished test never reaches.
+
+What survives is a lower bound. The spread is `1.96 * sqrt(mean of the squared log ratios)`,
+and a sum of squares is at least its largest term, so with *n* comparisons in the finished pool
+the final spread cannot come in below `worst |log ratio| / sqrt(n)`. That grows as comparisons
+arrive, which is what a stopping rule needs. It fires far later than the old one — a single
+comparison must sit about 10% off parity — so a failing device now usually pays for the whole
+run. That is the honest price of the floor no longer being a maximum.
+
+### What it means for the reference device
+
+At its measured 7.0% run-to-run spread the table puts it near 9.2%, against the 10% limit.
+That is a pass, and a narrow one: close enough that a single unlucky comparison could still
+push it over. It has not been run yet.
+
 ## What passing the null test means
 
 `NullTestResult.passed` requires all four of:

@@ -2,6 +2,10 @@ package com.amaral.driverlab.report
 
 import com.amaral.driverlab.stats.AbConfig
 import com.amaral.driverlab.stats.NullTest
+import kotlin.math.abs
+import kotlin.math.expm1
+import kotlin.math.ln
+import kotlin.math.sqrt
 
 /**
  * Whether a null test in progress has already lost, so the remaining comparisons cannot
@@ -25,24 +29,37 @@ public object NullTestDecision {
     public fun settledFailure(
         perWorkload: List<WorkloadArms>,
         config: AbConfig = AbConfig(),
+        required: Int = NullTest.REQUIRED_CONSECUTIVE_PASSES,
     ): String? {
         for (workload in perWorkload) {
             if (workload.comparisons.isEmpty()) continue
 
-            // The floor is the largest dispersion seen, so it never falls as comparisons are
-            // added: a partial pool already past the limit stays past it. That monotonicity
-            // is the whole licence for stopping here, and swapping the floor rule for
-            // anything that can decrease would quietly invalidate this.
-            val floor = NullTest.calibrate(
-                arms = workload.comparisons.map { it.toArrays() },
-                config = config,
-            ).floor
+            // The floor itself is no longer safe to test here. It used to be the largest
+            // dispersion seen, which never falls; finding 13 made it the spread of the
+            // comparisons, which does fall when a steady comparison is added — a partial pool
+            // can read 23.6% and finish at 19.5%. Stopping on that would abandon runs over a
+            // verdict the finished test never reaches.
+            //
+            // What survives is a *lower bound* on where the finished floor can land. The
+            // spread is 1.96 * sqrt(mean(x^2)) over the log ratios, and a sum of squares is at
+            // least its largest term, so with `required` comparisons in the finished pool the
+            // final spread cannot fall below the worst |x| seen so far divided by sqrt(required).
+            // That bound only grows as comparisons arrive, which is the property this needs.
+            val worstLogRatio = workload.comparisons.maxOf { pair ->
+                val a = pair.first.median()
+                val b = pair.second.median()
+                if (a <= 0.0 || b <= 0.0) 0.0 else abs(ln(b / a))
+            }
+            val leastPossibleFloor =
+                expm1(1.96 * worstLogRatio / sqrt(required.toDouble())) *
+                    NullTest.CALIBRATION_SAFETY_FACTOR
 
-            if (floor > NullTest.MAXIMUM_USABLE_NOISE_FLOOR) {
+            if (leastPossibleFloor > NullTest.MAXIMUM_USABLE_NOISE_FLOOR) {
                 return "${workload.workloadId}: ${workload.comparisons.size} comparison(s) in, " +
-                    "the floor is already ${"%.1f".format(floor * 100)}%, past the " +
+                    "one of them is far enough off parity that the finished floor cannot come " +
+                    "in under ${"%.1f".format(leastPossibleFloor * 100)}%, past the " +
                     "${"%.0f".format(NullTest.MAXIMUM_USABLE_NOISE_FLOOR * 100)}% limit. " +
-                    "It cannot come back down, so no further comparison can pass this. " +
+                    "No further comparison can pull it back. " +
                     widestComparison(workload)
             }
         }
