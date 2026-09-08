@@ -54,8 +54,18 @@ public data class BenchmarkPlan(
     }
 
     public companion object {
-        /** Section 7: at least five independent runs per driver. */
-        public const val DEFAULT_RUNS_PER_ARM: Int = 5
+        /**
+         * Section 7 asks for at least five. Five is also the number that made the null test
+         * unpassable, and finding 11 is why: the noise floor is a bootstrap interval over this
+         * many values, and over five it is about 20% wide no matter how steady the device is.
+         * The reference Odin2's own arms differed by 4.0% and still calibrated a 21.8% floor.
+         *
+         * This is deliberately the same constant for the A/A and A/B runs. The gate is not a
+         * formality bolted onto the measurement — it measures the very protocol the comparison
+         * uses, so raising it here to make the gate pass while leaving the comparison at five
+         * would only hide that the comparison cannot resolve anything either.
+         */
+        public const val DEFAULT_RUNS_PER_ARM: Int = 15
         public const val DEFAULT_ARM_COOLDOWN_MS: Long = 20_000L
 
         /** Builds the A/A plan: the same driver on both sides. */

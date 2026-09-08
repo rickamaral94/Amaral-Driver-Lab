@@ -427,6 +427,108 @@ more frames per run buys the same variance reduction at a quarter of the wall ti
 20 s cooldown is charged per run and not per frame. The logs cannot settle it — every run so far
 is 1000 frames — so it needs one deliberate experiment at two frame counts.
 
+## Finding 11: the floor was measuring the sample size, and the protocol was shaped to maximise that
+
+Finding 10 fixed what a run is summarised by. This is about how many runs there are, and it is
+the reason the reference device still could not pass.
+
+A cold Odin2, A/A on the system driver, on the build with the trimmed mean:
+
+```
+arm  :    B    A    A    B    B    A    A    B    B    A
+ms   : 9.08 8.19 7.80 8.25 7.78 7.93 7.46 8.31 7.64 8.26
+degC : 38.2 37.8 39.4 37.8 39.0 39.0 39.0 37.8 38.6 37.8
+
+arm A median 7.93   arm B median 8.25   ->  point estimate +4.0%
+                                            calibrated floor  21.8%
+```
+
+The estimator change worked: the same device reported its two arms 11.8% apart before and 4.0%
+apart here. And the floor still came out at 21.8%, because **the floor is not the point estimate**
+— it is the bootstrap interval around it, and a bootstrap interval over five values is about 20%
+wide however steady the device is. The Odin2 was being failed for the sample size, not for the
+hardware.
+
+### The protocol was the worst arrangement of its own budget
+
+The floor is the **worst** comparison's interval. So comparisons and runs pull in opposite
+directions: every comparison added is another chance to draw a bad one and can only widen the
+floor, while every run added narrows all of them. Ten comparisons of five runs maximises both
+harms. Simulated at the measured per-run spread, keeping the total device time roughly fixed:
+
+| comparisons | runs/arm | executions | wall time | floor @3.9% | floor @5.7% |
+|------------:|---------:|-----------:|----------:|------------:|------------:|
+|          10 |        5 |        100 |      50 m |       17.6% |       24.7% |
+|           5 |       11 |        110 |      55 m |       11.1% |       14.1% |
+|           6 |       15 |        180 |      90 m |        9.2% |       12.9% |
+|           8 |       15 |        240 |     120 m |      ~10%   |       ~13%  |
+|          10 |       15 |        300 |     150 m |        9.7% |       15.6% |
+
+### Why eight and not fewer
+
+Fewer comparisons is cheaper and tightens the floor, so the count wants to fall — and the
+ordering check is what stops it. Measured against plain A,B,A,B alternation under drift, the
+protocol finding 3 rejected:
+
+| comparisons | alternation flagged | counterbalanced flagged (false alarms) |
+|------------:|--------------------:|---------------------------------------:|
+|           6 |             10 / 40 |                                  2 / 40 |
+|           8 |             24 / 40 |                                  0 / 40 |
+|          10 |             27 / 40 |                                  1 / 40 |
+
+Six comparisons saves half an hour and hands back most of finding 3's safety net. Eight keeps
+it. Below five the check cannot fire at all — Wilcoxon signed-rank on n comparisons has no
+two-sided p smaller than 2/2^n, so at five the smallest attainable p is 0.0625 and no sensible
+alpha can ever be crossed. A check that cannot fail is decoration.
+
+**Shipped: 8 comparisons of 15 runs per arm**, and the warm-up comparison is gone.
+
+### The same-constant rule
+
+`DEFAULT_RUNS_PER_ARM` is deliberately shared by the A/A and A/B runs. It is tempting to raise
+it only for the null test so the gate passes, and that would be the dishonest fix: the gate is
+not a formality bolted onto the measurement, it measures **the very protocol the comparison
+uses**. A 21.8% floor at five runs per arm was not the gate being pedantic — it was the correct
+statement that a five-run-per-arm A/B comparison on this device cannot resolve anything below
+about 20%. Two of the four Turnip-versus-Qualcomm runs in finding 10 (+13.4% and +7.3%) sit
+under that. Removing the gate would not have made those measurements real, only silent.
+
+### A change that was measured and rejected
+
+The obvious next move was to apply finding 10 one level up: the arm statistic is the *median* of
+the per-run values, and a median of five is coarse for the same reason a median of a bimodal
+frametime series is. On the real comparison above it helps — 21.8% down to 15.7%. It was
+rejected anyway, because the objection turned out to dominate:
+
+| arm statistic | clean floor | floor with one 2×-slow run | point error, contaminated |
+|---------------|------------:|---------------------------:|--------------------------:|
+| median        |        8.6% |                       9.2% |                      0.2% |
+| mean          |        6.5% |                      42.5% |                      9.0% |
+| trim 1 each end |      7.0% |                      36.0% |                      0.5% |
+
+An Android device can always hand you one corrupted run — a background app, a thermal event.
+The median costs about two points on a clean pool and is the only one of the three that survives
+that. Trimming does not rescue the mean here, because the bootstrap resamples with replacement
+and a contaminated value reappears often enough to survive the trim.
+
+The reason this is the opposite of finding 10's answer is worth stating, because "use the
+trimmed mean" is not a rule: within a run the frametimes are **multimodal**, so the median
+quantises onto a mode and reports the wrong quantity. Across runs the values are continuous and
+roughly symmetric, so the median is merely a little inefficient. Same estimator, different
+distribution, opposite verdict.
+
+### Two things the app was saying that were not true
+
+The screen for the run above read **"this device resolves differences of about 2.0%"** directly
+underneath **"the calibration did not pass"**, and below that, "0 of 10 A/A comparisons done".
+
+The run had settled after one comparison on a 21.8% floor. Cross-validation needs at least two
+comparisons to leave one out, so reading a one-comparison record back yielded no usable
+comparisons and fell through to `NoiseFloorCalibration.assumed()` — the default claim of 2.0%,
+which `describe()` then rendered as "Measured on 0 A/A comparisons". The one number a user takes
+away from that screen was both invented and flattering, on a failure. It now says the resolution
+is unknown and that the number is a default rather than a finding.
+
 ## What passing the null test means
 
 `NullTestResult.passed` requires all four of:

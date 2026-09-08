@@ -26,6 +26,31 @@ carried forward; it remains in git history and on `main`.
 
 ### Fixed
 
+- **The noise floor was reporting the sample size, not the device.** With five runs per arm a
+  bootstrap interval is about 20% wide whatever it measures, so the reference device
+  calibrated a 21.8% floor from two arms that were 4.0% apart. Worse, the protocol was shaped
+  to maximise exactly that: the floor is the *worst* comparison's interval, so comparisons
+  widen it and runs narrow it, and ten comparisons of five runs is the worst arrangement of
+  its own budget. Now **eight comparisons of fifteen runs per arm**, which simulates at about
+  10% instead of 22%. Eight rather than fewer because the ordering check is measured to fire
+  24 times in 40 against a biased protocol at eight and only 10 at six; below five comparisons
+  it cannot fire at all, since signed-rank has no two-sided p below 2/2^n. `DEFAULT_RUNS_PER_ARM`
+  stays shared with the A/B profiles on purpose — raising it only for the gate would have hidden
+  that a five-run comparison cannot resolve a driver difference below about 20% either. Finding
+  11 in [`docs/STATISTICS.md`](docs/STATISTICS.md), including the arm-statistic change that was
+  measured and **rejected**: a mean beats the median on a clean pool and collapses under one
+  corrupted run, which an Android device can always supply.
+- **The calibration screen reported an invented number as a measurement, on a failure.** A run
+  that settled after one comparison stored too little for cross-validation to leave one out, so
+  reading it back fell through to the assumed default and rendered it as "Measured on 0 A/A
+  comparisons: this device resolves differences of about 2.0%" — directly under "the
+  calibration did not pass", and flattering by a factor of ten. It now says the resolution is
+  unknown and names the number as a default.
+- **A failing null test named the symptom and hid the cause.** A too-coarse floor and an
+  ordering effect can both be present; only the floor was reported, so the advice was "cool the
+  device down" when the actual problem was drift landing on one arm. Both are reported now.
+- **The warm-up comparison is gone.** Finding 8 refuted its only stated justification and
+  nothing replaced it; at fifteen runs per arm it cost thirty executions.
 - **The A/B comparison read a statistic that manufactured the differences it reported.**
   It summarised each run by its median frametime. A run's frametimes are multimodal —
   the GPU changes DVFS step during the run — so the median reports whichever step held

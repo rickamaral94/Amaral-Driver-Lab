@@ -16,9 +16,22 @@ public data class NoiseFloorCalibration(
 ) {
     public val runsUsed: Int = comparisons.sumOf { it.runsA + it.runsB }
 
-    public fun describe(): String =
+    /** True when no A/A comparison backs this number, so it is a default rather than a finding. */
+    public val isAssumed: Boolean = comparisons.isEmpty()
+
+    public fun describe(): String = if (isAssumed) {
+        // This used to read "Measured on 0 A/A comparisons: this device resolves differences of
+        // about 2.0%". A run that stopped before it could calibrate anything was reporting the
+        // default claim as a measurement, and reporting it as the *best* result the app can
+        // show — on screen, above the words "the calibration did not pass". The one number a
+        // user takes away from that screen was both invented and flattering.
+        "No A/A comparison has been completed on this device, so its resolution is unknown. " +
+            "The ${"%.1f".format(floor * 100)}% below is the default the harness assumes, not " +
+            "something this device demonstrated."
+    } else {
         "Measured on ${comparisons.size} A/A comparisons: this device resolves differences of about " +
             "${"%.1f".format(floor * 100)}% or larger. Anything smaller is reported as a technical tie."
+    }
 
     public companion object {
         /** For a first run, before any calibration exists: claim only the default resolution. */
@@ -107,7 +120,12 @@ public data class NullTestResult(
                 "${"%.1f".format(calibration.floor * 100)}%, past the " +
                 "${"%.0f".format(NullTest.MAXIMUM_USABLE_NOISE_FLOOR * 100)}% limit. Every A/A comparison " +
                 "tied because the harness cannot see anything, not because the device is steady. " +
-                "Cool the device down, close other apps, or raise the number of runs per arm."
+                "Cool the device down, close other apps, or raise the number of runs per arm." +
+                // A coarse floor is a symptom and an ordering effect is a cause, so reporting
+                // only the first tells the user to cool the device down when the actual problem
+                // is that the schedule is letting drift land on one arm. When both are present
+                // the cause is the useful half.
+                if (hasOrderingBias) " $ORDERING_EFFECT_ALSO" else ""
         failedIndices.isNotEmpty() -> {
             val worst = failedIndices.joinToString(", ") { index ->
                 val c = comparisons[index]
@@ -118,35 +136,69 @@ public data class NullTestResult(
         }
         comparisons.size < requiredConsecutivePasses ->
             "Null test incomplete: ${comparisons.size} of $requiredConsecutivePasses A/A comparisons done."
-        hasOrderingBias ->
-            "Null test failed: the first arm came out ahead in $firstArmWins of " +
-                "$directedComparisons comparisons, by enough that the lean is unlikely to be chance " +
-                "(signed-rank p=${"%.4f".format(orderingBiasP)}). A driver compared with itself " +
-                "should not favour a side, so the protocol has an ordering effect — usually drift " +
-                "between arms that interleaving has not cancelled."
+        hasOrderingBias -> ORDERING_EFFECT
         else ->
             "Null test passed: $requiredConsecutivePasses consecutive A/A comparisons all returned a " +
                 "technical tie against a ${"%.1f".format(appliedNoiseFloor * 100)}% noise floor. " +
                 "Widest self-difference seen: ${"%.1f".format(observedNoiseFloor * 100)}%."
     }
+
+    private val ORDERING_EFFECT: String
+        get() = "Null test failed: the first arm came out ahead in $firstArmWins of " +
+                "$directedComparisons comparisons, by enough that the lean is unlikely to be chance " +
+                "(signed-rank p=${"%.4f".format(orderingBiasP)}). A driver compared with itself " +
+                "should not favour a side, so the protocol has an ordering effect — usually drift " +
+                "between arms that interleaving has not cancelled."
+
+    private val ORDERING_EFFECT_ALSO: String
+        get() = "There is also an ordering effect: the first arm led in $firstArmWins of " +
+            "$directedComparisons comparisons (signed-rank p=${"%.4f".format(orderingBiasP)}), " +
+            "which a driver compared with itself has no reason to do. Drift between the arms is " +
+            "the likelier cause than the device being noisy."
 }
 
 public object NullTest {
 
-    /** Section 13, phase 1: ten consecutive A/A comparisons must all be technical ties. */
-    public const val REQUIRED_CONSECUTIVE_PASSES: Int = 10
+    /**
+     * Section 13, phase 1: this many consecutive A/A comparisons must all be technical ties.
+     *
+     * Six, not ten, and the direction is not a weakening. The floor is the **worst**
+     * comparison's dispersion, so every comparison added is another chance to draw a bad one
+     * and can only widen it, while every run added to a comparison narrows all of them. Ten
+     * comparisons of five runs was the worst arrangement of its own budget: simulated at the
+     * reference device's measured spread it calibrates a 22% floor, where eight of fifteen
+     * calibrates about 10% — more device time, but spent on the axis that helps.
+     *
+     * Eight rather than fewer, because the ordering check is what stops the count falling
+     * further and it was measured rather than guessed. Against plain alternation under drift —
+     * the protocol finding 3 rejected — the check fires 24 times in 40 at eight comparisons,
+     * 10 at six, and 27 at ten; on the correct counterbalanced protocol it fires 0 to 1 in 40
+     * at every count. Six saves half an hour of device time and hands back most of finding 3's
+     * safety net, which is not a trade worth making. Below five the check cannot fire at all:
+     * Wilcoxon signed-rank on n comparisons has no two-sided p below 2/2^n.
+     */
+    public const val REQUIRED_CONSECUTIVE_PASSES: Int = 8
 
 
     /**
-     * A/A comparisons run and thrown away before calibration begins.
+     * A/A comparisons run and thrown away before calibration begins. **Zero, on purpose.**
      *
-     * The GPU spends the first minutes of a session in a different frequency step: on an
-     * Adreno 740, seven of the eight slowest runs in a 150-run session were in the first four
-     * minutes. Measuring that ramp-up and calling it the device's resolution is the same
-     * mistake as timing a workload's first frame, which is why every workload already has
-     * warmup frames. This is the same idea one level up.
+     * This was one, to discard a cold ramp-up: seven of the eight slowest runs in a 150-run
+     * session were in its first four minutes. Finding 8 showed that reading was backwards —
+     * that session was not cold, it began the moment a 57-minute run ended, and a genuinely
+     * cold device is the *fast* one. The justification was gone and nothing replaced it.
+     *
+     * Finding 9 then showed a mechanism by which it could actively hurt, and the run in
+     * finding 11 is consistent with it: the first run after the discarded comparison was
+     * 9.08 ms, the slowest of the twenty, and dropping it takes the session's run-to-run
+     * spread from 5.7% to 3.9% — the difference between a shape that clears the 10% limit and
+     * one that does not. That is one run and not proof.
+     *
+     * It goes on cost and absence of justification rather than on proof of harm: at fifteen
+     * runs per arm it is thirty executions, about fifteen minutes, spent on a step whose only
+     * stated reason has been refuted.
      */
-    public const val WARMUP_COMPARISONS: Int = 1
+    public const val WARMUP_COMPARISONS: Int = 0
 
     /**
      * Margin over the calibrated dispersion. A device whose A/A comparisons landed within 3.5%

@@ -1,0 +1,109 @@
+{
+ "source": "AYN Odin2 Portal (QCS8550, Adreno 740), Android 13, 2026-09-08T14:01 local",
+ "note": "A/A null test of the system driver against itself, on the first build with the trimmed-mean estimator, started from cold (38-39 C, flat). This is the comparison that failed the run: the arms are 4.0% apart on the point estimate and the calibrated floor is still 21.8%, because a bootstrap interval over five values is about 20% wide whatever it measures. It is the evidence for finding 11 \u2014 that the floor was reporting the sample size rather than the hardware.",
+ "workload": "baseline/v1",
+ "framesPerRun": 1000,
+ "runsPerArm": 5,
+ "executions": [
+  {
+   "comparison": 1,
+   "slot": 0,
+   "arm": "B",
+   "trimmedMeanMs": 9.08,
+   "medianMs": 10.38,
+   "gpuMs": 9068,
+   "frames": 1000,
+   "celsius": 38.2
+  },
+  {
+   "comparison": 1,
+   "slot": 1,
+   "arm": "A",
+   "trimmedMeanMs": 8.19,
+   "medianMs": 8.76,
+   "gpuMs": 8191,
+   "frames": 1000,
+   "celsius": 37.8
+  },
+  {
+   "comparison": 1,
+   "slot": 2,
+   "arm": "A",
+   "trimmedMeanMs": 7.8,
+   "medianMs": 8.76,
+   "gpuMs": 7800,
+   "frames": 1000,
+   "celsius": 39.4
+  },
+  {
+   "comparison": 1,
+   "slot": 3,
+   "arm": "B",
+   "trimmedMeanMs": 8.25,
+   "medianMs": 8.76,
+   "gpuMs": 8323,
+   "frames": 1000,
+   "celsius": 37.8
+  },
+  {
+   "comparison": 1,
+   "slot": 4,
+   "arm": "B",
+   "trimmedMeanMs": 7.78,
+   "medianMs": 6.78,
+   "gpuMs": 7855,
+   "frames": 1000,
+   "celsius": 39.0
+  },
+  {
+   "comparison": 1,
+   "slot": 5,
+   "arm": "A",
+   "trimmedMeanMs": 7.93,
+   "medianMs": 7.57,
+   "gpuMs": 7941,
+   "frames": 1000,
+   "celsius": 39.0
+  },
+  {
+   "comparison": 1,
+   "slot": 6,
+   "arm": "A",
+   "trimmedMeanMs": 7.46,
+   "medianMs": 7.57,
+   "gpuMs": 7488,
+   "frames": 1000,
+   "celsius": 39.0
+  },
+  {
+   "comparison": 1,
+   "slot": 7,
+   "arm": "B",
+   "trimmedMeanMs": 8.31,
+   "medianMs": 8.76,
+   "gpuMs": 8374,
+   "frames": 1000,
+   "celsius": 37.8
+  },
+  {
+   "comparison": 1,
+   "slot": 8,
+   "arm": "B",
+   "trimmedMeanMs": 7.64,
+   "medianMs": 7.57,
+   "gpuMs": 7653,
+   "frames": 1000,
+   "celsius": 38.6
+  },
+  {
+   "comparison": 1,
+   "slot": 9,
+   "arm": "A",
+   "trimmedMeanMs": 8.26,
+   "medianMs": 8.76,
+   "gpuMs": 8249,
+   "frames": 1000,
+   "celsius": 37.8
+  }
+ ]
+}

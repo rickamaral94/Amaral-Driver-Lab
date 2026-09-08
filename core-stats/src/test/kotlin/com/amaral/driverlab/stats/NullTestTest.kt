@@ -32,7 +32,10 @@ class NullTestTest {
         runNoise: Double,
         driftPerRun: Double = 0.0,
         order: Order = Order.COUNTERBALANCED,
-        runsPerArm: Int = 5,
+        // Must match BenchmarkPlan.DEFAULT_RUNS_PER_ARM, which :core-stats cannot see from
+        // here. It was 5 while the app shipped 15, so every power figure in this file was
+        // measured on a protocol nobody runs.
+        runsPerArm: Int = 15,
         comparisons: Int = NullTest.REQUIRED_CONSECUTIVE_PASSES,
     ): Device {
         val sim = Simulation(seed)
