@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Build and test the app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install the NDK and CMake the native build pins
+        run: |
+          sdkmanager --install "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew test testDebugUnitTest --stacktrace
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: amaral-driver-lab-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Keep the schema samples for the schema job
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-samples
+          path: core-report/build/schema-samples/*.json
+          if-no-files-found: error
+
+  ingestion:
+    name: Ingestion pipeline
+    runs-on: ubuntu-latest
+    needs: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install jsonschema pytest
+
+      - name: Fetch the payloads the app actually produces
+        uses: actions/download-artifact@v4
+        with:
+          name: schema-samples
+          path: core-report/build/schema-samples
+
+      - name: Check the schema is well-formed and matches real output
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys, jsonschema
+          schema = json.loads(pathlib.Path("schema/result-v1.schema.json").read_text())
+          jsonschema.Draft202012Validator.check_schema(schema)
+          validator = jsonschema.Draft202012Validator(schema)
+          failed = False
+          for sample in sorted(pathlib.Path("core-report/build/schema-samples").glob("*.json")):
+              errors = sorted(validator.iter_errors(json.loads(sample.read_text())),
+                              key=lambda e: list(e.path))
+              print(f"{sample.name}: {'ok' if not errors else str(len(errors)) + ' errors'}")
+              for error in errors[:10]:
+                  failed = True
+                  print("  ", ".".join(str(p) for p in error.path) or "(root)", error.message)
+          sys.exit(1 if failed else 0)
+          PY
+
+      - name: Ingestion tests
+        run: python -m pytest tools/ingest/tests -q
+
+  release-apk:
+    name: Signed release APK
+    runs-on: ubuntu-latest
+    needs: android
+    # Signing material only exists on the main repository, so forks build debug only.
+    if: github.event_name != 'pull_request' && github.repository == 'rickamaral94/Amaral-Driver-Lab'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - run: sdkmanager --install "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode the signing keystore
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No signing keystore configured; skipping the signed build."
+          else
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Assemble release
+        if: steps.keystore.outputs.present == 'true'
+        env:
+          RELEASE_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          GITHUB_CLIENT_ID: ${{ secrets.GH_OAUTH_CLIENT_ID }}
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Upload release APK
+        if: steps.keystore.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: amaral-driver-lab-release
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

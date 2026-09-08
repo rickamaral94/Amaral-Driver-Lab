@@ -1,259 +1,162 @@
 # Amaral Driver Lab
 
-APK Android arm64, sem root, para comparar o driver Vulkan do sistema com pacotes Turnip/AdrenoTools em processos isolados e reproduzíveis. A prioridade atual é **correção de renderização antes de performance**.
+An Android app that compares Vulkan drivers on a phone, and a repository that turns
+the results into something other people can check.
 
-## O que existe
+Rootless, arm64 only. It loads a Turnip/Mesa driver package the user imported,
+proves which driver actually answered, runs a fixed amount of graphics work, and
+reports a difference only when it can support one.
 
-- importação de ZIP AdrenoTools com validação de `meta.json`, ELF64/AArch64, limites contra ZIP bomb/path traversal e SHA-256;
-- carregamento rootless via [`libadrenotools`](https://github.com/bylaws/libadrenotools), fixada no commit `8fae8ce254dfc1344527e05301e43f37dea2df80`;
-- processo `:runner` descartado depois de cada fase, sem reaproveitar o loader Vulkan entre sistema e candidato;
-- modos `system_only`, `candidate_only` e `ab_system_vs_candidate`, com ordem AB/BA alternada;
-- **correção offscreen v1**: cena determinística 256 × 256, SHA-256 do RGBA, preview PNG lossless e comparação tolerante por blocos;
-- reprovação explícita quando o candidato excede a tolerância de render, independentemente de velocidade;
-- diff de extensões, features core, limites Vulkan, identidade do driver, conformance e versão Mesa;
-- catálogo persistente de crash, timeout, `VK_ERROR_DEVICE_LOST`, outros erros Vulkan, validation errors e render mismatch;
-- workload legado `vulkan_transfer_stress_v1`, preservado sem redefinir `transfer_payload_gib_s`;
-- telemetria de aparelho, Vulkan, bateria, temperatura, energia/corrente disponíveis, estado térmico e cauda do logcat;
-- exportação JSON e publicação opcional em GitHub Issues por Device Flow, sem PAT ou client secret no APK;
-- histórico local de suítes, diff lado a lado, ranking por hardware/workload e bisect de builds sequenciais;
-- envelope público anônimo opcional, validado e assinado por hash canônico, sem envio automático;
-- command trace Vulkan próprio, versionado, com gate de correção e análise A/B;
-- campanhas automatizadas de até 64 suítes, com ordem termicamente balanceada, retomada e manifesto auditável;
-- SDK Android de telemetria opt-in para emuladores, importação local, resumo de frame pacing, comparação descritiva e vínculo imutável com suítes;
-- diagnóstico profundo A/B de formatos, corpus de shaders, pipeline cache, memória, sincronização e Soak Test.
-- benchmark visual avançado com 768 cubos 3D em 1280×720, iluminação procedural e pós-processamento de 19 amostras, integrado ao Recommended v5.
+**Status: rebuilt from scratch, and not yet run on hardware.** Everything below is
+implemented and unit-tested; nothing has been executed on a real GPU. See
+[What has not been verified](#what-has-not-been-verified).
 
-A correção offscreen valida somente a cena fixa incluída no APK. Ela **não prova ganho em jogos** nem correção em todos os shaders, APIs ou emuladores.
+## Why it is built this way
 
-## Como instalar e usar
+Most of the design exists because the obvious version of it is wrong.
 
-### 1. Instale o APK
+**A benchmark that cannot name the driver is worse than no benchmark.** A Turnip
+package that silently fails to load, followed by real numbers filed under
+"Turnip", looks exactly like evidence. So the app asks Vulkan which driver
+answered and refuses to run if it is not the one you chose, and the loader fails
+outright rather than falling back to the system driver.
 
-1. Baixe o APK mais recente em [Releases](https://github.com/rickamaral94/Amaral-Driver-Lab/releases) ou no artifact da CI.
-2. Permita a instalação pelo navegador/gerenciador de arquivos, caso o Android solicite.
-3. Instale e abra **Amaral Driver Lab**. Root não é necessário.
+**A driver that renders wrong is not fast.** Each workload reads its final frame
+back and hashes it before any timing counts.
 
-O app não troca o driver global do Android. O pacote escolhido é carregado somente no processo isolado da fase.
+**A ranking is only as honest as the harness under it.** Before ranking anything,
+the app runs one driver against itself. If it can tell a driver apart from itself,
+the measurements are the problem, and the ranking stays blocked.
 
-### 2. Prepare o teste
+**A tie is a real answer.** Two drivers performing the same is the most common
+outcome, and the app says so instead of inventing a winner from noise.
 
-1. Feche jogos e emuladores.
-2. Fixe brilho, modo de desempenho e velocidade da ventoinha.
-3. Desconecte o carregador quando possível.
-4. Espere o aparelho chegar a uma temperatura inicial comparável.
+## The three findings that changed the design
 
-### 3. Importe o candidato
+These were measured, not assumed, and each contradicted the obvious approach.
+[docs/STATISTICS.md](docs/STATISTICS.md) has the detail.
 
-1. Toque em **IMPORTAR ZIP ADRENOTOOLS**.
-2. Confirme o aviso de execução de código nativo.
-3. Escolha o ZIP ainda compactado.
-4. Aguarde a validação e confira a biblioteca principal e o SHA-256 exibidos.
+1. **A fixed noise floor does not work.** Claiming "differences under 2% are ties"
+   sounds careful. Simulating a device with 1% run-to-run spread showed its A/A
+   dispersion sitting at 2.2% median — the harness could not resolve what it
+   claimed. The floor is now measured from the device's own A/A runs and shown to
+   the user: *this device resolves differences of about 5% or larger*.
 
-### 4. Execute correção sistema × candidato
+2. **A calibrated floor hides the defect it should expose.** A device too unstable
+   to resolve anything calibrates itself an enormous floor, inside which every A/A
+   comparison trivially ties — the harness reports "steady" exactly when it has
+   gone blind. A floor coarser than 10% now fails the null test outright.
 
-1. Em **Workload**, mantenha **Correção offscreen v1 · recomendado**.
-2. Em **Protocolo**, escolha **A/B · sistema × candidato**.
-3. Comece com tolerância RGBA `2`, máximo de blocos divergentes `0` e pelo menos `3` rodadas.
-4. Toque em **▶ INICIAR TESTE** e não use outros apps até a conclusão.
+3. **A,B,A,B interleaving is not enough.** The spec asks for interleaved arms, and
+   it helps, but the first arm still takes the earlier, cooler slot of *every*
+   pair. Under thermal drift it wins all ten comparisons by a margin small enough
+   for the noise floor to swallow. The protocol now counterbalances AB/BA and flips
+   the leading arm between comparisons, and a sign test on direction catches what
+   is left.
 
-Cada braço abre um processo novo. O app salva um PNG por fase, compara sistema e candidato da mesma rodada e apresenta um veredito:
+## What it measures
 
-- `passed_render_correctness`: todos os pares ficaram dentro da tolerância;
-- `failed_render_correctness`: pelo menos um par teve alteração estrutural acima do limite;
-- `failed_execution`: ocorreu crash, timeout, erro Vulkan, device lost ou validation error;
-- `completed_no_reference`: o modo single-driver terminou, mas não havia braço de referência.
+| Workload | What it catches |
+|---|---|
+| `baseline/v1` | Sanity, and the cost of getting a frame into the queue at all |
+| `tiling_gmem/v1` | Binning and GMEM decisions — the classic Turnip regression vector |
 
-O hash exato serve para integridade e detecção de não determinismo. A aprovação usa tolerância por canal e por bloco, porque arredondamentos pequenos entre implementações podem ser legítimos.
+Two subpasses over a 4x multisampled colour target and a packed depth/stencil
+target, resolved inside the render pass and read back through an input attachment
+with `BY_REGION`, both multisampled attachments `DONT_CARE` on store. Every part of
+that shape is a decision the driver has to make about what stays on chip.
 
-### 5. Revise capacidades e falhas
+Work is fixed as counts, never as a duration. Running "for thirty seconds" rewards
+a faster driver with more work and the same wall clock, which turns throughput into
+a measurement of how hot the device happened to be.
 
-No `suite.json`:
+Percentiles are percentiles *of frametime*. FPS is produced at the very last
+moment, for display only.
 
-- `render_correctness` contém percentual de pixels compatíveis, blocos divergentes e detalhes por rodada;
-- `capability_diff` mostra extensões/features ganhas e perdidas, além de limites que aumentaram ou diminuíram;
-- `failure_catalog` registra a fase, o braço, a rodada, o estágio e o tipo de cada falha;
-- `validity_warnings` informa condições que pedem repetição.
+## Modules
 
-Uma extensão perdida pode explicar uma regressão percebida, mas uma extensão presente não garante que sua implementação esteja correta.
-
-### 6. Use o workload legado de transferência quando necessário
-
-Selecione **Transferência fill/copy v1 · legado** para reproduzir a série histórica existente.
-
-`transfer_payload_gib_s` continua medindo exatamente o mesmo protocolo fill/copy v1. A métrica não representa largura de banda física da VRAM e não prova ganho em jogos.
-
-Compare apenas resultados com o mesmo `workload_id`, `workload_version`, aparelho, APK, configuração e condições térmicas.
-
-## Pacote de driver esperado
-
-O ZIP precisa ter `meta.json` e as bibliotecas `.so` na raiz. A biblioteca indicada por `libraryName` deve existir.
-
-```json
-{
-  "schemaVersion": 1,
-  "name": "Turnip A740 Odin 2 Portal",
-  "description": "Perfil de teste",
-  "author": "Amaral",
-  "packageVersion": "2.1.0-rc1",
-  "vendor": "Mesa/Turnip",
-  "driverVersion": "25.x",
-  "minApi": 28,
-  "libraryName": "libvulkan_freedreno.so"
-}
+```
+:app             Compose UI, the :bench service, the process boundary
+:core-bench      Runner state machine, the counterbalanced protocol, orchestration
+:core-vk         C++17 Vulkan engine, workloads, JNI
+:core-driver     Package import, validation, driver identity, the P1 guard
+:core-stats      Percentiles, bootstrap, Mann-Whitney U, Cliff's delta, the null test
+:core-report     Versioned schema, issue payload, GitHub publishing
+:core-telemetry  Thermal, battery, preflight, comparability
 ```
 
-O APK executa código nativo do ZIP. Use somente pacotes próprios ou hashes verificados. O SHA-256 registrado identifica o ZIP completo, não apenas a biblioteca principal.
+`:core-stats` is a plain Kotlin JVM module on purpose, so its statistics can be run
+and checked without a device.
 
-## Esquema de resultados
+## Building
 
-A versão atual usa `schema_version = 13`. Todas as evoluções foram aditivas: o workload legado `vulkan_transfer_stress/v1`, a correção v1, os cinco workloads da Fase 2 e `analysis_version = 1` permanecem inalterados.
+Requires JDK 17, Android SDK 35, NDK 27.2.12479018, CMake 3.22.1.
 
-Mudanças na geometria, SPIR-V, ordem dos draws, resolução, formato, cálculo ou regra padrão de comparação exigem uma nova `workload_version`.
-
-Veja [docs/RESULT_SCHEMA.md](docs/RESULT_SCHEMA.md).
-
-## Compilar e testar
-
-Requisitos:
-
-- JDK 17;
-- Android SDK 35 e Build Tools 35.0.0;
-- Android NDK `27.2.12479018`;
-- CMake 3.22.1;
-- Gradle 8.11.1.
-
-```bash
-cp local.properties.example local.properties
-# ajuste sdk.dir
-./gradlew :app:testDebugUnitTest :telemetry-sdk:testDebugUnitTest :app:assembleDebug
+```
+./gradlew test testDebugUnitTest    # 189 Kotlin tests
+./gradlew :app:assembleDebug
+python -m pytest tools/ingest/tests # 28 ingestion tests
 ```
 
-O CMake usa o `glslc` do NDK para compilar os shaders fixos em SPIR-V durante o build. O APK é publicado somente para `arm64-v8a`.
+Rootless driver loading needs `libadrenotools`, which is not vendored here — see
+[docs/DRIVER_LOADING.md](docs/DRIVER_LOADING.md) for the pinned commit. Without it
+the app builds and runs against the system driver, and says clearly that an
+imported package was not loaded and the system driver was *not* used instead.
 
-## Issues automáticas
+## Publishing a result
 
-Siga [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md). Sem GitHub App configurado, o resultado continua salvo e o APK abre um rascunho de issue no navegador. Nenhum PAT ou client secret deve ser compilado no APK.
+The result screen has **Publish to GitHub**. The app shows exactly what will be
+sent before sending it. Publication is always an explicit action; there is no
+automatic telemetry, and no persistent device identifier is collected — see
+[docs/PRIVACY.md](docs/PRIVACY.md).
 
-## Estado do projeto
+A submission becomes an issue, which
+[the ingestion workflow](.github/workflows/ingest-report.yml) validates against
+[`schema/result-v1.schema.json`](schema/result-v1.schema.json) and comments on. If
+it passes, the row is appended to `data/results.jsonl` and the
+[leaderboard](docs/leaderboard/index.html) is regenerated.
 
-As Fases 1 e 2 fornecem correção, capacidades e workloads reais versionados. A Fase 3 adiciona inferência estatística conservadora. A Fase 4 organiza as suítes em histórico local, diff, ranking, bisect e envelope público validado. A Fase 5 adiciona command traces Vulkan próprios e versionados com correção obrigatória antes do veredito de performance. A Fase 6 executa matrizes de drivers × workloads/traces com plano imutável, retomada segura e rankings separados por chave comparável. A Fase 7 adiciona o Teste Full Recomendado, recomendação geral com gate de compatibilidade e pacote completo de diagnóstico. A Fase 8 adiciona três cenas Vulkan visíveis e animadas, checkpoints determinísticos e atualiza o Full Qualification para v2 sem redefinir as séries anteriores. A Fase 9 adiciona um SDK versionado de telemetria para emuladores, armazenamento local e comparação descritiva sem incorporar sessões reais ao score Full. A Fase 10 adiciona uma série separada de diagnóstico profundo do Turnip, com matriz de formatos, corpus compute, cache, memória, sincronização e soak controlado. A Fase 11 consolida tudo isso no Full Qualification v3. A Fase 12 adiciona seleção persistente de idioma, oito traduções e relatório HTML localizado sem alterar os contratos técnicos.
+Refusals, each with the reason commented on the issue: invalid schema, missing
+driver hash, failed null test, a failed execution under the compatibility gate, and
+a run that started while the device was already throttling.
 
+## About "verified results"
 
-## Fase 3: comparação estatística
+This project does not claim them, and cannot.
 
-Suítes A/B de performance agora geram `statistical_analysis` com pareamento por rodada, melhora percentual orientada pela direção da métrica, bootstrap determinístico de 95%, teste exato dos sinais, tamanho de efeito e diagnóstico de viés de ordem. O padrão recomendado é **5 a 10 rodadas**.
+Any signature the app could generate, anyone who unpacked the APK could generate
+too, because the key would be in the APK. Promising verification on that basis
+would be a lie told with cryptography.
 
-A classificação usa uma margem prática de ±3%:
+What is actually done: the raw frametime series is required rather than aggregates;
+the median, mean and percentiles are recomputed server-side from that series and a
+summary that does not follow from it is refused; physically impossible frametimes
+are rejected. Editing one number to look faster fails these checks. A determined
+forger who generates a consistent fake will pass them, and the leaderboard says so.
+A result is marked `corroborated` only when an independent submission reproduces it.
 
-- `candidate_better_with_confidence`;
-- `candidate_worse_with_confidence`;
-- `practically_equivalent_with_confidence`;
-- `inconclusive_statistical_comparison`;
-- `insufficient_statistical_data`.
+## What has not been verified
 
-Essa camada não altera nenhuma série de workload v1. Compare inferências somente com o mesmo `analysis_version` e as mesmas condições do aparelho. Veja [docs/PHASE3_STATISTICAL_ANALYSIS.md](docs/PHASE3_STATISTICAL_ANALYSIS.md).
+Honest list, per section 15 of the spec. None of this has run on a GPU.
 
+- **Nothing has been executed on hardware.** All 217 tests are unit tests. The
+  Vulkan code compiles for arm64 and the APK builds; no frame has been rendered.
+- **`libadrenotools` compiles and packages, but has never loaded a driver.** The
+  hook libraries reach the APK and the argument order matches the vendored header;
+  whether the hook takes on Android 13 and whether the loaded ICD answers is what a
+  single run on an Odin2 would settle. Six assumptions remain in
+  [docs/DRIVER_LOADING.md](docs/DRIVER_LOADING.md).
+- **The null test's acceptance criterion is met in simulation only.** Ten
+  consecutive A/A ties pass against simulated devices; whether a real Odin2 Portal
+  holds still enough is exactly what the null test is for, and it has not run.
+- **Workloads 3 through 9 are not implemented.** The spec asks each workload to
+  prove it separates two known-different builds before entering the default
+  profile. That proof needs hardware, so the workloads that would need it are not
+  written yet.
+- **Dynamic range is unproven for workloads 1 and 2.** Same reason.
+- **Room persistence and run history are not implemented.** Results currently live
+  for the session and are exported or published from there.
 
-## Fase 4: laboratório histórico
+## Licence
 
-Abra **HISTÓRICO · DIFF · RANKING · BISECT** na tela principal para indexar resultados locais ou importar outros `suite.json`. O app permite:
-
-- filtrar por workload e identidade de hardware;
-- comparar duas suítes sem calcular deltas quando a metodologia é incompatível;
-- ranquear hashes de drivers somente dentro da mesma chave hardware/workload/configuração;
-- localizar a fronteira entre uma build conhecida como boa e a primeira build ruim;
-- exportar manualmente um envelope técnico sem modelo do aparelho, fingerprint, caminhos, logs ou imagens.
-
-Avisos bloqueantes e falhas impedem ranking válido, bisect conclusivo e publicação pública. Veja [docs/PHASE4_HISTORY_REGRESSION.md](docs/PHASE4_HISTORY_REGRESSION.md).
-
-
-## Fase 5: trace replay Vulkan versionado
-
-Selecione **Trace replay Vulkan v1** e escolha um dos traces embutidos:
-
-- **Misto: render pass + compute + barreiras v1**;
-- **Compute: cadeia de dependências v1**.
-
-Cada braço é executado em um processo novo. A saída binária recebe SHA-256, e o modo A/B exige hashes idênticos em todos os pares antes de aceitar a análise de performance. O workload usa `median_replay_ms`, mas não é uma captura de jogo e não representa FPS. Veja [docs/PHASE5_VERSIONED_TRACE_REPLAY.md](docs/PHASE5_VERSIONED_TRACE_REPLAY.md).
-
-
-## Fase 6: campanhas automatizadas de regressão
-
-Abra **CAMPANHAS DE REGRESSÃO · FASE 6** para selecionar até 8 drivers e até 8 workloads/traces. Cada combinação vira uma suíte A/B completa. O agendador rotaciona a posição dos candidatos, aplica cooldown entre jobs e salva um `campaign.json` com plano imutável e SHA-256 canônico.
-
-Uma campanha interrompida pode ser retomada; o job que estava em execução volta para `pending` e é repetido. Ao final, rankings são gerados separadamente para cada hardware/workload/versão/configuração. Não existe vencedor ou score agregado entre workloads diferentes. Veja [docs/PHASE6_AUTOMATED_CAMPAIGNS.md](docs/PHASE6_AUTOMATED_CAMPAIGNS.md).
-
-## Fase 7: Teste Full Recomendado
-
-O botão **TESTE FULL RECOMENDADO · FASE 7** executa o perfil imutável `turnip_full_qualification/v1`: todos os workloads e traces oficiais, correção visual antes e depois da carga, preflight ambiental, pausa/retomada, índice de qualificação, recomendação clara e um `diagnostic-bundle.zip` com relatório HTML, JSONs, resultados brutos, PNGs e hashes.
-
-O índice geral é um resumo versionado para facilitar decisão; as métricas científicas individuais continuam separadas. Falhas de compatibilidade ou validade sempre bloqueiam a recomendação, mesmo quando o candidato é mais rápido em algum teste. Veja [docs/PHASE7_FULL_QUALIFICATION.md](docs/PHASE7_FULL_QUALIFICATION.md).
-
-
-## Fase 8: cenas Vulkan visíveis e Full Qualification v2
-
-A Fase 8 adiciona três workloads independentes:
-
-- `visual_scene_geometry/v1`: 144 instâncias animadas, depth e câmera determinística;
-- `visual_scene_materials/v1`: materiais procedurais e padrões de alta frequência;
-- `visual_scene_postprocess/v1`: amostragem intermediária, bloom, tone mapping e sincronização entre passes.
-
-As cenas são exibidas em tela cheia, renderizadas internamente em 960×540 e capturam checkpoints nos frames 30, 90 e 150. O braço candidato só recebe veredito de performance quando seus checkpoints passam pela comparação visual A/B e permanecem determinísticos entre rodadas. A métrica primária é `p99_gpu_frame_ms`, menor é melhor.
-
-O Teste Full Recomendado atual passa a usar `turnip_full_qualification/v2` com 13 etapas. Resultados v1 permanecem válidos, mas não entram no ranking v2. Veja [docs/PHASE8_VISIBLE_VULKAN_SCENES.md](docs/PHASE8_VISIBLE_VULKAN_SCENES.md).
-
-### Benchmark visual avançado · GPU Stress 3D
-
-Em **Ferramentas avançadas → Workload**, selecione **Cena avançada: GPU Stress 3D v1** para executar `visual_scene_gpu_stress/v1`. Essa série independente renderiza 768 cubos procedurais em 1280×720, com depth, quatro luzes, materiais multi-oitava e um passe final de 19 amostras.
-
-O teste mantém a comparação A/B, os checkpoints determinísticos nos frames 30, 90 e 150 e o gate de correção antes do veredito de performance. Ele não redefine os três workloads visuais v1. A partir do **Turnip Recommended Validation v2** (`turnip_full_qualification/v5`), o GPU Stress integra o Teste Full Recomendado como a nona etapa, com peso de 20% e gate visual obrigatório; os perfis v1–v4 permanecem históricos e separados. Veja [docs/ADVANCED_VISUAL_BENCHMARK.md](docs/ADVANCED_VISUAL_BENCHMARK.md).
-
-
-## Fase 9: SDK de telemetria para emuladores
-
-Abra **TELEMETRIA DE EMULADORES · FASE 9** para importar um `session.json` produzido pelo módulo `telemetry-sdk`. O contrato registra somente identidade anônima do jogo por SHA-256, versão do emulador, hash das configurações, identidade pública de hardware, braço do driver, frame times e eventos técnicos permitidos. Títulos, caminhos e identificadores de conta são recusados.
-
-O app calcula P50/P95/P99, 1% low descritivo, razões de stutter, eventos de crash/device lost e amostras térmicas. Duas sessões são comparadas somente quando emulador, build, jogo anônimo, configurações, hardware, relógio e política de amostragem coincidem; duração e contagem de frames também precisam ficar dentro de 10%. A comparação não usa frames como amostras independentes, não gera confiança estatística e não altera Full Qualification, ranking ou campanhas.
-
-O vínculo com uma suíte é salvo em `suite-link.json`, sem modificar `session.json` nem `suite.json`. Nenhum upload ocorre automaticamente. Veja [docs/PHASE9_EMULATOR_TELEMETRY.md](docs/PHASE9_EMULATOR_TELEMETRY.md).
-
-
-## Fase 10: diagnóstico profundo do Turnip
-
-Abra **DIAGNÓSTICO PROFUNDO TURNIP · FASE 10** para executar o perfil `turnip_deep_diagnostics/v1` em A/B. O relatório compara capacidades de formatos, seis shaders compute, criação cold/warm de pipelines, serialização de pipeline cache, pressão de memória com limite seguro, fences, binary semaphores, barriers e um reliability probe.
-
-O botão **SOAK TEST A/B** repete ciclos de criação/destruição de objetos Vulkan, memória limitada e submits com fence. Falhas de capacidade, shader, sincronização, crash ou `device lost` bloqueiam qualquer conclusão favorável de tempo.
-
-A Fase 10 forma uma série histórica própria. Ela não altera workloads anteriores, Full Qualification, campanhas, ranking ou telemetria de emuladores. Veja [docs/PHASE10_DEEP_TURNIP_DIAGNOSTICS.md](docs/PHASE10_DEEP_TURNIP_DIAGNOSTICS.md).
-
-## Phase 11 — Full Qualification v3
-
-The recommended Full test now orchestrates every automatic test added through Phase 10: existing A/B suites, visible Vulkan scenes, deep diagnostics at the safe 128 MiB memory profile and a five-cycle short soak. The report exposes separate performance and compatibility indices. Emulator telemetry remains optional, local and not scored automatically.
-
-Historical Full v1 and v2 profiles remain immutable and separate from v3.
-
-
-## Fase 12 — internacionalização completa
-
-O botão de bandeira no canto superior direito permite escolher **Português do Brasil, Inglês, Espanhol, Francês, Alemão, Italiano, Japonês, Chinês simplificado** ou voltar ao idioma do sistema. A preferência é local, persiste após reiniciar o app e também é aplicada aos processos isolados de execução. Os resultados humanos, logs Full, relatórios HTML e issues usam português quando o locale efetivo do app é `pt`; para qualquer outro locale, usam inglês. IDs, métricas e contratos JSON permanecem independentes de idioma.
-
-A interface herdada das Fases 1–11, dialogs, spinners, mensagens e o `summary.html` usam o idioma selecionado. O JSON permanece técnico e estável: nomes de campos, enums, códigos Vulkan, hashes, métricas e IDs de workload não são traduzidos. A mudança eleva o resultado para `schema_version = 13`, sem redefinir workloads nem os perfis Full v1, v2 ou v3.
-
-Veja [docs/PHASE12_LOCALIZATION.md](docs/PHASE12_LOCALIZATION.md) e [docs/TRANSLATION_GUIDE.md](docs/TRANSLATION_GUIDE.md).
-
-## Fase 13 — UX guiada e identidade Amaral
-
-A tela inicial agora prioriza o **Full Qualification v3**, separa Comparações, Testes individuais e Resultados, e mantém a área técnica atrás do modo avançado persistente. O fluxo guiado organiza driver, teste, preparação, execução e resultado em cinco etapas, com progresso segmentado e conclusão antes das métricas brutas.
-
-A identidade visual usa tokens derivados do logo Amaral, estados acessíveis com cor + ícone + texto, ajuda contextual em três níveis e suporte aos oito idiomas da Fase 12. A mudança é exclusivamente de apresentação: workloads, scores, gates, hashes, IDs técnicos e séries históricas permanecem inalterados.
-
-Veja [docs/PHASE13_UX_REDESIGN.md](docs/PHASE13_UX_REDESIGN.md), [docs/BRAND_GUIDELINES.md](docs/BRAND_GUIDELINES.md), [docs/HELP_CONTENT_GUIDE.md](docs/HELP_CONTENT_GUIDE.md) e [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md).
-
-### Fase 13 alpha2 — fluxo direto de comparação
-
-O card principal permite selecionar **Sistema × Turnip** ou **Turnip × Turnip**, escolher candidato e referência, importar o ZIP e iniciar o Full v3 diretamente. Ao finalizar, o aplicativo abre o log completo com exportação do diagnóstico e criação de issue no projeto, mantendo a área técnica opcional.
-
-
-### Refinamento do teste recomendado (alpha3)
-
-A home agora começa pela importação e seleção do candidato, da referência e do modo Sistema × Turnip ou Turnip × Turnip. O teste recomendado usa o perfil **Turnip Recommended Validation v2** de nove etapas, focado em correção visual, compatibilidade, shaders, frametime e sincronização. A quarta cena é o GPU Stress 3D em 1280×720, com peso de 20% e gate visual obrigatório. O Full Qualification v3 longo permanece em Ferramentas avançadas, e o Recommended v1/v4 continua preservado como série histórica.
+See [LICENSE](LICENSE).

@@ -1,0 +1,96 @@
+name: Ingest benchmark report
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+# Comments on the issue, applies labels, and commits the accepted row.
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  # Two edits in quick succession must not race to append to results.jsonl.
+  group: ingest-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    if: contains(github.event.issue.labels.*.name, 'benchmark-report')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install validator dependencies
+        run: pip install jsonschema
+
+      - name: Write the issue body to a file
+        env:
+          # Through the environment, never interpolated into the shell: an issue
+          # body is untrusted input written by anyone who can open an issue.
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: printf '%s' "$ISSUE_BODY" > issue-body.md
+
+      - name: Validate the submission
+        id: validate
+        continue-on-error: true
+        run: |
+          python tools/ingest/validate.py \
+            --issue-body-file issue-body.md \
+            --issue-number "${{ github.event.issue.number }}" \
+            --output-dir ingest-out
+
+      - name: Comment with the result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}" \
+            --body-file ingest-out/comment.md
+
+      - name: Apply labels
+        if: steps.validate.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          labels=$(python -c "import json;print(','.join(json.load(open('ingest-out/result.json'))['labels']))")
+          gh issue edit "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}" \
+            --add-label "$labels"
+
+      - name: Label the refusal
+        if: steps.validate.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue edit "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}" --add-label "invalid-submission"
+
+      - name: Append the result and rebuild the leaderboard
+        if: steps.validate.outcome == 'success'
+        run: |
+          python tools/ingest/leaderboard.py \
+            --report ingest-out/report.json \
+            --result ingest-out/result.json \
+            --issue "${{ github.event.issue.number }}"
+
+      - name: Commit
+        if: steps.validate.outcome == 'success'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/results.jsonl docs/leaderboard/index.html
+          if git diff --cached --quiet; then
+            echo "nothing changed"
+          else
+            git commit -m "data: ingest benchmark report from #${{ github.event.issue.number }}"
+            git push
+          fi
+
+      - name: Fail the run when the submission was refused
+        if: steps.validate.outcome == 'failure'
+        run: exit 1

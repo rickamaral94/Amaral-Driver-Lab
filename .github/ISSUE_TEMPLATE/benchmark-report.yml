@@ -1,0 +1,70 @@
+name: Benchmark report
+description: Submit a driver benchmark result from Amaral Driver Lab.
+title: "[device] driver A vs driver B"
+labels: ["benchmark-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The app fills this in for you: **Publish to GitHub** on the result screen.
+
+        Filing it by hand works too, as long as the JSON block is the complete
+        export from the app. The ingestion workflow validates it against
+        [`schema/result-v1.schema.json`](../../blob/main/schema/result-v1.schema.json)
+        and comments with what it found. It will not partially accept a report —
+        an entry the leaderboard cannot re-check from raw data is not an entry.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What you were testing and anything unusual about the run.
+      placeholder: Turnip 25.1.0 against the previous build on an Odin2 Portal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: result_json
+    attributes:
+      label: Result JSON
+      description: >
+        The full export from the app. Paste it here, or paste a Gist link on its own
+        line if the app told you it was too large for an issue body.
+      render: json
+    validations:
+      required: true
+
+  - type: input
+    id: gist_url
+    attributes:
+      label: Gist URL
+      description: Only if the result was too large to paste. The app fills this in.
+      placeholder: https://gist.github.com/...
+    validations:
+      required: false
+
+  - type: dropdown
+    id: conditions
+    attributes:
+      label: Run conditions
+      description: Confirm what the app's preflight asked for.
+      multiple: true
+      options:
+        - Battery at 40% or above
+        - Charger disconnected
+        - Thermal status was NONE at the start
+        - No other heavy app running
+        - Device had cooled down since the previous run
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: honesty
+    attributes:
+      label: Before submitting
+      options:
+        - label: >
+            The JSON is the app's unmodified export. Editing it is pointless rather than
+            forbidden — the workflow checks the raw frametime series for consistency with
+            the summary, and a hand-edited entry fails that check rather than ranking well.
+          required: true

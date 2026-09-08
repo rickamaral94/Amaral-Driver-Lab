@@ -1,0 +1,45 @@
+name: Publish leaderboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'schema/**'
+      - 'data/results.jsonl'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp -r docs/leaderboard/* _site/
+          # The schema is published alongside the leaderboard so its $id resolves
+          # and anyone can validate a payload before submitting it.
+          mkdir -p _site/schema
+          cp schema/*.json _site/schema/
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

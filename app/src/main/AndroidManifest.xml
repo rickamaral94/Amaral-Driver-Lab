@@ -1,89 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+      INTERNET is used for exactly two things, both listed in docs/PRIVACY.md:
+      publishing a result the user explicitly asked to publish, and refreshing the
+      allowlist of known driver hashes. There is no automatic telemetry.
+    -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-feature
-        android:name="android.hardware.vulkan.version"
-        android:required="true"
-        android:version="0x00400000" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x400003" android:required="true" />
+    <uses-feature android:name="android.hardware.vulkan.level" android:version="1" android:required="false" />
 
     <application
-        android:name=".DriverLabApplication"
+        android:name=".AmaralApplication"
         android:allowBackup="false"
-        android:extractNativeLibs="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:localeConfig="@xml/locales_config"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.DriverLab">
-
-
-        <activity
-            android:name=".AdvancedSettingsActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".GuidedTestFlowActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".DeepDiagnosticsActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".TelemetryActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".QualificationLogActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".QualificationActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".CampaignActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".Phase4Activity"
-            android:exported="false" />
-
-        <activity
-            android:name=".DeepDiagnosticsRunnerActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:noHistory="true"
-            android:process=":runner"
-            android:theme="@style/Theme.DriverLab.Runner" />
-
-        <activity
-            android:name=".VisualRunnerActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:noHistory="true"
-            android:process=":runner"
-            android:screenOrientation="landscape"
-            android:theme="@style/Theme.DriverLab.VisualRunner" />
-
-        <activity
-            android:name=".RunnerActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:noHistory="true"
-            android:process=":runner"
-            android:theme="@style/Theme.DriverLab.Runner" />
+        android:theme="@style/Theme.AmaralDriverLab">
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:label="@string/app_name"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-    </application>
 
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!--
+          The benchmark runs in its own process. A driver that segfaults or loses the
+          device takes this process down and nothing else: the crash is recorded as
+          data, and the session survives. That is the whole reason for the separate
+          process, and it is why the service is not merged back into the app process
+          for convenience.
+        -->
+        <service
+            android:name=".BenchmarkService"
+            android:process=":bench"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Runs a fixed-work GPU benchmark that must not be interrupted or throttled by the scheduler." />
+        </service>
+    </application>
 </manifest>

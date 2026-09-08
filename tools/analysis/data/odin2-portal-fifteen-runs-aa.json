@@ -1,0 +1,309 @@
+{
+ "source": "AYN Odin2 Portal (QCS8550, Adreno 740), Android 13, 2026-09-08T14:49 local",
+ "note": "The first comparison of the 8x15 protocol from finding 11, from cold. Its two arms are 0.50% apart \u2014 the tightest A/A estimate in this project \u2014 and the calibrated floor is still 12.4%, because the run-to-run spread is 7.0% and a bootstrap interval over fifteen values is that wide. A linear trend explains 9% of the spread, so it is scatter rather than drift. Evidence for finding 12.",
+ "workload": "baseline/v1",
+ "framesPerRun": 1000,
+ "runsPerArm": 15,
+ "executions": [
+  {
+   "comparison": 1,
+   "slot": 0,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 7422,
+   "trimmedMeanMs": 7.38,
+   "medianMs": 6.77,
+   "celsius": 37.4
+  },
+  {
+   "comparison": 1,
+   "slot": 1,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 7209,
+   "trimmedMeanMs": 7.15,
+   "medianMs": 6.77,
+   "celsius": 37.8
+  },
+  {
+   "comparison": 1,
+   "slot": 2,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 8671,
+   "trimmedMeanMs": 8.64,
+   "medianMs": 7.57,
+   "celsius": 37.1
+  },
+  {
+   "comparison": 1,
+   "slot": 3,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 8044,
+   "trimmedMeanMs": 8.03,
+   "medianMs": 7.57,
+   "celsius": 37.1
+  },
+  {
+   "comparison": 1,
+   "slot": 4,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 7630,
+   "trimmedMeanMs": 7.53,
+   "medianMs": 6.77,
+   "celsius": 38.2
+  },
+  {
+   "comparison": 1,
+   "slot": 5,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 7634,
+   "trimmedMeanMs": 7.62,
+   "medianMs": 6.77,
+   "celsius": 38.6
+  },
+  {
+   "comparison": 1,
+   "slot": 6,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 7329,
+   "trimmedMeanMs": 7.28,
+   "medianMs": 7.57,
+   "celsius": 39.0
+  },
+  {
+   "comparison": 1,
+   "slot": 7,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 7872,
+   "trimmedMeanMs": 7.88,
+   "medianMs": 8.76,
+   "celsius": 38.6
+  },
+  {
+   "comparison": 1,
+   "slot": 8,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 8245,
+   "trimmedMeanMs": 8.25,
+   "medianMs": 8.76,
+   "celsius": 37.8
+  },
+  {
+   "comparison": 1,
+   "slot": 9,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 6702,
+   "trimmedMeanMs": 6.62,
+   "medianMs": 6.12,
+   "celsius": 40.6
+  },
+  {
+   "comparison": 1,
+   "slot": 10,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 6842,
+   "trimmedMeanMs": 6.84,
+   "medianMs": 6.77,
+   "celsius": 40.6
+  },
+  {
+   "comparison": 1,
+   "slot": 11,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 8691,
+   "trimmedMeanMs": 8.66,
+   "medianMs": 8.76,
+   "celsius": 37.4
+  },
+  {
+   "comparison": 1,
+   "slot": 12,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 8515,
+   "trimmedMeanMs": 8.47,
+   "medianMs": 8.76,
+   "celsius": 37.8
+  },
+  {
+   "comparison": 1,
+   "slot": 13,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 8406,
+   "trimmedMeanMs": 8.39,
+   "medianMs": 8.76,
+   "celsius": 38.2
+  },
+  {
+   "comparison": 1,
+   "slot": 14,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 8205,
+   "trimmedMeanMs": 8.17,
+   "medianMs": 8.76,
+   "celsius": 39.0
+  },
+  {
+   "comparison": 1,
+   "slot": 15,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 7675,
+   "trimmedMeanMs": 7.67,
+   "medianMs": 7.57,
+   "celsius": 39.4
+  },
+  {
+   "comparison": 1,
+   "slot": 16,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 9121,
+   "trimmedMeanMs": 9.14,
+   "medianMs": 10.37,
+   "celsius": 37.8
+  },
+  {
+   "comparison": 1,
+   "slot": 17,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 8419,
+   "trimmedMeanMs": 8.36,
+   "medianMs": 7.57,
+   "celsius": 38.2
+  },
+  {
+   "comparison": 1,
+   "slot": 18,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 8548,
+   "trimmedMeanMs": 8.5,
+   "medianMs": 7.57,
+   "celsius": 37.8
+  },
+  {
+   "comparison": 1,
+   "slot": 19,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 8079,
+   "trimmedMeanMs": 8.07,
+   "medianMs": 7.57,
+   "celsius": 37.8
+  },
+  {
+   "comparison": 1,
+   "slot": 20,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 8081,
+   "trimmedMeanMs": 8.07,
+   "medianMs": 7.57,
+   "celsius": 37.8
+  },
+  {
+   "comparison": 1,
+   "slot": 21,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 7625,
+   "trimmedMeanMs": 7.61,
+   "medianMs": 6.77,
+   "celsius": 39.4
+  },
+  {
+   "comparison": 1,
+   "slot": 22,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 8131,
+   "trimmedMeanMs": 8.11,
+   "medianMs": 7.57,
+   "celsius": 38.2
+  },
+  {
+   "comparison": 1,
+   "slot": 23,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 8115,
+   "trimmedMeanMs": 8.09,
+   "medianMs": 7.57,
+   "celsius": 38.2
+  },
+  {
+   "comparison": 1,
+   "slot": 24,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 7471,
+   "trimmedMeanMs": 7.35,
+   "medianMs": 6.77,
+   "celsius": 39.4
+  },
+  {
+   "comparison": 1,
+   "slot": 25,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 8077,
+   "trimmedMeanMs": 8.06,
+   "medianMs": 7.57,
+   "celsius": 40.2
+  },
+  {
+   "comparison": 1,
+   "slot": 26,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 8158,
+   "trimmedMeanMs": 8.11,
+   "medianMs": 7.57,
+   "celsius": 37.8
+  },
+  {
+   "comparison": 1,
+   "slot": 27,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 8361,
+   "trimmedMeanMs": 8.29,
+   "medianMs": 7.57,
+   "celsius": 38.2
+  },
+  {
+   "comparison": 1,
+   "slot": 28,
+   "arm": "A",
+   "frames": 1000,
+   "gpuMs": 8153,
+   "trimmedMeanMs": 8.06,
+   "medianMs": 7.57,
+   "celsius": 38.2
+  },
+  {
+   "comparison": 1,
+   "slot": 29,
+   "arm": "B",
+   "frames": 1000,
+   "gpuMs": 8307,
+   "trimmedMeanMs": 8.28,
+   "medianMs": 7.57,
+   "celsius": 39.4
+  }
+ ]
+}

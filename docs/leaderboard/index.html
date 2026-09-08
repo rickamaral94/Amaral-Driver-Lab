@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amaral Driver Lab leaderboard</title>
+<style>
+  :root { color-scheme: light dark; --line: #8883; }
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0 auto; padding: 2rem 1rem; max-width: 72rem; }
+  h1 { font-size: 1.6rem; margin-bottom: .25rem; }
+  h2 { font-size: 1.1rem; margin-top: 2.5rem; }
+  p.lede { opacity: .8; max-width: 46rem; }
+  table { border-collapse: collapse; width: 100%; margin-top: .75rem; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--line); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { font-weight: 600; opacity: .75; }
+  .wrap { overflow-x: auto; }
+  .empty { opacity: .6; }
+  .note { border-left: 3px solid var(--line); padding-left: .9rem; opacity: .85; max-width: 46rem; }
+  input { padding: .4rem .6rem; font: inherit; width: 100%; max-width: 22rem; margin-top: 1rem; }
+</style>
+</head>
+<body>
+<h1>Amaral Driver Lab leaderboard</h1>
+<p class="lede">
+  Vulkan driver benchmarks submitted from the app. Every row links to the issue it came
+  from, where the raw frametime series live. Numbers you cannot re-check are not evidence.
+</p>
+
+<input id="filter" placeholder="Filter by device, GPU or driver…" aria-label="Filter results">
+
+<h2>Ranked</h2>
+<p class="note">
+  These passed the A/A null test, completed every workload, and started from a clean
+  preflight. The noise floor is what that device demonstrated it can resolve — a
+  difference smaller than it is reported as a tie, not as a win.
+</p>
+<div class="wrap"><p class="empty">Nothing here yet.</p></div>
+
+<h2>Recorded, not ranked</h2>
+<p class="note">
+  Real runs that do not meet the bar for ranking. A driver that crashed appears here
+  with the reason rather than with a position.
+</p>
+<div class="wrap"><p class="empty">Nothing here yet.</p></div>
+
+<h2>About confidence</h2>
+<p class="note">
+  <strong>corroborated</strong> means the same driver pair was submitted independently at
+  least 2 times on the same GPU. <strong>single submission</strong>
+  means one person ran it once. Nothing here is cryptographically verified: any signature
+  the app could produce, anyone who unpacked the APK could produce too, so this project
+  does not claim verification it cannot deliver.
+</p>
+
+<script>
+  const filter = document.getElementById('filter');
+  filter.addEventListener('input', () => {
+    const needle = filter.value.toLowerCase();
+    for (const row of document.querySelectorAll('tbody tr, table tr')) {
+      if (row.querySelector('th')) continue;
+      row.hidden = needle !== '' && !row.textContent.toLowerCase().includes(needle);
+    }
+  });
+</script>
+</body>
+</html>

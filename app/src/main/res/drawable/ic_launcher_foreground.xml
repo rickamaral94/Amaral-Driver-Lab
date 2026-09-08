@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A frametime trace: a steady line with one hitch, which is what this app looks for. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M26,64 L38,64 L44,64 L50,40 L56,64 L62,64 L82,64"
+        android:strokeColor="#7FD1B9"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M26,76 L82,76"
+        android:strokeColor="#3A5A54"
+        android:strokeWidth="3"
+        android:strokeLineCap="round" />
+</vector>
