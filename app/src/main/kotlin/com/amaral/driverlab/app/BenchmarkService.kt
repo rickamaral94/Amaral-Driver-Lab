@@ -256,22 +256,30 @@ class BenchmarkService : Service() {
                 ).totalExecutions
                 val totalExecutions = perPlanExecutions * spec.totalComparisons
 
+                val frameCountsUsed = mutableListOf<Int>()
                 for (comparison in 0 until spec.totalComparisons) {
                     val phase = if (comparison < spec.warmupComparisons) "warm-up" else "A/A"
                     // ABBA rather than alternating, so neither cooldown setting is confounded
                     // with how far into the session it ran — the same reasoning that
                     // counterbalances the arms.
+                    val longRun = ((comparison + 1) / 2) % 2 != 0
                     val cooldown = spec.cooldownExperimentMs?.let { short ->
-                        if (((comparison + 1) / 2) % 2 == 0) BenchmarkPlan.DEFAULT_ARM_COOLDOWN_MS else short
+                        if (longRun) short else BenchmarkPlan.DEFAULT_ARM_COOLDOWN_MS
                     } ?: BenchmarkPlan.DEFAULT_ARM_COOLDOWN_MS
+                    // The same ABBA position decides the frame count when that is what is
+                    // being varied. Only one of the two experiments runs at a time.
+                    val planWorkloads = spec.frameCountExperiment?.takeIf { longRun }?.let { long ->
+                        workloads.map { it.copy(frameCount = long) }
+                    } ?: workloads
                     val plan = BenchmarkPlan.nullTest(
                         driver = driver,
                         label = request.armA.label,
-                        workloads = workloads,
+                        workloads = planWorkloads,
                         runsPerArm = request.runsPerArm,
                         comparisonIndex = comparison,
                     ).copy(cooldownBetweenArmsMs = cooldown)
                     cooldownUsed += cooldown
+                    frameCountsUsed += planWorkloads.first().frameCount
                     DiagnosticLog.i(
                         TAG,
                         "null test $phase ${comparison + 1} of ${spec.totalComparisons}",
@@ -352,7 +360,11 @@ class BenchmarkService : Service() {
                     perWorkload = armsSoFar(),
                 )
                 if (spec.isExperiment) {
-                    writeCooldownExperiment(request, spec, snapshot, armsSoFar(), cooldownUsed)
+                    if (spec.frameCountExperiment != null) {
+                        writeFrameCountExperiment(request, spec, snapshot, armsSoFar(), frameCountsUsed)
+                    } else {
+                        writeCooldownExperiment(request, spec, snapshot, armsSoFar(), cooldownUsed)
+                    }
                     return@runCatching BenchCompletion(ok = true, nullTest = true)
                 }
                 NullTestStore(File(filesDir, STATE_DIRECTORY)).write(record)
@@ -383,6 +395,67 @@ class BenchmarkService : Service() {
      * mid-run, so its dispersion describes two different conditions at once and is not a
      * floor anything should be judged against.
      */
+    /**
+     * Writes what the frame-count experiment saw, beside the logs.
+     *
+     * The question it answers: is the reference device's 7.0% run-to-run spread produced
+     * *inside* a run — the GPU changing DVFS step during it — or between runs? If inside, the
+     * spread falls as 1/sqrt(frames) and longer runs buy precision at a quarter of the wall
+     * time, because the 20 s cooldown is charged per run and not per frame. If between, only
+     * more runs help and a calibration on this device costs hours.
+     */
+    private fun writeFrameCountExperiment(
+        request: BenchRequest,
+        spec: NullTestSpec,
+        snapshot: com.amaral.driverlab.telemetry.DeviceSnapshot,
+        arms: List<WorkloadArms>,
+        frameCounts: List<Int>,
+    ) {
+        val warmup = spec.warmupComparisons
+        val samples = arms.flatMap { workload ->
+            workload.comparisons.mapIndexedNotNull { index, pair ->
+                frameCounts.getOrNull(index + warmup)?.let { frames ->
+                    FrameCountSample(
+                        comparisonIndex = index,
+                        frameCount = frames,
+                        workloadId = workload.workloadId,
+                        armFirstNs = pair.first,
+                        armSecondNs = pair.second,
+                    )
+                }
+            }
+        }
+
+        val experiment = FrameCountExperiment(
+            deviceFingerprint = snapshot.buildFingerprint,
+            driverLabel = request.armA.label,
+            appVersion = versionName(),
+            completedAtEpochMs = System.currentTimeMillis(),
+            standardFrameCount = request.workloads.first().toSpec().frameCount,
+            longFrameCount = spec.frameCountExperiment ?: 0,
+            runsPerArm = request.runsPerArm,
+            armCooldownMs = BenchmarkPlan.DEFAULT_ARM_COOLDOWN_MS,
+            samples = samples,
+        )
+
+        val directory = DiagnosticLog.logsDirectory()?.let { File(it, "experiments") }
+        if (directory == null) {
+            DiagnosticLog.e(TAG, "no log directory, so the frame count experiment has nowhere to go")
+            return
+        }
+        directory.mkdirs()
+        val file = File(directory, "frames-${System.currentTimeMillis()}.json")
+        runCatching { file.writeText(Json.encodeToString(FrameCountExperiment.serializer(), experiment)) }
+            .onSuccess {
+                DiagnosticLog.i(
+                    TAG,
+                    "frame count experiment written to ${file.name}: ${samples.size} comparison(s) " +
+                        "across ${frameCounts.toSet().sorted().joinToString(" and ")} frames",
+                )
+            }
+            .onFailure { DiagnosticLog.e(TAG, "could not write the frame count experiment", it) }
+    }
+
     private fun writeCooldownExperiment(
         request: BenchRequest,
         spec: NullTestSpec,

@@ -243,7 +243,11 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
      *   calibration: it varies the protocol mid-run on purpose, so it writes its findings
      *   beside the logs and never touches the null test record.
      */
-    fun startNullTest(driver: RequestedDriver, cooldownExperimentMs: Long? = null) {
+    fun startNullTest(
+        driver: RequestedDriver,
+        cooldownExperimentMs: Long? = null,
+        frameCountExperiment: Int? = null,
+    ) {
         val current = state.value
         val workloads = if (current.quickProfile) BenchmarkProfiles.quick() else BenchmarkProfiles.complete()
         val ref = refFor(driver, current)
@@ -256,12 +260,19 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
                 warmupComparisons = com.amaral.driverlab.stats.NullTest.WARMUP_COMPARISONS,
                 comparisons = com.amaral.driverlab.stats.NullTest.REQUIRED_CONSECUTIVE_PASSES,
                 cooldownExperimentMs = cooldownExperimentMs,
+                frameCountExperiment = frameCountExperiment,
             ),
         )
 
         DiagnosticLog.i(
             TAG,
-            "starting ${if (cooldownExperimentMs != null) "cooldown experiment" else "null test"} on ${ref.label}",
+            "starting ${
+                when {
+                    cooldownExperimentMs != null -> "cooldown experiment"
+                    frameCountExperiment != null -> "frame count experiment"
+                    else -> "null test"
+                }
+            } on ${ref.label}",
         )
         state.update {
             it.copy(step = Step.Running, progress = null, busy = true, runError = null)

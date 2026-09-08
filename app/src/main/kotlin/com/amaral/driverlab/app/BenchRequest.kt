@@ -53,10 +53,29 @@ data class NullTestSpec(
      * a verdict. Nothing it measures is written to the null test store.
      */
     val cooldownExperimentMs: Long? = null,
+    /**
+     * When set, this is not a calibration but an experiment on how long a run should be.
+     *
+     * Finding 11 left the reference device at a 12.4% floor against a 10% limit, with its two
+     * arms 0.50% apart — the protocol is fine and the run-to-run spread is not: 7.0%, of which
+     * a linear trend across the session explains only 9%. So it is scatter rather than drift,
+     * and scatter can be averaged down. Whether that is bought with more runs or longer ones
+     * decides the shape of every calibration from here, and the two cost very different
+     * amounts: the 20 s cooldown is charged per *run*, so for a fixed number of frames, fewer
+     * and longer runs is the cheaper way to buy the same precision — if the scatter is inside
+     * a run rather than between runs. Nobody knows which, because every run ever recorded is
+     * 1000 frames.
+     *
+     * Comparisons alternate between the profile's frame count and this one in ABBA order, for
+     * the same reason the cooldown experiment does, and nothing it measures reaches the null
+     * test store: a run that varies the protocol on purpose is not a floor anything should be
+     * judged against.
+     */
+    val frameCountExperiment: Int? = null,
 ) {
     val totalComparisons: Int get() = warmupComparisons + comparisons
 
-    val isExperiment: Boolean get() = cooldownExperimentMs != null
+    val isExperiment: Boolean get() = cooldownExperimentMs != null || frameCountExperiment != null
 }
 
 /** One comparison of a cooldown experiment: the setting used, and what dispersion it produced. */
@@ -67,6 +86,29 @@ data class CooldownSample(
     val workloadId: String,
     val armFirstMedianNs: List<Double>,
     val armSecondMedianNs: List<Double>,
+)
+
+/** One comparison of a frame-count experiment: the size used, and the dispersion it produced. */
+@Serializable
+data class FrameCountSample(
+    val comparisonIndex: Int,
+    val frameCount: Int,
+    val workloadId: String,
+    val armFirstNs: List<Double>,
+    val armSecondNs: List<Double>,
+)
+
+@Serializable
+data class FrameCountExperiment(
+    val deviceFingerprint: String,
+    val driverLabel: String,
+    val appVersion: String,
+    val completedAtEpochMs: Long,
+    val standardFrameCount: Int,
+    val longFrameCount: Int,
+    val runsPerArm: Int,
+    val armCooldownMs: Long,
+    val samples: List<FrameCountSample>,
 )
 
 @Serializable

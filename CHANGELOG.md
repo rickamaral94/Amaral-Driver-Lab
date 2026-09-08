@@ -24,8 +24,28 @@ carried forward; it remains in git history and on `main`.
 - Published as [`schema/result-v1.schema.json`](schema/result-v1.schema.json), and
   validated in CI against payloads the app's own serializer produced.
 
+### Added
+
+- **An experiment on how long a run should be.** Finding 12 left the reference device with its
+  two A/A arms 0.50% apart and a 12.4% floor, and traced the width to a 7.0% run-to-run
+  spread that is scatter rather than drift. Whether that scatter lives inside a run or between
+  runs decides the shape of every calibration, and the two cost very differently, because the
+  arm cooldown is charged per run and not per frame. The run quadruples the frame count on half
+  the comparisons in ABBA order, never stops early, and writes beside the logs rather than to
+  the null test store. Read with `tools/analysis/frame_count_experiment.py`.
+
 ### Fixed
 
+- **The screen kept showing the invented floor after it was supposedly fixed.** The previous
+  fix went into `NoiseFloorCalibration.describe()`, and the result card never calls it — it
+  reads `noiseFloors` and formats the number into a localised string, so the same 2.0% appeared
+  again over "0 of 8". The map is filtered where it is built instead, in both the view model
+  and the service, so an unmeasured floor cannot reach any renderer present or future. An empty
+  map now renders "the resolution of this device is not known yet".
+- **A failed calibration was rendered in the same green as a passing one**, because the card
+  used `primaryContainer` regardless of outcome.
+- **The calibration screen still quoted the old protocol** — "fifteen comparisons at five runs
+  per arm", "the claim is ten consecutive ties" — after finding 11 changed both numbers.
 - **The noise floor was reporting the sample size, not the device.** With five runs per arm a
   bootstrap interval is about 20% wide whatever it measures, so the reference device
   calibrated a 21.8% floor from two arms that were 4.0% apart. Worse, the protocol was shaped

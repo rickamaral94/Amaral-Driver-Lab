@@ -529,6 +529,81 @@ which `describe()` then rendered as "Measured on 0 A/A comparisons". The one num
 away from that screen was both invented and flattering, on a failure. It now says the resolution
 is unknown and that the number is a default rather than a finding.
 
+## Finding 12: fifteen runs fixed the estimate and not the interval
+
+The 8x15 shape from finding 11, run on a cold Odin2, A/A on the system driver:
+
+```
+arm A median 8.07 ms     arm B median 8.11 ms     point estimate +0.50%
+                                                  calibrated floor  12.4%
+```
+
+Half a percent apart, same driver, thirty runs. The protocol is doing its job — that is the
+tightest A/A estimate this project has produced, against 4.0% at five runs per arm and 11.8%
+before finding 10. And the floor is still past the 10% limit, by 2.4 points.
+
+The width comes from the run-to-run spread, which measured **7.0%** — higher than the 3.9-5.7%
+that finding 11's simulations assumed, which is why 8x15 landed at 12.4% rather than the
+predicted ~10%.
+
+### It is scatter, not drift
+
+Worth checking before spending anything on it, because the two have opposite fixes — drift
+wants *shorter* comparisons, scatter wants longer ones:
+
+```
+correlation with slot order         r = +0.30
+linear trend across the comparison  +7.0% over 30 runs
+variance explained by that trend    9%
+floor with the trend removed        10.5%  (from 12.1%)
+```
+
+So 91% of it is scatter that counterbalancing cannot cancel and ordering cannot explain.
+Scatter averages down; the only question is what to spend to average it.
+
+### The arithmetic that decides where to spend
+
+Wall time for one comparison is
+
+```
+2 * (frames_per_arm / frames_per_second  +  runs_per_arm * cooldown)
+```
+
+The cooldown is charged **per run**, not per frame. So for a fixed number of frames per arm —
+which is what sets the precision, *if* the scatter lives inside a run — the second term shrinks
+as runs per arm falls. Fewer, longer runs would then be strictly cheaper for the same
+precision. Concretely, closing 12.4% to under 10% needs about 1.5x the frames per arm:
+
+| shape                  | executions | wall time |
+|------------------------|-----------:|----------:|
+| 23 runs x 1000 frames  |        368 |     183 m |
+| 8 runs x 2830 frames   |        128 |     103 m |
+| 5 runs x 4530 frames   |         80 |      87 m |
+
+All three buy the same precision **if** the scatter is within-run. If it is between-run, only
+the first works and it costs three hours.
+
+Nothing in any log can settle it, because every run ever recorded is 1000 frames. That is the
+experiment now in the app beside the cooldown one: it quadruples the frame count on half the
+comparisons in ABBA order and compares the spread at each size. Read it with
+`tools/analysis/frame_count_experiment.py`. A halving says within-run and the calibration gets
+much cheaper; no change says between-run and it is genuinely expensive.
+
+### What the 12.4% already permits
+
+A floor is not a verdict on the device, it is the smallest difference the harness will call.
+At 12.4% this Odin2 can still separate anything larger — and Turnip against the Qualcomm driver
+measured +18.2%, +29.8%, +13.4% and +7.3% on run means. Three of those four clear it. The
+measurement works today; what 12.4% blocks is the *ranking*, which needs to resolve differences
+between two Turnip builds, and those are much smaller than the gap to a different vendor.
+
+### An aside worth not over-reading
+
+Frametime correlated with the reported temperature at r = -0.59: hotter runs were *faster*.
+That is almost certainly the sensor lagging the work rather than heat making the GPU quick — a
+fast run does more work per second and the reading taken afterwards is higher. Recorded because
+it will look like a finding to the next person who plots it, and it is not one.
+
 ## What passing the null test means
 
 `NullTestResult.passed` requires all four of:

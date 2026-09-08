@@ -365,10 +365,16 @@ fun ResultScreen(
 /** Half the standard wait, which is the comparison worth making first. */
 private const val COOLDOWN_EXPERIMENT_MS = 10_000L
 
+/**
+ * Four times the profile's frame count, which is the smallest step that would show a
+ * halving of the run-to-run spread if that spread is produced inside a run.
+ */
+private const val FRAME_COUNT_EXPERIMENT = 4_000
+
 @Composable
 fun NullTestScreen(
     state: UiState,
-    onStart: (RequestedDriver, Long?) -> Unit,
+    onStart: (RequestedDriver, Long?, Int?) -> Unit,
     onBack: () -> Unit,
 ) {
     // Defaults to the system driver because it needs no import, so a device can be
@@ -400,7 +406,7 @@ fun NullTestScreen(
         }
 
         Button(
-            onClick = { onStart(selected, null) },
+            onClick = { onStart(selected, null, null) },
             enabled = !state.busy,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -411,11 +417,20 @@ fun NullTestScreen(
         // protocol, so it answers a question about the harness and produces no calibration.
         Note(stringResource(R.string.null_test_cooldown_experiment_note))
         OutlinedButton(
-            onClick = { onStart(selected, COOLDOWN_EXPERIMENT_MS) },
+            onClick = { onStart(selected, COOLDOWN_EXPERIMENT_MS, null) },
             enabled = !state.busy,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(stringResource(R.string.null_test_cooldown_experiment))
+        }
+
+        Note(stringResource(R.string.null_test_frames_experiment_note))
+        OutlinedButton(
+            onClick = { onStart(selected, null, FRAME_COUNT_EXPERIMENT) },
+            enabled = !state.busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(R.string.null_test_frames_experiment))
         }
 
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {

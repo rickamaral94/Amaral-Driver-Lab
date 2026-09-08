@@ -60,7 +60,7 @@
     <string name="home_null_test_stale_profile">A calibração guardada não cobre os workloads do perfil selecionado, então este perfil não pode ser ranqueado.</string>
     <string name="null_test_title">Calibrar este aparelho</string>
     <string name="null_test_explainer">O app roda um driver contra ele mesmo e espera não achar diferença nenhuma. Qualquer diferença que ele achar foi fabricada por este aparelho — deriva térmica, degraus de clock, carga de fundo — e define o limite do que uma comparação de verdade pode afirmar. Enquanto esse limite não for conhecido, os resultados aparecem mas nunca são ranqueados.</string>
-    <string name="null_test_cost">Quinze comparações a cinco runs por braço, nos workloads do perfil selecionado. Não existe versão mais curta que continue honesta: a afirmação é dez empates seguidos, então dez é o que precisa ser medido. Deixe o aparelho desconectado, frio e sem uso, e conte com bastante tempo.</string>
+    <string name="null_test_cost">Oito comparações a quinze execuções por braço, nos workloads do perfil selecionado — cerca de duas horas. Não existe versão mais curta que continue honesta. Menos execuções por braço não mede o aparelho, mede o tamanho da amostra: com cinco, o intervalo em volta de uma diferença tem cerca de 20%% de largura por mais estável que o hardware seja. Deixe o aparelho desconectado, frio e sem uso.</string>
     <string name="null_test_driver">Rodar com</string>
     <string name="null_test_start">Iniciar calibração</string>
     <string name="null_test_passed">A calibração passou</string>
@@ -70,6 +70,8 @@
     <string name="back">Voltar</string>
     <string name="running_execution_at_most">Execução %1$d de no máximo %2$d</string>
     <string name="running_may_stop_early">Isto encerra assim que o resultado estiver decidido, o que costuma ser bem antes da última execução.</string>
+    <string name="null_test_frames_experiment">Rodar o experimento de duração da execução</string>
+    <string name="null_test_frames_experiment_note">Mede se este aparelho é instável dentro de uma execução ou entre execuções. Quadruplica a contagem de frames em metade das comparações e compara a dispersão. Se ela cair pela metade, execuções mais longas compram precisão muito mais barato que mais execuções. Não produz calibração: compartilhe o diagnóstico depois.</string>
     <string name="null_test_cooldown_experiment">Rodar o experimento do cooldown</string>
     <string name="null_test_cooldown_experiment_note">Mede se a espera de 20 s entre braços — cerca de 70%% do tempo desta execução — está fazendo alguma coisa. Ela é reduzida à metade em metade das comparações e os resultados são comparados. Não produz calibração: compartilhe o diagnóstico depois.</string>
 </resources>

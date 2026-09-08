@@ -66,7 +66,7 @@
     <string name="home_null_test_stale_profile">The stored calibration does not cover the workloads in the selected profile, so this profile cannot be ranked.</string>
     <string name="null_test_title">Calibrate this device</string>
     <string name="null_test_explainer">The app runs one driver against itself and expects to find no difference. Any difference it does find was manufactured by this device — thermal drift, clock steps, background load — and sets the limit on what a real comparison can claim. Until that limit is known, results are shown but never ranked.</string>
-    <string name="null_test_cost">Fifteen comparisons at five runs per arm, on the workloads of the selected profile. There is no shorter honest version: the claim is ten consecutive ties, so ten is what gets measured. Keep the device unplugged, cool and idle, and expect this to take a while.</string>
+    <string name="null_test_cost">Eight comparisons at fifteen runs per arm, on the workloads of the selected profile — around two hours. There is no shorter honest version. Fewer runs per arm does not measure the device, it measures the sample size: at five, the interval around a difference is about 20%% wide however steady the hardware is. Keep the device unplugged, cool and idle.</string>
     <string name="null_test_driver">Run it on</string>
     <string name="null_test_start">Start calibration</string>
     <string name="null_test_passed">Calibration passed</string>
@@ -76,6 +76,8 @@
     <string name="back">Back</string>
     <string name="running_execution_at_most">Execution %1$d of at most %2$d</string>
     <string name="running_may_stop_early">This stops as soon as the result is decided, which is usually long before the last execution.</string>
+    <string name="null_test_frames_experiment">Run the run-length experiment instead</string>
+    <string name="null_test_frames_experiment_note">Measures whether this device is unsteady inside a run or between runs. It quadruples the frame count on half the comparisons and compares the spread. If the spread halves, longer runs buy precision far more cheaply than more runs. It produces no calibration: share the diagnostics afterwards.</string>
     <string name="null_test_cooldown_experiment">Run the cooldown experiment instead</string>
     <string name="null_test_cooldown_experiment_note">Measures whether the 20 s wait between arms — about 70% of this run\u2019s wall time — is doing anything. It halves that wait on half the comparisons and compares the results. It produces no calibration: share the diagnostics afterwards.</string>
 </resources>
