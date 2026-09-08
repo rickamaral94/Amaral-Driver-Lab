@@ -211,7 +211,15 @@ class BenchViewModel(application: Application) : AndroidViewModel(application) {
                     completedAtEpochMs = record.completedAtEpochMs,
                     explanation = forProfile?.explain()
                         ?: derived.entries.joinToString("\n\n") { "${it.key} — ${it.value.explain()}" },
-                    noiseFloors = derived.mapValues { it.value.appliedNoiseFloor },
+                    // Only floors the device actually demonstrated. A run too short to
+                    // cross-validate falls back to the assumed default, and that default was
+                    // reaching the screen as "this device resolves differences of about 2.0%"
+                    // — under the words "the calibration did not pass", and flattering by a
+                    // factor of ten. Filtering at the source rather than at each renderer,
+                    // because the first fix went into describe() and this path never calls it.
+                    noiseFloors = derived
+                        .filterValues { !it.calibration.isAssumed }
+                        .mapValues { it.value.appliedNoiseFloor },
                     coversCurrentProfile = forProfile != null,
                 )
             }

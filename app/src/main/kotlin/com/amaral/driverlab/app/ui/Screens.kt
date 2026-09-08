@@ -440,7 +440,16 @@ fun NullTestResultScreen(state: UiState, onHome: () -> Unit, onShareLogs: () -> 
         val nullTest = state.nullTest
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            colors = CardDefaults.cardColors(
+                // A failed calibration in the primary container reads as a pass at a glance,
+                // which is how a screen saying "the calibration did not pass" still managed to
+                // look like good news.
+                containerColor = if (nullTest?.passed == true) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.errorContainer
+                },
+            ),
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -449,6 +458,14 @@ fun NullTestResultScreen(state: UiState, onHome: () -> Unit, onShareLogs: () -> 
                     ),
                     style = MaterialTheme.typography.titleMedium,
                 )
+                if (nullTest != null && nullTest.noiseFloors.isEmpty()) {
+                    // Says nothing rather than something invented. The map now carries only
+                    // floors a device demonstrated, so an empty one means exactly this.
+                    Text(
+                        stringResource(R.string.null_test_floor_unknown),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 if (nullTest != null) {
                     for ((workloadId, floor) in nullTest.noiseFloors) {
                         Text(

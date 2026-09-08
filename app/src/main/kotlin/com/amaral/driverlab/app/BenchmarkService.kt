@@ -174,7 +174,10 @@ class BenchmarkService : Service() {
                         runnerFinalState = outcome.finalState.name,
                     ),
                     nullTestResult = verdict?.weakest(),
+                    // Measured floors only: an assumed one may not widen a published claim,
+                    // because nothing measured it. Same rule as the screen.
                     noiseFloors = verdict?.perWorkload.orEmpty()
+                        .filterValues { !it.calibration.isAssumed }
                         .mapValues { it.value.appliedNoiseFloor },
                 )
             }

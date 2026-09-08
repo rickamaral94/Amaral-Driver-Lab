@@ -72,6 +72,7 @@
     <string name="null_test_passed">Calibration passed</string>
     <string name="null_test_failed">Calibration failed</string>
     <string name="null_test_floor">This device resolves differences of about %1$s or larger on %2$s.</string>
+    <string name="null_test_floor_unknown">The resolution of this device is not known yet: no A/A comparison has completed on it.</string>
     <string name="back">Back</string>
     <string name="running_execution_at_most">Execution %1$d of at most %2$d</string>
     <string name="running_may_stop_early">This stops as soon as the result is decided, which is usually long before the last execution.</string>
